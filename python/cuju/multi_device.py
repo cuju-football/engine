@@ -377,6 +377,17 @@ class MultiDeviceBatch:
         part, local = self._part(index)
         return part.get_state(local)
 
+    def roles(self, index: int) -> dict[str, torch.Tensor]:
+        """Returns the role of each player of environment `index`, as `BatchEnvironment.roles` does.
+
+        Raises:
+            EnvironmentIndexError: If `index` lies outside the batch. It is an `IndexError` and a
+                `RuntimeError`.
+            ClosedError: If the batch is closed. It is a `RuntimeError`.
+        """
+        part, local = self._part(index)
+        return part.roles(local)
+
     def set_state(self, index: int, state: bytes) -> None:
         """Sets environment `index` to a state, as `BatchEnvironment.set_state` does.
 

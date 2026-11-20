@@ -4,7 +4,6 @@
 
 import gc
 import hashlib
-import importlib.util
 import logging
 import os
 import statistics
@@ -56,6 +55,7 @@ def test_observers_leave_every_output_as_it_is(device):
         if done is not None:
             seen.append(int(information['score_reward'].sum()))
             information['reward'].sum().item()
+            information['actions'].sum().item()
             for index in range(batch.environment_count):
                 batch.get_state(index)
 
@@ -94,7 +94,8 @@ def test_observers_run_in_order_with_what_each_call_returns():
         assert calls[index][2] is not returned and 'reward' not in returned
         assert calls[index][2]['reward'] is rewards
         assert all(calls[index][2][key] is value for key, value in returned.items())
-        assert calls[index][2].keys() == {*returned, 'reward'}
+        assert calls[index][2].keys() == {*returned, 'reward', 'actions'}
+        assert calls[index][2]['actions'].tolist() == [[0] * 4] * 3
     assert calls[4][1] is None and calls[4][2]['reset'].tolist() == [True, False, True]
     batch.remove_observer(first)
     batch.step(torch.zeros((3, 4), dtype=torch.int32))
@@ -102,6 +103,87 @@ def test_observers_run_in_order_with_what_each_call_returns():
     batch.close()
     assert calls[-1][1] is None and calls[-1][2] == {'close': True}
     assert batch.observers == ()
+
+
+def actions_of(observed):
+    """An observer that keeps a copy of the actions of each step and the key of each reset."""
+
+    def observer(batch, done, information):
+        if done is None:
+            observed.append(('actions' in information, None))
+            return
+        actions = information['actions']
+        assert actions.dtype == torch.int32 and actions.device == batch.torch_device
+        assert tuple(actions.shape) == (batch.environment_count, batch.agents)
+        observed.append((done.bool().any().item(), actions.clone()))
+
+    return observer
+
+
+def test_observers_receive_the_actions_of_every_step(device):
+    batch = cuju.BatchEnvironment(ASSETS, environment_count=3, device=device, seed=3)
+    observed = []
+    batch.add_observer(actions_of(observed))
+    batch.reset()
+    on_device = actions_at(1, 3, 4, batch.action_count).to(batch.torch_device)
+    _, _, _, _ = batch.step(on_device)
+    # Actions already in the batch's form reach the observers without a copy.
+    seen = []
+    batch.add_observer(lambda batch, done, information: seen.append(information.get('actions')))
+    batch.step(on_device)
+    assert seen[-1].data_ptr() == on_device.data_ptr()
+    played = [on_device.cpu(), on_device.cpu()]
+    forms = [
+        actions_at(2, 3, 4, batch.action_count).tolist(),
+        actions_at(3, 3, 4, batch.action_count).to(torch.int64),
+        actions_at(4, 3, 4, batch.action_count),
+        # A negative index counts from the end, and the observers see it as given.
+        -1 - actions_at(5, 3, 4, batch.action_count),
+    ]
+    if device == 'cuda':
+        forms.append(actions_at(6, 3, 4, batch.action_count).pin_memory())
+    for actions in forms:
+        batch.step(actions)
+        played.append(torch.as_tensor(actions, dtype=torch.int32))
+    batch.reset(mask=[True, False, True])
+    # After `step_async` the observers see the actions that the step started with, even when the
+    # caller writes its tensor before `step_wait`.
+    for host in (False, True):
+        actions = actions_at(7 + host, 3, 4, batch.action_count)
+        actions = actions if host else actions.to(batch.torch_device)
+        batch.step_async(actions)
+        played.append(actions.cpu().clone())
+        actions.fill_(0)
+        batch.step_wait()
+    batch.close()
+    steps = [entry for entry in observed if entry[1] is not None]
+    # The two resets and the close carry no actions.
+    assert [entry for entry in observed if entry[1] is None] == [(False, None)] * 3
+    assert len(steps) == len(played)
+    for (_, seen_actions), actions in zip(steps, played, strict=True):
+        assert seen_actions.cpu().tolist() == actions.tolist()
+
+
+def test_observers_receive_the_actions_of_a_step_that_resets(device):
+    batch = cuju.BatchEnvironment(
+        'academy_empty_goal_close_l1_r0', environment_count=2, device=device, seed=5
+    )
+    observed = []
+    batch.add_observer(actions_of(observed))
+    batch.reset()
+    resets = 0
+    for step in range(400):
+        # The first environment shoots, the second moves, so only one ends on most steps.
+        actions = torch.tensor([[12 if step % 2 else 5], [step % 9]], dtype=torch.int32)
+        _, _, done, _ = batch.step(actions.squeeze(1) if step % 3 else actions)
+        ended, seen = observed[-1]
+        assert ended == bool(done.bool().any())
+        assert seen.cpu().tolist() == actions.tolist()
+        resets += int(ended)
+        if resets == 3:
+            break
+    assert resets == 3
+    batch.close()
 
 
 def test_reset_done_hands_the_ended_environments():
@@ -321,7 +403,7 @@ def test_scenario_name(tmp_path):
 def run(code, **variables):
     """Runs `code` in a new interpreter that sees the same `cuju`, and returns what it prints."""
     environment = {**os.environ, **variables}
-    environment.pop('CUJU_RENDER', None)
+    environment.pop('CUJU_BATCH_HOOKS', None)
     environment.update(variables)
     result = subprocess.run(
         [sys.executable, '-c', textwrap.dedent(code)],
@@ -332,59 +414,6 @@ def run(code, **variables):
         env=environment,
     )
     return result.stdout.split()
-
-
-def test_a_plain_batch_imports_no_renderer_and_scans_no_entry_points():
-    # PyTorch may read entry points as it loads, so the count starts once it has.
-    code = """
-        import importlib.metadata as metadata
-        import sys
-        import torch
-
-        calls = []
-        for name in ('entry_points', 'distributions', 'distribution', 'metadata', 'version'):
-            def counted(*arguments, _original=getattr(metadata, name), _name=name, **keywords):
-                calls.append(_name)
-                return _original(*arguments, **keywords)
-            setattr(metadata, name, counted)
-        import cuju
-
-        batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=2, device='cpu')
-        batch.reset()
-        for _ in range(5):
-            batch.step(torch.zeros((2, 4), dtype=torch.int32))
-        batch.close()
-        print(len(calls), any(name.startswith('cuju.render') for name in sys.modules))
-    """
-    assert run(code) == ['0', 'False']
-    assert run(code, CUJU_RENDER='off') == ['0', 'False']
-
-
-def _renderer_installed():
-    """Returns whether the renderer, the package cuju-render, is installed."""
-    try:
-        return importlib.util.find_spec('cuju.render') is not None
-    except ModuleNotFoundError:
-        return False
-
-
-@pytest.mark.skipif(not _renderer_installed(), reason='the renderer, cuju-render, is missing')
-def test_the_render_variable_imports_the_renderer_only_when_set(render_home):
-    code = """
-        import sys
-        import cuju
-
-        batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=1, device='cpu')
-        print('cuju.render' in sys.modules, len(batch.observers))
-        batch.close()
-    """
-    assert run(code, CUJU_RENDER_HOME=str(render_home)) == ['False', '0']
-    assert run(code, CUJU_RENDER='on', CUJU_RENDER_HOME=str(render_home)) == ['True', '1']
-
-
-@pytest.fixture
-def render_home(tmp_path):
-    return tmp_path / 'render'
 
 
 def test_a_step_without_observers_costs_no_more_than_one_with_a_no_op_observer():

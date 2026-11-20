@@ -33,7 +33,7 @@ def test_an_environment_out_of_range_is_an_index_error(batch):
 
 
 def test_an_unknown_device_is_a_value_error():
-    for options in ({'device': 'tpu'}, {'device': 'cpu', 'representation': 'pixels'}):
+    for options in ({'device': 'tpu'}, {'device': 'cpu', 'representation': 'pictures'}):
         with pytest.raises(cuju.ChoiceError) as raised:
             cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, **options)
         assert isinstance(raised.value, ValueError) and isinstance(raised.value, KeyError)

@@ -28,3 +28,49 @@ def test_state_round_trip(device):
             break
     if not ended:
         assert batch.get_state(0) == batch.get_state(1)
+
+
+def test_a_state_of_the_other_parity_plays_as_in_grf(device):
+    # GRF: `11_vs_11_stochastic` swaps the teams' formations with the parity of the episode. A load
+    # takes the state's order of the teams, while the players keep the formation entries of the
+    # reset. The digest is of every field of the clean GRF build's match 115 steps after loading a
+    # state of the second episode into the third, past a goal and its kickoff, without the padding
+    # that GRF leaves unset in each radian.
+    import hashlib
+
+    import numpy as np
+    import torch
+
+    import cuju.state
+
+    def batch(episode_number):
+        made = cuju.BatchEnvironment(
+            '11_vs_11_stochastic',
+            environment_count=1,
+            device=device,
+            agent_counts=[(0, 0)],
+            episode_number=episode_number,
+            game_engine_random_seed=2,
+        )
+        made.reset()
+        return made
+
+    actions = torch.zeros((1, 0), dtype=torch.int32, device=device)
+    first = batch(1)
+    for _ in range(100):
+        first.step(actions)
+    state = first.get_state(0)
+    first.close()
+    second = batch(2)
+    second.set_state(0, state)
+    for _ in range(115):
+        second.step(actions)
+    loaded = second.get_state(0)
+    second.close()
+    layout = cuju.state.layout()
+    names = list(layout)
+    digest = hashlib.sha256()
+    for name, value in zip(names, cuju.state.read(loaded, names), strict=True):
+        data = np.ascontiguousarray(value).tobytes()
+        digest.update(data[:5] if layout[name].type == 'N7blunted6radianE' else data)
+    assert digest.hexdigest() == '61019403dfa67543dcad95dc61e2ebd7f6cdcc18c50183a4e0cf96e27c2dd15a'
