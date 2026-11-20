@@ -5,8 +5,8 @@ type: software
 authors:
     - family-names: Koraleski
       given-names: André
-version: 0.2.1
-date-released: "2026-11-11"
+version: 0.3.0
+date-released: "2026-11-20"
 license:
     - Apache-2.0
     - LGPL-2.1-or-later
@@ -14,8 +14,8 @@ license:
     - SunPro
     - BSL-1.0
     - BSD-3-Clause
-url: https://github.com/AndreKoraleski/cuju
-repository-code: https://github.com/AndreKoraleski/cuju
+url: https://github.com/cuju-football/engine
+repository-code: https://github.com/cuju-football/engine
 abstract: >-
     cuju is a bit-exact, batched reimplementation of Google Research Football for CUDA and the
     CPU. For the same seed and actions, every state, observation, reward and done flag equals that
