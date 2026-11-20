@@ -1,11 +1,11 @@
 # Migrating from GRF
 
 **Migration from GRF** moves code written for Google Research Football, or GRF, onto cuju's engine
-through one of three entry points, GRF's import paths in `cuju.gfootball`, GRF's
+through one of three entry points, GRF's own Python package in `cuju.gfootball`, GRF's
 `create_environment` in `cuju.env`, and the batch, `cuju.BatchEnvironment`. The matches are the
 same in all three, and every option keeps GRF's name. The first two entry points play one
-environment per call with GRF's interface and run GRF's code as it stands, and the batch plays
-thousands of environments per call and takes a rewrite of the training loop.
+environment per call with GRF's interface, and the batch plays thousands of environments per call
+and takes a rewrite of the training loop.
 
 The batch changes three properties of a loop. Its outputs are shared tensors that the next step
 overwrites, its episodes reset inside `step` with the last observation in `final_observation`, and
@@ -18,13 +18,13 @@ and the version of GRF.
 
 cuju has three entry points, which trade compatibility with GRF's code for throughput.
 
-**GRF's import paths, in `cuju.gfootball`.** The imports change and the rest of the code stays as it
-is. The code keeps calling `create_environment`, the wrappers and `observation_preprocessing`, as
-it did with GRF.
+**GRF's Python package, in `cuju.gfootball`.** GRF's own modules, ported verbatim with their import
+lines changed, run over cuju's engine. The imports change and the rest of the code stays as it is,
+its use of GRF's internals included.
 
-**GRF's `create_environment`, in `cuju.env`.** The same function under a shorter path takes three
-keyword-only arguments beyond GRF's, `device`, `threads` and `api`, the last of which chooses
-Gymnasium's interface.
+**GRF's `create_environment`, in `cuju.env`.** cuju's own implementation of GRF's function, over a
+batch of one environment, takes three keyword-only arguments beyond GRF's, `device`, `threads` and
+`api`, the last of which chooses Gymnasium's interface.
 
 **The batch, `cuju.BatchEnvironment`.** Thousands of environments advance per call, and their
 outputs arrive as PyTorch tensors. The throughput of cuju lies here, and the loop is written for a
@@ -34,8 +34,10 @@ The first two play one environment per call, as GRF does, so they keep GRF's arc
 throughput of one environment at a time. In return, GRF's code runs on them as it stands.
 Evaluation scripts, a Kaggle submission, a notebook that inspects raw observations or a test that
 compares with published numbers keep working, and code with known results confirms that cuju
-reproduces them. The batch serves the part of a project where the time goes, the collection of
-experience for training.
+reproduces them. `cuju.gfootball` is GRF's code itself and runs everything that GRF's Python does,
+at about GRF's speed, since GRF's Python costs about a millisecond a step on its own. `cuju.env`
+skips that Python and runs several times as fast. The batch serves the part of a project where the
+time goes, the collection of experience for training.
 
 A port usually proceeds in two stages. The imports switch first, and the existing code runs, so that
 any difference appears in code whose behaviour is known. The training loop then moves to a batch, a
@@ -44,30 +46,18 @@ convenient. Both kinds of environment play GRF's matches, so the two coexist in 
 
 ## Import paths
 
-`cuju.gfootball` mirrors GRF's import paths, `gfootball.env`, `gfootball.env.config.Config`,
-`FootballEnv`, `football_action_set`, `observation_preprocessing`, `scenario_builder`,
-`script_helpers`, `player_base`, `gfootball.scenarios`, `gfootball.replay` and `dump_to_txt`. Its
-`wrappers` module holds every wrapper of GRF's module, each running GRF's code over cuju's
-environment, and `create_environment` applies them itself from its arguments, as GRF's does. A
-stack of wrappers built by hand over a raw environment therefore gives the outputs of
-`create_environment` for the same arguments, bit for bit. Its `get_state` and `set_state` carry the
-counts of `CheckpointRewardWrapper` and the frames of `FrameStack` in the state, as GRF's do, so the
-stack and `create_environment` write equal bytes and load each other's states. Code written for GRF
-runs unchanged once its imports point there, except where it renders or reaches into GRF's
-internals, as listed in [Counterparts of GRF's other features](#counterparts-of-grfs-other-features).
-
-These paths, and `cuju.env` beneath them, build GRF's spaces with Gymnasium, which the extra
-`spaces` installs. As in GRF, `import cuju.gfootball` binds `cuju.gfootball.env`, which loads at
-its first use, so the import itself succeeds on an installation without Gymnasium.
-
-`FootballEnv(config)` plays the players of a `Config` as GRF's does, with at most one `agent`. A
-configuration that leaves out the agent, as in GRF's `play_game.py`, lets its players play every
-step of `env.step([])`, and `reset` and `step` return GRF's observation of the match, the dictionary
-that GRF's dumps hold, with the scoring reward as a `float32` scalar array. A configuration with no
-player at all leaves the batch no raw observation to read, so its observation is `None`.
+`cuju.gfootball` is GRF's Python package, `gfootball` of GRF 2.10.3, with every module of it,
+`gfootball.env`, `config`, `football_env`, `football_env_core`, `wrappers`, `observation_processor`,
+`scenario_builder`, the players, the scenarios with their `tests` package, `play_game`, `replay`,
+`dump_to_txt`, `dump_to_video`, `eval_server` and `examples`. Each module is GRF's file with its
+import lines pointed at `cuju.gfootball`, `cuju.gfootball_engine` and two small modules of cuju, so
+the code that runs is GRF's own, line for line. `cuju.gfootball_engine` stands in for GRF's compiled
+engine with the same classes, functions, conversions and errors, so GRF's Python finds what it
+expects, down to `env.unwrapped._env`, the `_unused_engines` pool and the private attributes of
+GRF's classes. Code written for GRF runs unchanged once its imports point there.
 
 ```sh
-pip install 'cuju[spaces]'
+pip install cuju-engine
 ```
 
 A short program in GRF opens an environment and computes its SMM.
@@ -92,43 +82,107 @@ observation = env.reset()
 smm = observation_preprocessing.generate_smm(observation)
 ```
 
+GRF's package needs `absl-py` and `six`, which `pip install cuju-engine` installs. It uses the
+installed gym wherever GRF runs on it, gym 0.21, which GRF requires, and every gym up to 0.24, and gym 0.25
+with numpy 1. With a later gym, or without one, cuju carries a copy of gym 0.21's core, which serves
+in its place, as [Differences from GRF](differences-from-grf.md#grfs-python-package) describes.
+OpenCV, which GRF uses for frames and videos, loads at its first use, so training without it works,
+and the extra `gfootball-video` installs it together with GRF's media, which cuju's renderer draws
+GRF's frames from. The extras `gfootball-play` and `gfootball-remote` install pygame for GRF's game
+and keyboard players and gRPC for its remote environments.
+
 These paths run on cuju alone, and with GRF installed as well, the two run side by side in one
-script. Each draws its seeds from Python's `random`, so two environments in one
-process shift each other's seeds, as two GRF environments do, a behaviour covered in
-[Episodes and seeds](episodes-and-seeds.md).
+script, since cuju's engine module never takes the name of GRF's. Each draws its seeds from Python's
+`random`, so two environments in one process shift each other's seeds, as two GRF environments do,
+a behaviour covered in [Episodes and seeds](episodes-and-seeds.md).
 
-### Counterparts of GRF's other features
+Importing `cuju.gfootball` registers GRF's ids `GFootball-<scenario>-<representation>-v0` with the
+gym it uses, as importing `gfootball` does, so `gym.make('GFootball-11_vs_11_kaggle-SMM-v0')` gives
+GRF's environment wherever GRF runs on the installed gym, and `cuju.gfootball._gym.make` gives it
+everywhere.
 
-Almost all of GRF's interface works through these paths. The remaining features of GRF have
-counterparts in cuju or in GRF itself, and they fall into three groups.
+### GRF's names through cuju-gfootball
 
-| GRF | Counterpart | Reason |
+Some code keeps its imports for good reasons. A library may import `gfootball` deep inside its own
+modules, as Kaggle's football environment does, a test suite may be worth running exactly as GRF
+ships it, and a dump written by GRF names GRF's modules inside its pickles. The package
+cuju-gfootball serves these cases. It maps GRF's top-level names onto the port, `gfootball` and its
+submodules onto `cuju.gfootball`, and `gfootball_engine` and `_gameplayfootball` onto
+`cuju.gfootball_engine`, so the first program of this section runs on cuju exactly as written for
+GRF.
+
+```sh
+pip install cuju-gfootball
+```
+
+Each of GRF's names is the module of cuju itself, so
+`gfootball.env.football_env is cuju.gfootball.env.football_env` holds, and code that mixes both
+spellings shares one module and one state. `importlib.util.find_spec('gfootball')` and
+`from gfootball.scenarios import *` work as in GRF, and so do gym's ids of the form
+`gfootball:GFootball-11_vs_11_kaggle-SMM-v0` on the gyms that accept that form for GRF, gym 0.21,
+0.24 and 0.25 with numpy 1. Gym 0.22 and 0.23 refuse the form for GRF's own package as well, and on
+them `import gfootball` followed by `gym.make('GFootball-11_vs_11_kaggle-SMM-v0')` gives the
+environment, as it does on every gym that GRF runs on. The specification of an id names the entry
+point `cuju.gfootball.env:create_environment`, the same function as GRF's
+`gfootball.env:create_environment` through the alias.
+
+The classes of the port report GRF's module names under the alias. `CoreAction` reports
+`gfootball.env.football_action_set`, `EnvState` reports `gfootball.env.football_env_core`, and the
+engine's enumerations report `_gameplayfootball`, which are the names that Python's `pickle`
+writes. A dump written through the alias therefore opens in GRF, and a dump written by GRF opens in
+the port, so dumps move freely between machines that run GRF and machines that run cuju, a
+convenience for a project that keeps an old evaluation pipeline on GRF while it trains on cuju.
+Without the alias each side writes names that the other cannot import, as
+[Differences from GRF](differences-from-grf.md#grfs-python-package) describes, while cuju's own
+readers, `cuju.dumps.read_dump`, `cuju replay` and `cuju dump-to-txt`, read every dump with or
+without it.
+
+GRF's own tests run through the alias exactly as GRF ships them, every file byte for byte, and
+cuju's testing runs them on each gym that GRF supports. Testing is internal, and it also opens dumps
+in both directions between the alias and GRF 2.10.3 and plays Kaggle's football environment end to
+end on the alias, its videos and the private trace that it reads at the end of an episode included,
+with the same matches as on GRF. Reports of code that behaves otherwise on the alias are welcome as
+issues.
+
+The alias activates through a file `cuju_gfootball.pth`, which Python runs at startup, and decides
+at the first import of one of GRF's names or of the port. The decision concerns GRF itself. The
+name `gfootball` belongs to an installed GRF, whether a regular or editable install, a folder on
+`PYTHONPATH` or the installed distribution `gfootball`, so beside any of them the alias activates
+nothing, the port keeps its own module names, and one `RuntimeWarning` names what it found.
+`python -m cuju_gfootball` prints which case holds and exits with 1 when the alias is inactive. GRF
+and cuju then run side by side in one script through `gfootball` and `cuju.gfootball`, as without
+the alias, and uninstalling either one of GRF and cuju-gfootball settles the name at the next start
+of Python. `pip uninstall cuju-gfootball` removes the alias and leaves cuju as it was.
+
+### Rendering and GRF's interactive features
+
+Every feature of GRF's Python works through these paths, rendering included. cuju's software
+renderer draws GRF's frames for `render=True`, `env.render()`, `write_video` with `render`, the
+representations `pixels` and `pixels_gray` and `PixelsStateWrapper`, byte for byte as GRF draws them
+on its reference, Mesa 25.2.8's llvmpipe, once the extra `pixels` has installed GRF's media.
+
+```sh
+pip install 'cuju-engine[pixels]'
+```
+
+Code that renders in GRF therefore renders in `cuju.gfootball` as it stands, and the section on
+[pixel observations and frames](#pixel-observations-and-frames) discusses its move to a batch. A
+few features have points worth knowing.
+
+| GRF | In cuju | Note |
 | --- | --- | --- |
-| `tracker_setup` | `get_state` at the steps to inspect | GRF's debugging tracker of its engine |
-| `env.unwrapped._env` and the private attributes of the players | the public API, or `get_state` | GRF's internals, with no core object per environment in cuju |
-| `render`, `write_video`, the representations `pixels` and `pixels_gray`, `PixelsStateWrapper` | dumps, which GRF's `dump_to_video` renders | rendering takes place in GRF, from dumps |
-| the `keyboard` player and `real_time` | GRF's own `keyboard` player, in a GRF that renders | interactive play needs a renderer |
-| the `ppo2_cnn` player | the policy loaded in the caller's code and played as an agent | a player of an OpenAI Baselines checkpoint |
-| `create_remote_environment` | an environment from `create_environment`, for evaluation on the caller's machine | a client of GRF's online game server |
-| importing a scenario module, as `import gfootball.scenarios.<name>` | the scenario's name, or `cuju.scenarios` with a custom scenario file | a batch plays bundles rather than importable modules |
+| the `keyboard` and `gamepad` players | GRF's own players, in `cuju.gfootball` with the extra `gfootball-play` | cuju's renderer draws into memory, so a program in which a person plays shows the frames itself, for example with OpenCV's `imshow` |
+| `real_time` | GRF's schedule, in `cuju.gfootball` | the renders per step follow the wall clock, in GRF and in cuju alike, so the matches depend on the speed of the machine |
+| `render_resolution_x`, `render_resolution_y` | GRF's options, in `cuju.gfootball` and in a batch | any height and a width that is a multiple of 4, with the frames tested at nine sizes |
+| `create_remote_environment` | GRF's client in `cuju.gfootball.env.remote_football_env`, with the extra `gfootball-remote` | a client of GRF's online game server, whose availability is unknown |
 
-Rendering accounts for the largest group. Videos, pixel observations and interactive play come from
-GRF, which renders cuju's dumps. For training this costs little, since a rendered GRF plays other
-matches than an unrendered one, as listed in [Differences from GRF](differences-from-grf.md), so
-every result trained on GRF's vector or SMM observations came from an unrendered match. A dump that
-GRF renders into a video shows the match that was played.
-
-GRF's internals form the second group. Code that reaches into `env.unwrapped._env` or the private
-attributes of GRF's players depends on GRF's object layout, which has no counterpart in a batch. In
-practice such code usually seeks one of two things, a value of the match, which `get_state` and the
-`raw` observation hold, or a way to set the match up, which a scenario file or `set_state` gives. The
-tracker belongs here too, and states saved at the steps of interest replace it.
-
-The third group holds features that belong to GRF's wider ecosystem. Remote play went through GRF's
-online game server, and evaluation in cuju runs on the caller's machine with `create_environment` or
-a batch. The `ppo2_cnn` player plays a checkpoint of OpenAI Baselines, whose policy loads in the
-caller's code and plays as an agent. A scenario is a name or a file, which a batch turns into a
-bundle.
+A rendering GRF plays other matches than an unrendered one, as listed in
+[Differences from GRF](differences-from-grf.md), and cuju's engine plays the rendering ones
+whenever it renders. Every result trained on GRF's vector or SMM observations came from an
+unrendered match, which a batch plays by default, and every result trained on GRF's pixels came
+from a rendering match, which a batch with `pixels` plays. `write_video` with `render` off writes
+GRF's two-dimensional view of the match, which GRF's Python draws with OpenCV from the extra
+`gfootball-video`, and Kaggle's videos are of this kind.
 
 ## GRF's interface for one environment
 
@@ -136,8 +190,10 @@ bundle.
 with GRF's interface, the one of gym 0.21 that GRF 2.10.3 is written for. `reset()` returns the
 observation, and `step(action)` returns `(observation, reward, done, info)`. It plays the same
 matches as GRF's after the same `random.seed(...)`, since it draws its seeds from Python's `random`
-as GRF does. It is also the function behind `cuju.gfootball.env.create_environment`. An environment
-with a stacked SMM and checkpoint rewards takes one step in a few lines.
+as GRF does, and as `cuju.gfootball.env.create_environment` does. It runs GRF's episode logic in
+cuju's engine rather than in GRF's Python, which makes it several times as fast, at the cost of
+GRF's internals. An environment with a stacked SMM and checkpoint rewards takes one step in a few
+lines.
 
 ```python
 import random
@@ -164,21 +220,26 @@ several times as fast as a GRF process.
 `(observation, info)` and `step` five values. `import cuju` registers the ids
 `GFootball-<scenario>-<representation>-v0`, with the representations `SMM`, `simple115` and
 `simple115v2`, for every shipped scenario, with Gymnasium as soon as it is imported, and
-`gymnasium.make('GFootball-11_vs_11_kaggle-simple115v2-v0')` gives that interface. gym's interface
-suits code written for GRF, and Gymnasium's suits libraries that expect it.
+`gymnasium.make('GFootball-11_vs_11_kaggle-simple115v2-v0')` gives that interface. gym gets GRF's
+own environments under the same ids from `import cuju.gfootball`. gym's interface suits code
+written for GRF, and Gymnasium's suits libraries that expect it.
 
 `get_state`, `set_state`, `observation()`, which returns GRF's raw dictionaries of the agent's
 players, and `close` work as GRF's do, and `env.batch` is the batch of one environment underneath,
 for access to a batch method from GRF's interface. With `representation='raw'`, `observation_space`
 is `None`, as GRF's raw observation has no space. `seed` returns `None` and `reward_range` is
 unbounded, as gym's `Env` gives them to GRF's environment, and `disable_render` does nothing.
-`render=True`, `write_video=True` and the `Pixels` ids raise `ValueError`, since rendering takes
-place in GRF, from dumps.
+`render=True`, `write_video=True` and the `Pixels` ids raise `ValueError`, since GRF's rendering
+takes place in `cuju.gfootball`, as [Frames and videos](rendering.md#grfs-rendering-in-cujugfootball)
+describes, and in a `BatchEnvironment` with `representation='pixels'` or `render_frames=True`, as
+[Rendering batches](rendering.md#rendering-batches) describes.
 
-The environment is a Gymnasium `Env` whose `reset` and `step` return gym's values. Its spaces are
-Gymnasium's when Gymnasium is installed, so a check such as
-`isinstance(space, gymnasium.spaces.Box)` holds, and the same check against gym's classes fails.
-GRF's wrappers come from `cuju.gfootball.env.wrappers`, which run over this interface.
+The environment is a Gymnasium `Env` whose `reset` and `step` return gym's values. Where a gym
+older than 0.26 is installed, as GRF requires, the environment is also gym's `Env` and its spaces
+are gym's, so code written for GRF checks `isinstance(env, gym.Env)` and
+`isinstance(space, gym.spaces.Box)` as it did. With only Gymnasium installed, the spaces are
+Gymnasium's. `api='gymnasium'` always gives Gymnasium's spaces. GRF's wrappers from
+`cuju.gfootball.env.wrappers` run over this interface too.
 
 This interface serves existing code, the check of a port and comparisons, and the batch serves
 training. A loop over many such environments, one per process as GRF is usually scaled, combines
@@ -207,11 +268,11 @@ dump is the time of that replay rather than of the original step. The match itse
 
 A dump can also be checked without rendering. `cuju replay --trace_file=<dump>`
 plays a dump's actions again from its configuration and compares every step with the dump, bit for
-bit. It prints the first difference and exits 1, or the steps found equal and exits 0.
-`cuju.gfootball.replay.check(trace_file)` returns `(steps, ended, difference)` for use in a script,
-and `ScriptHelpers().replay(dump, render=False)` is GRF's method, which raises `ValueError` naming
-the first difference. Both take dumps of cuju and of GRF that start at the start of an episode. The
-check confirms that a dump written by GRF on a given machine plays the same match in cuju.
+bit. It prints the first difference and exits 1, or the steps found equal and exits 0. It takes
+dumps of cuju and of GRF that start at the start of an episode, and confirms that a dump written by
+GRF on a given machine plays the same match in cuju. GRF's own `replay` and `ScriptHelpers().replay`
+in `cuju.gfootball` render with cuju's renderer, as GRF's do with its own, and its `dump_to_video`
+turns a dump into a rendered video.
 
 ### Custom players
 
@@ -222,8 +283,8 @@ and `lazy`, as in `extra_players=['<name>:left_players=1']`, loads
 `take_action(observations)` receives GRF's raw observation of each of its players and returns one
 action each, and `reset()` follows every `env.reset()`. `cuju.gfootball.env.player_base.PlayerBase`
 is GRF's base class, so a player written for GRF imports it from there, and the `replay` player
-plays a dump's actions. A missing module or class, or a wrong number of actions, raises
-`ValueError`.
+plays a dump's actions. In `cuju.env`, a missing module or class, or a wrong number of actions,
+raises `ValueError`, and in `cuju.gfootball` such a player fails as it does in GRF.
 
 Such a player runs in Python once per step, as in GRF, which suits an opponent in evaluation. For
 training, an opponent plays as agents of a batch, or as the ported
@@ -232,14 +293,12 @@ environment at once.
 
 ### Scenario configuration
 
-`Config.ScenarioConfig()` builds the scenario of the current episode as GRF's `scenario_builder`
-does, from GRF's scenario files, which cuju ships, or from a custom scenario file. `NewScenario()`
-and `set_scenario_value(key, value)` behave as GRF's do. `scenario_builder.Scenario(config)` is
-GRF's builder of a configuration's scenario, which draws the seed of the episode from Python's
-`random` unless the configuration holds one, and its `ScenarioConfig()` returns the scenario. Code
-that reads a scenario's settings, such as the length of a half or whether it ends on a goal, keeps
-working. A dump written after 150 steps and the start of the second half of `11_vs_11_kaggle` each
-take a line.
+`cuju.gfootball.env.config.Config` is GRF's, so `Config.ScenarioConfig()` builds the scenario of
+the current episode with GRF's `scenario_builder`, from GRF's scenario files, which
+`cuju.gfootball.scenarios` holds, and returns GRF's `ScenarioConfig` with `float32` positions, as
+GRF's engine stores them. Code that reads a scenario's settings, such as the length of a half or
+whether it ends on a goal, keeps working. A dump written after 150 steps and the start of the second
+half of `11_vs_11_kaggle` each take a line.
 
 ```python
 import cuju.env
@@ -255,9 +314,9 @@ configuration = config.Config({'level': '11_vs_11_kaggle'})
 configuration.ScenarioConfig().second_half  # 1500
 ```
 
-Two details differ. A bundle holds no scenario file, so its `ScenarioConfig()` raises
-`NotImplementedError`. The positions keep the scenario's double values, where GRF's engine rounds
-them to `float32`, so comparisons of positions use a tolerance.
+GRF's `Config` takes a level that names a module of `cuju.gfootball.scenarios`, as GRF's takes one of
+`gfootball.scenarios`, and ends the process for any other, as GRF's does. The levels that name a
+bundle or the path of a scenario file belong to `cuju.env` and the batch.
 
 ## Batched training loop
 
@@ -322,10 +381,10 @@ the agent counts move into the scenario's name or `agent_counts`.
 | --- | --- | --- |
 | `env_name` | the first argument | a shipped scenario by name, a bundle by path, or a scenario file |
 | `stacked` | `stacked` | same |
-| `representation` | `representation` | same names, the default is `simple115v2` where GRF's is `extracted`, and `pixels` comes from GRF's rendering |
+| `representation` | `representation` | same names, the default is `simple115v2` where GRF's is `extracted`, and `pixels` and `pixels_gray` render, as in [Pixel observations and frames](#pixel-observations-and-frames) |
 | `rewards` | `rewards` | same, `scoring` or `scoring,checkpoints` |
 | `write_goal_dumps`, `write_full_episode_dumps`, `dump_frequency`, `logdir` | `cuju.dumps.DumpWriter` | written on request, outside the step, as in [Dumps from a batch](#dumps-from-a-batch) |
-| `render`, `write_video` | GRF's `dump_to_video`, from dumps | rendering takes place in GRF |
+| `render`, `write_video` | `render_frames=True` for the frames, and `write_video` in `cuju.gfootball` | a batch returns frames, and GRF's videos come from GRF's Python |
 | `extra_players` | `cuju.players.Bot`, `cuju.players.Lazy` | GRF's `bot` and `lazy` players, ported, as in [Scripted players](#scripted-players-and-control_all_players) |
 | `number_of_left_players_agent_controls` | the `_l<left>` of the name, or `agent_counts` | same meaning, any count from 0 to the team size |
 | `number_of_right_players_agent_controls` | the `_r<right>` of the name, or `agent_counts` | same meaning |
@@ -352,9 +411,9 @@ the same names where they mean the same thing.
 | `level` | the first argument | the scenario |
 | `players` | the agent counts, `cuju.players.Bot`, `cuju.players.Lazy`, and custom players through `create_environment` | the `keyboard` player plays in a GRF that renders |
 | `real_time` | the speed of the hardware | a batch runs as fast as the hardware allows |
-| `display_game_stats`, `custom_display_stats` | GRF's rendering of dumps | rendering takes place in GRF |
-| `render_resolution_x`, `render_resolution_y` | GRF's rendering of dumps | rendering takes place in GRF |
-| `video_format`, `video_quality_level`, `write_video` | GRF's rendering of dumps | rendering takes place in GRF |
+| `display_game_stats`, `custom_display_stats` | GRF's options in `cuju.gfootball` | GRF's Python draws them over its videos |
+| `render_resolution_x`, `render_resolution_y` | `render_resolution_x`, `render_resolution_y` | same, the size of a rendering batch's frames, with a width that is a multiple of 4 |
+| `video_format`, `video_quality_level`, `write_video` | GRF's options in `cuju.gfootball` | GRF's Python writes its videos |
 | `dump_full_episodes`, `dump_scores`, `tracesdir` | `cuju.dumps.DumpWriter` | as in [Dumps from a batch](#dumps-from-a-batch) |
 
 `reverse_team_processing` is the only option whose place changes in meaning. In GRF it is drawn from
@@ -375,9 +434,9 @@ The methods map one to one, with an environment axis added to everything they ta
 | `env.close()` | `batch.close()` | frees the buffers |
 | `env.observation_space` | `batch.single_observation_space` | `batch.observation_space` for the batch |
 | `env.action_space` | `batch.single_action_space` | `batch.action_space` for the batch |
-| `env.render()`, `env.disable_render()` | GRF's `dump_to_video`, from dumps | rendering takes place in GRF |
+| `env.render()`, `env.disable_render()` | `render_frames=True` and `batch.frame()` | a batch renders from its creation, every environment alike |
 | `env.write_dump(name)` | `env.write_dump(name)` in `cuju.env`, `cuju.dumps.DumpWriter` for a batch | the last steps of an episode, or whole episodes and goals |
-| `env.tracker_setup(start, end)` | `get_state` at the chosen steps | the tracker is part of GRF's engine |
+| `env.tracker_setup(start, end)` | `get_state` at the chosen steps, or GRF's tracker in `cuju.gfootball` | GRF's tracker compares two engines of one process in lockstep |
 | `info['score_reward']` | `information['score_reward']` | same, `[environment_count]` |
 | `len(obs['left_team'])`, `len(obs['right_team'])` | `batch.left_players`, `batch.right_players` | per environment, from a left agent's view |
 
@@ -394,7 +453,7 @@ in Python disappears.
 | --- | --- | --- |
 | `Simple115StateWrapper` | `representation='simple115'` or `'simple115v2'` | computed inside the batch |
 | `SMMWrapper` | `representation='extracted'` | computed inside the batch |
-| `PixelsStateWrapper` | GRF itself | pixel observations come from a renderer |
+| `PixelsStateWrapper` | `representation='pixels'` or `'pixels_gray'` | drawn by cuju's renderer, the same frame for every agent |
 | `FrameStack` | `stacked=True` | four observations, the oldest first |
 | `CheckpointRewardWrapper` | `rewards='scoring,checkpoints'` | same reward, same state key |
 | `SingleAgentObservationWrapper`, `SingleAgentRewardWrapper` | `squeeze=True` | drops the agent axis for one agent, which GRF does by itself when one agent plays and cuju only when asked |
@@ -402,12 +461,11 @@ in Python disappears.
 | `PeriodicDumpWriter` | `cuju.dumps.DumpWriter` | as in [Dumps from a batch](#dumps-from-a-batch) |
 | `MultiAgentToSingleAgent` | `cuju.wrappers.MultiAgentToSingleAgent` | for scenarios that set `control_all_players`, as in [Scripted players](#scripted-players-and-control_all_players) |
 
-The classes themselves remain in `cuju.gfootball.env.wrappers` for code on GRF's interface, where
-they wrap one environment at a time, as GRF's do. `MultiAgentToSingleAgent` there takes a batch as
-well and then gives the batched class. Over one environment it gives the players that the policy
-does not move GRF's `builtin_ai` action, which a cuju environment plays with the action set `v2` or
-`full`, so the environment under it takes `other_config_options={'action_set': 'v2'}`, whose first
-19 actions are those of `default`.
+GRF's classes themselves are in `cuju.gfootball.env.wrappers` for code on GRF's interface, where
+they wrap one environment at a time, as GRF's do. Over one environment `MultiAgentToSingleAgent`
+gives the players that the policy does not move GRF's `builtin_ai` action, which an environment
+plays with the action set `v2` or `full`, so the environment under it takes
+`other_config_options={'action_set': 'v2'}`, whose first 19 actions are those of `default`.
 
 A custom wrapper that transforms observations ports best as a function applied to the batch's
 tensors after each step, where it runs once for all environments rather than once per environment.
@@ -488,13 +546,90 @@ therefore serves dumps meant for video, and a dump meant for replay needs no raw
 An episode whose difficulty differs from its scenario's names its level
 `<scenario>_difficulty_<left>_<right>` and writes that GRF scenario file next to the dumps. GRF's
 tools find it once it is copied into GRF's `gfootball/scenarios/`, since GRF looks scenarios up by
-name. `cuju.dumps.read_dump(path)` reads a dump, cuju's or GRF's, without GRF or numpy, and runs no
-code from it, which makes it safe for dumps from other sources.
+name. `cuju.dumps.read_dump(path)` reads a dump, cuju's, GRF's or one of `cuju.gfootball`, without
+GRF or numpy, and runs no code from it, which makes it safe for dumps from other sources.
 
-In GRF, `ScriptHelpers().replay(path, render=False)` replays a dump of cuju bit for bit, with GRF's
-default `physics_steps_per_frame=10`, and `cuju replay` checks one without GRF.
-A rendering replay drifts from the match, as rendering does, so its video can part from the match
-that the dump was written from.
+In GRF and in `cuju.gfootball`, `ScriptHelpers().replay(path, render=False)` replays a dump of
+cuju bit for bit, with GRF's default `physics_steps_per_frame=10`, and `cuju replay` checks one
+without GRF. A rendering replay plays the matches of render mode, so its video can part from an
+unrendered match that the dump was written from, in GRF and in `cuju.gfootball` alike. A batch with
+`render_frames=True` gives the frames of the match that it plays itself.
+
+## Pixel observations and frames
+
+Code that trains or evaluates on GRF's pixels moves to cuju along the same two stages as any other
+code. With its imports pointed at `cuju.gfootball`, it runs as it stands and draws GRF's frames
+through cuju's software renderer, so a policy trained on GRF's pixels sees in `cuju.gfootball` the
+pictures it would see on GRF's reference. Its training loop then moves to a batch with
+`representation='pixels'` or `'pixels_gray'`, which draws the same frames for many environments at
+once, each on a worker of its own.
+
+The frames are those of one reference, GRF on Mesa 25.2.8's llvmpipe, as
+[Frames and videos](rendering.md#frames-equal-to-grfs) explains. A GRF that rendered with a GPU's driver
+drew slightly different pixels, so a policy trained there meets in cuju the same pictures up to
+small differences of shading and filtering, much as it would meet them on another GRF machine, and
+a comparison with its published numbers is statistical, over many episodes. GRF 3d9e754 drawing
+with Mesa 25.2.8's llvmpipe and LLVM 20.1.2 on an AMD processor of the Zen 3 generation drew cuju's
+frames exactly.
+
+### The batch for pixel code
+
+A loop over GRF environments with pixels maps onto a batch with few changes.
+
+```python
+import gfootball.env as football_env
+
+env = football_env.create_environment('11_vs_11_stochastic', representation='pixels', render=True)
+observation = env.reset()  # [72, 96, 3]
+```
+
+With cuju, eight such environments run in one batch.
+
+```python
+import cuju
+
+batch = cuju.BatchEnvironment(
+    '11_vs_11_stochastic',
+    environment_count=8,
+    device='cpu',
+    representation='pixels',
+    squeeze=True,
+)
+observation = batch.reset()  # [8, 72, 96, 3]
+```
+
+The options and outputs of GRF's pixel code map as the table shows.
+
+| GRF | cuju | Notes |
+| --- | --- | --- |
+| `representation='pixels'`, `render=True` | `representation='pixels'` | a batch with pixels renders by itself, so `render` has no counterpart |
+| `representation='pixels_gray'` | `representation='pixels_gray'` | `[..., 72, 96, 1]`, as in GRF |
+| `channel_dimensions` | `channel_dimensions` | same, the size of the shrunk frame |
+| `stacked=True` with pixels | a stack kept by the training code | the batch raises `ConfigurationError` for `stacked=True` with pixels, and [Training on pixels](rendering.md#training-on-pixels) shows a stack of four |
+| `observation['frame']` of `raw` | `information['frame']` with `render_frames=True`, or `batch.frame()` | `[environment_count, render_resolution_y, render_resolution_x, 3]`, rows from the top, red, green, blue |
+| `env.render(mode='rgb_array')` | `information['frame']` with its channels reversed | GRF's `render` reverses the channels of the observation's frame, and the batch returns the observation's order |
+| `render_resolution_x`, `render_resolution_y` | `render_resolution_x`, `render_resolution_y` | same, and `pixels` and `pixels_gray` shrink the whole frame, as GRF's wrapper does |
+| `write_video=True`, `dump_to_video` | GRF's, in `cuju.gfootball`, or a video written from `information['frame']` | GRF's video also holds the frames of the internal steps, which a batch does not draw |
+
+### Points to check in a pixel port
+
+**Matches of render mode.** A batch with pixels plays the matches of a rendering GRF, as every GRF
+with pixels did, so the same seed in a batch with `simple115v2` plays other matches, which part once
+the referee acts out a stoppage. A port that compares pixel runs with vector runs compares the game,
+not the matches.
+
+**Overwritten frames.** The pixel observations and the frames are buffers that the next step
+overwrites, as every output of a batch is, so a rollout buffer or a video writer copies them at
+each step.
+
+**The cost.** A frame costs a few hundred milliseconds of processor time, so a batch on a laptop
+draws about ten frames a second in all and each environment holds about 200 MB.
+[Frames and videos](rendering.md#speed) gives the measured figures, and a port plans its batch from them
+rather than from the speed of the simulation.
+
+**The GPU.** On the GPU the simulation runs on the device and the frames are drawn on the host and
+copied to the device after each step, so a batch with pixels refuses `step_async` and
+`torch.compile`, and a loop that used them steps with `step`.
 
 ## Scripted players and `control_all_players`
 

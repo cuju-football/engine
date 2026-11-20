@@ -61,9 +61,19 @@ observation of the ended episode is in `information['final_observation']`, where
 A difference from a local GRF may indicate a bug in cuju, and reports of such differences are
 welcome as issues. Agreement requires that both run the same scenario, options, seed and actions, on
 a GRF built as the reference is, with GCC for x86-64 Linux with glibc 2.39. A GRF built on another
-platform may play other matches, and a GRF that renders always does. A difference that persists
-under these conditions is reported in an issue with the details that [Exactness](exactness.md)
-lists.
+platform may play other matches, and a GRF that renders plays the matches of render mode, which
+cuju plays whenever it renders, in `cuju.gfootball` and in batches with pixels or frames. A
+difference that persists under these conditions is reported in an issue with the details that
+[Exactness](exactness.md) lists.
+
+### Frames that differ from a local GRF's
+
+GRF's frames depend on the driver that draws them, a GPU's driver or a version of Mesa, so a local
+GRF can draw pixels that differ from cuju's while the match is the same. cuju draws the frames of
+one reference, GRF on Mesa 25.2.8's llvmpipe with LLVM 20.1.2 on an AMD Zen 3 processor, on every
+machine, as [Frames and videos](rendering.md#frames-equal-to-grfs) explains. A frame of cuju that differs
+from that reference's is a bug and is welcome as an issue, while a difference from GRF on another
+driver is the driver's own picture.
 
 ### Transfer of policies to GRF
 
@@ -120,12 +130,20 @@ and the CUDA backend on Linux on x86-64, Windows and WSL2. Every platform passes
 with the same digests, so each gives the same bits, as listed in
 [Installation](installation.md#platforms).
 
+### Missing renderer or media
+
+`RendererMissingError` in `cuju.gfootball`, or `MissingFileError` from a batch with pixels, names
+`pip install 'cuju-engine[pixels]'`, which installs GRF's media, the package cuju-grf-media. The renderer's
+library itself is part of cuju's wheel, and a source build makes it with the CMake option
+`CUJU_RENDER`, on by default, as [Installation](installation.md) describes.
+
 ### Missing kernel image
 
-The wheels for Linux on x86-64 and for Windows carry machine code for the GPU architectures on
-which exactness was checked, compute capabilities 7.5, 8.0, 8.6 and 8.9. Other GPUs run cuju from a
-source build, with `CMAKE_CUDA_ARCHITECTURES` set to the compute capability of the GPU, after which
-`pytest tests/` checks the build.
+The wheels for Linux on x86-64 and for Windows carry machine code for compute capabilities 7.5,
+8.0, 8.6 and 8.9, all compiled from the same source. The kernels of this release were proven
+bit-exact on the RTX 3050 Laptop GPU, compute capability 8.6, and `cuju check` verifies any GPU in
+about a minute. Other GPUs run cuju from a source build, with `CMAKE_CUDA_ARCHITECTURES` set to the
+compute capability of the GPU, after which `pytest tests/` checks the build.
 
 ### Slow first call
 
@@ -196,17 +214,17 @@ the player of one agent to the built-in AI for a step, which produces other matc
 
 ### Rendering and video
 
-Matches of cuju are watched in a browser with `cuju render`, saved or live, as described in
-[Rendering](rendering.md), and watching preserves every output. The Home page leads to the live
-sources and recent recordings. Matches requests games between registered submissions, including
-teams that control several players, and Play a game lets one or two people play with a keyboard
-or controllers. Ability sets the strength of the built in AI on each side, including teammates
-that it plays for a submission or a person. A `.cjr` file opens in the browser viewer.
+cuju draws GRF's frames with a software renderer of its own, which needs no GPU and no display, in
+`cuju.gfootball`, where `render=True`, `write_video=True`, `pixels` and `pixels_gray` run as in
+GRF, and in a batch with `representation='pixels'`, `'pixels_gray'` or `render_frames=True`, after
+`pip install 'cuju-engine[pixels]'`. The frames equal GRF's, byte for byte, and a frame takes a few hundred
+milliseconds of processor time, as [Frames and videos](rendering.md) describes.
 
-Videos of cuju matches are produced with
-the tools of GRF. `cuju.dumps.DumpWriter` writes a match as
-a GRF dump, and the `dump_to_video` of GRF turns the dump into a video. A state can also be loaded
-into a GRF with rendering, which plays differently from the moment it renders.
+GRF's videos of a match come from `write_video=True` in `cuju.gfootball`, with every frame that
+GRF's video holds, or from the frames of a batch with `render_frames=True`, written with any video
+library. `cuju.dumps.DumpWriter` writes a match as a GRF dump, and the `dump_to_video` of GRF, in
+GRF or in `cuju.gfootball`, turns the dump into a video, which plays the dump again in render mode
+and so plays another match than the unrendered one that the dump holds.
 
 ## Project
 

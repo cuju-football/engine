@@ -14,13 +14,13 @@ x86-64, on Windows and in WSL2, as [Installation](installation.md) describes pla
 
 ## Installation and check
 
-cuju installs from PyPI with pip, which also installs PyTorch when it is missing. On Linux with an
-NVIDIA driver that supports the CUDA version of PyPI's default build of PyTorch, the one command
-suffices, and [Installation](installation.md) gives the reasons to install a particular build of
-PyTorch first. A check that ships with the package then confirms the install.
+The `cuju-engine` distribution installs from PyPI with pip, which also installs PyTorch when it is
+missing. On Linux with an NVIDIA driver that supports the CUDA version of PyPI's default build of
+PyTorch, the one command suffices, and [Installation](installation.md) gives the reasons to install
+a particular build of PyTorch first. A check that ships with the package then confirms the install.
 
 ```sh
-pip install cuju
+pip install cuju-engine
 cuju check
 ```
 
@@ -136,7 +136,7 @@ Each topic has an article of its own.
 | [Rewards and actions](rewards-and-actions.md) | What an agent is paid for and what it can do. |
 | [Episodes and seeds](episodes-and-seeds.md) | The end of an episode and the match that each environment plays. |
 | [States](states.md) | Saving, restoring and moving a match between cuju and GRF, and reading single fields. |
-| [Rendering](rendering.md) | Watching matches in a browser, saved or live, with the package cuju-render. |
+| [Frames and videos](rendering.md) | GRF's frames, pixel observations and videos from cuju's software renderer. |
 | [Backends](backends.md) | The GPU and CPU backends and their fit with PyTorch. |
 | [Performance](performance.md) | Measured throughput and the size of a batch. |
 | [Recipes](recipes.md) | Patterns for wiring a batch into training. |

@@ -91,7 +91,13 @@ in GRF as GRF's own states do, with one property of GRF's loader to keep in mind
 freshly reset one does, can drift from the saved match when the state has `reverse_team_processing`
 on, as described in [Differences from GRF](differences-from-grf.md#output-differences). A
 comparison of the two engines from a state therefore moves the state from GRF to cuju, as
-`examples/compare_with_grf.py` does.
+`examples/compare_with_grf.py` does. `cuju.gfootball` loads states as GRF's loader does, this
+property included, so GRF's code over it plays GRF's matches, while a batch and `cuju.env` continue
+the saved match exactly.
+
+A save or a load also marks the cached positions of the players' skeletons in an engine that
+renders, as in GRF, so `get_state` in a rendering match changes the match that follows, as
+described in [Differences from GRF](differences-from-grf.md#grfs-python-package).
 
 The two sides agree on the scenario and on the options that shape the state, such as the rewards.
 The bytes are equal in meaning, and they can differ in bits in two places. The pickle that cuju
@@ -101,6 +107,14 @@ structures as it finds it in memory, so two identical GRF runs give match bytes 
 few hundred padding bytes, while cuju writes zeros there. States are therefore compared field by
 field or after loading, rather than as raw bytes. A GRF state loaded into cuju and saved again comes
 back byte for byte.
+
+GRF's Python package in `cuju.gfootball` writes its states itself, as GRF does, through GRF's
+`get_state` and `set_state` on `cuju.gfootball_engine`. Its pickle holds GRF's classes as they
+import there, under `cuju.gfootball`, and the engine stores them under GRF's names, `gfootball`,
+rewriting the module names inside the pickle when it saves and back when it loads. The rewrite
+touches the names alone and runs nothing, so a state of `cuju.gfootball` is GRF's state, byte for
+byte apart from the padding, and states move between `cuju.gfootball`, `cuju.env`, a batch and GRF
+in every direction.
 
 ## Scope of a state
 
@@ -129,23 +143,28 @@ other kind raises `StateError`.
 
 The environment of `cuju.env.create_environment` writes the same entries from its options. With
 `rewards='scoring,checkpoints'` and `stacked=True` its `get_state()` holds the checkpoints and the
-stack, and GRF's wrappers from `cuju.gfootball.env.wrappers`, built by hand over a raw environment,
-add theirs as GRF's do, `CheckpointRewardWrapper` its counts and `FrameStack` its frames. The
-entries are written the same way from either source, so a stack built by hand and
-`create_environment` with the same arguments give equal bytes, and each loads the other's states.
+stack, as GRF's `CheckpointRewardWrapper` and `FrameStack` hold them, so its states and those of
+GRF's `create_environment` with the same arguments, in GRF or in `cuju.gfootball`, load into one
+another.
 
 One detail lies outside the state in both engines. When a goalkeeper is sent off, the player who
 takes the keeper's place is part of the team data of the environment rather than of the match. A
 state loaded into another environment therefore takes that environment's hand-over, in GRF and in
-cuju alike.
+cuju alike. The observation that `set_state` writes already shows the roles through that hand-over,
+as GRF's observation after a load does.
+A batch reports the roles that its players play, the hand-over included, through `roles(index)`,
+described in the [API reference](api.md#roles). A recorder that saves states reads the roles with
+the same call and keeps them beside each state, since the state alone holds the scenario's roles.
 
 ## Safety
 
-A state is a pickle, and unpickling untrusted data can run code. `set_state` reads the pickle with a
-restricted unpickler that accepts only GRF's episode class, plain values and, for a stacked state
-or a state of `create_environment`, numpy arrays in a `deque`, and raises `StateError` for anything
-else. It remains a deserializer
-that outside bytes reach, so states are loaded from trusted sources. [SECURITY.md](../SECURITY.md)
+A state is a pickle, and unpickling untrusted data can run code. The `set_state` of a batch and of
+`cuju.env` reads the pickle with a restricted unpickler that accepts only GRF's episode class, plain
+values and, for a stacked state or a state of `create_environment`, numpy arrays in a `deque`, and
+raises `StateError` for anything else. It remains a deserializer that outside bytes reach, so
+states are loaded from trusted sources. GRF's Python in `cuju.gfootball` unpickles its states with
+Python's `pickle`, as GRF does, so a state loaded there runs whatever code its pickle names, and
+only states from trusted sources load there. [SECURITY.md](../SECURITY.md)
 describes how to report a problem.
 
 ## Uses
@@ -164,17 +183,13 @@ scenarios](custom-scenarios.md).
 
 For debugging, a state saved before a surprising event replays it any number of times.
 
-For viewing, cuju's renderer reads the joints, the ball and the score out of states and draws them
-in a browser, saved or live, without changing the match, as described in [Rendering](rendering.md).
-A `.cjr` recording keeps the fields needed for playback, including the referee calls, engine
-scorer and scenario timing. Keep a full state for restoring a match with `set_state`, and use a
-recording for watching it. The timing distinguishes a second half, an episode ending and full
-time, while a file saved during play ends at its last captured frame.
-A match from cuju is also shown in GRF, either from a dump of the match, described in [Migrating
-from GRF](migrating-from-grf.md#dumps-from-a-batch), or from a state loaded into a GRF that renders.
-Rendering in GRF changes how GRF plays, as described in [Differences from
-GRF](differences-from-grf.md#rendering-players-and-wrappers), so that continuation becomes a
-different match from the moment rendering starts.
+For video, cuju's software renderer supplies GRF's frames in `cuju.gfootball` and in a batch that
+renders, as described in [Frames and videos](rendering.md). GRF's `dump_to_video` can also produce
+frames from a dump, in GRF or in `cuju.gfootball`, as described in [Migrating from
+GRF](migrating-from-grf.md#dumps-from-a-batch). A state loaded into an engine that renders, in GRF
+or in cuju, continues as a rendering match, which parts from the unrendered one once the referee
+acts out a stoppage, as described in [Differences from
+GRF](differences-from-grf.md#grfs-python-package).
 
 ## Reading fields
 
@@ -233,7 +248,7 @@ player for each second between kick-offs. A thousand states occupy about 100 MB.
 ## See also
 
 - [Episodes and seeds](episodes-and-seeds.md)
-- [Rendering](rendering.md)
+- [Frames and videos](rendering.md)
 - [Exactness](exactness.md)
 - [Custom scenarios](custom-scenarios.md)
 - [Migrating from GRF](migrating-from-grf.md)

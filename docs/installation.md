@@ -90,14 +90,28 @@ The three methods differ in the GPUs they cover and in the part of the build tha
 controls.
 
 The wheel from PyPI installs with one command and covers every GPU in the wheel's table of
-architectures, as well as any machine that uses the CPU alone. It is also the one install whose
-machine code was tested on those GPUs, which makes it the method for work where exactness matters
-and the GPU is one of the wheel's architectures.
+architectures, as well as any machine that uses the CPU alone. Its machine code comes from the
+source and flags of the release, proven bit-exact on the RTX 3050 Laptop GPU, and `cuju check`
+confirms any other of its GPUs in about a minute, which makes it the method for work where exactness
+matters and the GPU is one of the wheel's architectures.
 
 A build from source covers GPUs outside the wheel, such as the H100 and the RTX 50 series, as well
 as builds with another compiler or other flags. It takes a few minutes and, for the CUDA library, a
 CUDA toolkit, and it places the check of exactness with the person who builds, through
 `cuju check --long` and `pytest tests/`.
+
+The test suite runs the ported GRF tests both under cuju's names and through the compatibility
+alias. Their replay and video export cases use OpenCV. The CPU CI jobs install
+`opencv-python-headless` to run those cases without a display. When OpenCV is absent, the suite
+reports those cases as skipped and still tests text export.
+
+The Linux x86-64 and Windows CPU jobs install the same cuju-grf-media wheel. CI builds it from the
+pinned GRF source with its caption glyph atlas. Both test suites replay stored renderer states and
+compare the resulting frames with GRF's frame digests, including when the media are in a folder
+with a Unicode name.
+
+The Windows Bash completion test uses Git Bash from a standard Git for Windows installation
+under Program Files. When Git Bash is absent, the test reports the paths it checked and skips.
 
 Docker runs a source build inside an image, for clusters, for continuous integration and for
 machines that keep no CUDA toolkit, and Apptainer runs the same image on clusters that offer
@@ -111,12 +125,12 @@ Where the scripts folder of a user installation is missing from the path, as can
 ## PyTorch
 
 cuju declares `torch>=2.3` as a dependency, and `torch>=2.2` on macOS on Intel processors, so
-`pip install cuju` installs PyTorch when it is missing. The build that pip takes from PyPI by
+`pip install cuju-engine` installs PyTorch when it is missing. The build that pip takes from PyPI by
 default is a CUDA build on Linux, WSL2 included, and a CPU-only build on Windows and macOS. Package
 metadata names a version of PyTorch and leaves the choice of index to pip, so the other builds,
 which pytorch.org serves from indexes of its own, are reached by installing them directly. On Linux
 with an NVIDIA driver that supports the CUDA version of PyPI's default build, plain
-`pip install cuju` therefore gives a working install of both backends in one command. On Windows,
+`pip install cuju-engine` therefore gives a working install of both backends in one command. On Windows,
 the GPU backend needs a CUDA build of PyTorch from pytorch.org, installed before cuju.
 
 Installing PyTorch first, from the index that pytorch.org lists for the system, selects a
@@ -127,7 +141,7 @@ second.
 
 ```sh
 pip install torch --index-url https://download.pytorch.org/whl/cu128
-pip install cuju
+pip install cuju-engine
 ```
 
 The build of PyTorch matters for the GPU backend. cuju's CUDA library carries its own CUDA runtime,
@@ -137,31 +151,76 @@ is true. The CPU backend runs with every build of PyTorch.
 
 ## Wheel from PyPI
 
-The wheel installs with pip.
+The `cuju-engine` distribution provides the `cuju` module, the `cuju` command and both engine
+backends. It brings PyTorch along when it is missing.
 
 ```sh
-pip install cuju
+pip install cuju-engine
 ```
 
-The extra `spaces` adds Gymnasium, which builds the spaces of GRF's interface in `cuju.env` and
-`cuju.gfootball`, the `GFootball-...` ids of `gymnasium.make`, and the spaces of a batch, such as
+The extra `spaces` adds Gymnasium, which builds the spaces of GRF's interface in `cuju.env`, the
+`GFootball-...` ids of `gymnasium.make`, and the spaces of a batch, such as
 `batch.single_observation_space`. The batch itself steps without it.
 
 ```sh
-pip install 'cuju[spaces]'
+pip install 'cuju-engine[spaces]'
 ```
 
-The extra `render` adds the browser renderer, the package cuju-render, which
-[Rendering](rendering.md) describes. It installs into the folder of cuju and releases with it,
-so the extra always takes a renderer that fits the installed cuju.
+GRF's own Python package, `cuju.gfootball`, runs with the base installation, which brings the
+`absl-py` and `six` that GRF's modules import. It takes the installed gym wherever GRF runs on it,
+gym 0.21 to 0.24, and 0.25 with numpy 1, and a copy of gym 0.21's core otherwise. Three extras add what GRF's package uses beyond training.
+`gfootball-video` adds OpenCV for GRF's frames and videos, which load OpenCV at their first use,
+`gfootball-play` adds pygame for GRF's game and its keyboard and gamepad players, and
+`gfootball-remote` adds gRPC and protobuf for GRF's remote environments. The extra `test` adds
+pytest and psutil, which GRF's own tests import.
+
+GRF generated its protobuf modules for protobuf 3, and protobuf 4 and later load them with
+protobuf's own Python implementation, which the variable `PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION=python`
+selects, as in GRF. With protobuf 3.20 or earlier installed, they load as they stand.
 
 ```sh
-pip install 'cuju[render]'
+pip install 'cuju-engine[gfootball-video,gfootball-play]'
 ```
 
+The `cuju-gfootball` package imports `cuju.gfootball` under GRF's own names, so that
+`import gfootball`, `gfootball_engine` and `_gameplayfootball` reach cuju's port
+and code written for GRF runs with every line as it was. It suits a library that imports `gfootball`
+inside its own modules, such as Kaggle's football environment, and dumps and states that travel
+between GRF and cuju. Where GRF itself is installed, the alias leaves the name `gfootball` to GRF and
+warns once, and `python -m cuju_gfootball` reports which of the two holds the name.
+[Migrating from GRF](migrating-from-grf.md#grfs-names-through-cuju-gfootball) describes it in full.
+
+```sh
+pip install cuju-gfootball
+```
+
+The extra `pixels` adds GRF's media, the package cuju-grf-media, which holds the models,
+textures, menu images and font that cuju's software renderer draws GRF's frames from. The extra
+`gfootball-video` takes the same package, since GRF's frames and videos in `cuju.gfootball` come
+from that renderer.
+
+```sh
+pip install 'cuju-engine[pixels]'
+```
+
+The media are 106 of GRF's own files, copied byte for byte from GRF's commit 3d9e754, the commit
+that cuju reproduces, so that the renderer starts from exactly the texels and models that GRF
+draws, and a glyph atlas of GRF's caption font, which the release draws with the libraries that
+GRF draws its captions with. The package holds data alone, so one wheel serves every platform and
+every Python 3. It downloads at about 9 MB and unpacks to about 93 MB, nearly all of it BMP
+images, which GRF stores uncompressed and which compress well inside the wheel. The renderer
+itself, libcuju_render, is part of cuju's wheel, so the extra adds the media alone. The package's
+version follows the media and not cuju, and each release of cuju names in its extras the versions
+that it reads, so an upgrade of cuju that reads the same media keeps the installed package. cuju
+reads the format of the media from their manifest and refuses one that it does not read, with a
+message that names the command that installs the version that fits.
+[Frames and videos](rendering.md#grfs-media) describes the files, their licenses and how to check them.
+
 The wheels for Linux on x86-64 and for Windows carry both libraries, and the wheels for Linux on
-Arm and for macOS carry the CPU library. The CUDA library holds machine code for the four GPU
-architectures that were checked for exactness.
+Arm and for macOS carry the CPU library. The CUDA library holds machine code for four GPU
+architectures, all compiled from the same source. The kernels of this release were proven bit-exact
+on the RTX 3050 Laptop GPU, compute capability 8.6, and `cuju check` verifies any of the four in
+about a minute.
 
 | Compute capability | GPUs |
 | --- | --- |
@@ -177,13 +236,35 @@ checked. Other GPUs, such as the H100 at 9.0, the B200 at 10.0 or the RTX 50 ser
 report that no kernel image is available for the device, and `cuju check` names the
 GPU's compute capability and the build it needs. `device='cpu'` works on every machine.
 
+### Upgrading from cuju 0.2.1
+
+From 0.3.0 on, `pip install cuju-engine` installs the engine, and `pip install cuju` installs the
+whole Cuju family through the umbrella distribution. When upgrading from 0.2.1, run
+`pip uninstall cuju` before installing 0.3.0.
+Upgrading in place makes pip remove the files of the old distribution after it wrote the new ones,
+so the engine loses every file that both releases hold and `import cuju` finds an empty folder.
+Run `cuju-repair` or `python -m cuju.engine_status` to get the repair command. The module survives
+the upgrade because its name is new in 0.3.0. It reads the installed distribution and its version
+from the package metadata that remains. For example, the repair command for `cuju-engine` 0.3.0 is
+
+```sh
+pip install --force-reinstall --no-deps cuju-engine==0.3.0
+```
+
+For a CPU-only installation, the command names `cuju-engine-cpu` and pins its installed version.
+Use `cuju-repair --json` for one object with the schema `engine.repair/1`, the installed version,
+the missing files and the repair command. An intact installation exits with status 0 and a damaged
+one with status 1. The `cuju-repair --help` page lists the options and examples. A package that
+relies on the engine calls `cuju.engine_status.intact()`, which returns `False` for a damaged
+engine, and `cuju.engine_status.repair_command()` for the text to show.
+
 ## Source build
 
 A source build compiles both libraries for the machine from a clone of the repository.
 
 ```sh
-git clone https://github.com/AndreKoraleski/cuju
-cd cuju
+git clone https://github.com/cuju-football/engine
+cd engine
 pip install .
 ```
 
@@ -256,6 +337,7 @@ establishes whether it plays GRF's matches.
 
 On Windows the build uses the MSVC of Visual Studio 2022 or later, with the C runtime linked
 statically, so `cuju_cpu.dll` and `cuju_cuda.dll` load without a Visual C++ runtime beside them.
+The build exports the C API declarations from the engine and renderer headers in their DLLs.
 `pip install .` in a clone builds the CPU library. The CUDA library is built on request, with
 `-DCUJU_CUDA=ON`, from the x64 Native Tools Command Prompt of Visual Studio 2022 with the CUDA
 toolkit and its Visual Studio integration installed, and with Ninja as the generator, as the wheel
@@ -284,6 +366,37 @@ the wheel on Apple silicon and 10.15 for the wheel on Intel processors.
 MACOSX_DEPLOYMENT_TARGET=11.0 pip install .
 ```
 
+### GRF's media from a clone
+
+The media package builds from a clone as well, from a checkout of GRF at the commit that cuju
+reproduces, in the same way as the release builds its wheel. On Linux, `ci/make_glyph_atlas.py`
+draws the glyph atlas of GRF's font with SDL_ttf 2.22.0, FreeType 2.13.2 and HarfBuzz 8.3.0, the versions
+that GRF's reference build links and that Ubuntu 24.04 packages, and checks every character
+against SDL_ttf's own renderings before it writes the file, in about four minutes.
+`ci/make_render_media.py` then copies the files that `packaging/cuju-grf-media/sources.txt` lists
+into the package folder, together with the atlas, the manifest, the checksums and the license
+texts, and pip installs the folder.
+
+```sh
+git clone https://github.com/google-research/football grf
+git -C grf checkout 3d9e754720a95621bba6475c4d3b0d56fe919014
+sudo apt-get install libsdl2-2.0-0 libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b
+python ci/make_glyph_atlas.py grf/third_party/fonts/AlegreyaSansSC-ExtraBold.ttf generated
+python ci/make_render_media.py grf --generated generated
+pip install packaging/cuju-grf-media
+```
+
+The script compares the SHA-256 of every file of the checkout with the pinned list before it
+writes anything, and stops with the list of files that differ when the checkout is another
+commit. A checkout whose text files were given Windows line endings differs as well, since the
+model files are text and their checksums were taken with GRF's own line endings, so on Windows the
+clone is made with `git clone -c core.autocrlf=false`. The script also refuses an atlas whose
+SHA-256 differs from its pin, which other versions of the three libraries can give. Every file that
+ends up in the package is therefore GRF's, byte for byte, or the pinned atlas, and the wheel that
+the script and pip build holds the same files as the published one. A folder that the script
+filled serves the renderer without an install too, through `CUJU_GRF_MEDIA`, as
+[Frames and videos](rendering.md#installing-the-media) describes.
+
 ## Docker image
 
 The repository's `Dockerfile` builds an image with both libraries and the Python package, on Ubuntu
@@ -292,8 +405,8 @@ for machine code alone, as in the wheel. Its default is the wheel's four archite
 `75-real;80-real;86-real;89-real`, and a build for the RTX 40 series alone names `89-real`.
 
 ```sh
-docker build --build-arg CUDA_ARCHITECTURES=89-real -t cuju:0.2.1 .
-docker run --rm --gpus all cuju:0.2.1 python3 -m cuju.check
+docker build --build-arg CUDA_ARCHITECTURES=89-real -t cuju:0.3.0 .
+docker run --rm --gpus all cuju:0.3.0 python3 -m cuju.check
 ```
 
 The image installs PyTorch from PyPI by default. The build argument `TORCH_INDEX_URL` names another
@@ -301,7 +414,7 @@ index, such as `https://download.pytorch.org/whl/cu126` for a host whose driver 
 CUDA version of PyPI's build.
 
 ```sh
-docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 -t cuju:0.2.1 .
+docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 -t cuju:0.3.0 .
 ```
 
 The image needs only the NVIDIA driver on the host, since the libraries link the CUDA runtime
@@ -311,17 +424,17 @@ published image keeps or offers under the terms in the License section of the
 the tests.
 
 ```sh
-docker run --rm --gpus all cuju:0.2.1 python -m pytest -p no:cacheprovider /usr/share/cuju/tests
+docker run --rm --gpus all cuju:0.3.0 python -m pytest -p no:cacheprovider /usr/share/cuju/tests
 ```
 
 ## Apptainer image
 
 The repository's `apptainer.def` makes an Apptainer image from the image that the `Dockerfile`
 builds, for clusters that run Apptainer, version 1.2 or later. By default it takes the image
-`cuju:0.2.1` from the local Docker daemon, so the Docker image is built first with that tag.
+`cuju:0.3.0` from the local Docker daemon, so the Docker image is built first with that tag.
 
 ```sh
-docker build -t cuju:0.2.1 .
+docker build -t cuju:0.3.0 .
 apptainer build cuju.sif apptainer.def
 ```
 
@@ -330,7 +443,7 @@ and `IMAGE`, so a cluster without Docker builds from an image that another machi
 
 ```sh
 apptainer build --build-arg BOOTSTRAP=docker \
-    --build-arg IMAGE=registry.example.org/cuju:0.2.1 cuju.sif apptainer.def
+    --build-arg IMAGE=registry.example.org/cuju:0.3.0 cuju.sif apptainer.def
 ```
 
 The image runs Python with its arguments, and `--nv` brings in the host's NVIDIA driver. Its test
@@ -422,6 +535,10 @@ Each common install failure has a cause and a fix.
 | the first GPU step is slow | CUDA loads the kernel | expected, with timing from the second step |
 | "the GPU is out of memory", with the bytes needed and free | the batch does not fit next to what else holds the GPU | the batch created before other large allocations, a call to `torch.cuda.empty_cache()`, or fewer environments |
 | every step about ten times slower on Windows or WSL2 | the driver moved GPU memory into shared system memory | one batch per GPU and fewer environments, as in [Performance](performance.md) |
+| `MissingFileError` naming cuju-grf-media and `pip install 'cuju-engine[pixels]'` | GRF's media are not installed, or an installed version holds media of another format | `pip install 'cuju-engine[pixels]'`, which takes the version that the installed cuju reads |
+| `RendererMissingError` at `start_game` in `cuju.gfootball` | a rendering engine finds no renderer library or no media | `pip install 'cuju-engine[pixels]'`, and for a source build the CMake option `CUJU_RENDER` left on |
+| `ArgumentError` at `start_game` naming a multiple of 4 | `render_resolution_x` is not a multiple of 4, which GRF would draw with sliding rows, or a side exceeds 16,384 | a width that is, such as GRF's default of 1280 |
+| `make_render_media.py` stops with files that differ from the pinned SHA-256 | the GRF checkout is another commit, or its text files have Windows line endings | a checkout of commit 3d9e754 made with `core.autocrlf=false`, as in [GRF's media from a clone](#grfs-media-from-a-clone) |
 | any other failure | | an issue with the output of `cuju check`, since issues are welcome |
 
 ## See also

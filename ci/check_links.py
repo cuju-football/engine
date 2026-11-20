@@ -1,15 +1,15 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks the links of the README, the docs, AGENTS.md and CONTRIBUTING.md.
+"""Checks the links of the README, the docs and CONTRIBUTING.md.
 
 Run it as `python ci/check_links.py --offline` to check without the network, as CI does, that
 every relative link names a file of the repository, that every link into this repository on
 GitHub or Colab names a file that exists here, that every anchor into a Markdown file of this
-repository names one of its headings, that every link into cuju-render names a path of
-RENDER_PATHS below, and that no file mentions a thing of REMOVED. Run it by hand as
+repository names one of its headings, that every link into a sibling repository names a path of
+SIBLING_PATHS below, and that no file mentions a thing of REMOVED. Run it by hand as
 `python ci/check_links.py` to also request every external link once, HEAD first and GET when
 HEAD fails, with a timeout, a pause between requests and a generic User-Agent, and to check each
-path of RENDER_PATHS against cuju-render's repository on GitHub. The report names each link that
+path of SIBLING_PATHS against its repository on GitHub. The report names each link that
 fails or moved permanently, with the files and lines that hold it.
 """
 
@@ -24,21 +24,22 @@ from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-OWNER = 'AndreKoraleski'
-HERE = 'cuju'
-RENDER = 'cuju-render'
+OWNER = 'cuju-football'
+HERE = 'engine'
+ARENA = 'arena'
+RENDER = 'render'
+UMBRELLA = 'cuju'
 BRANCH = 'main'
 
-# Every path of cuju-render's repository that the files link to, as it follows
-# https://github.com/AndreKoraleski/cuju-render/, with its anchor. The offline check holds each
-# such link to this list, and the online check, run by hand, checks the list against
-# cuju-render's repository on GitHub.
-RENDER_PATHS = [
-    '',
-    'blob/main/docs/presentation.md',
-    'blob/main/docs/reference.md',
-    'blob/main/docs/rendering.md',
-]
+# Every path of a sibling repository that the files link to, as it follows
+# https://github.com/cuju-football/<repository>/, with its anchor. The offline check holds each
+# such link to this table, and the online check, run by hand, checks it against the repositories
+# on GitHub.
+SIBLING_PATHS = {
+    ARENA: [''],
+    RENDER: [''],
+    UMBRELLA: [''],
+}
 
 # The hosts whose addresses are no links to check, each with its reason.
 SKIP = {
@@ -84,8 +85,8 @@ class Link:
 
 
 def markdown_files(root):
-    """Returns the README, AGENTS.md, CONTRIBUTING.md and the Markdown files of docs."""
-    files = [root / name for name in ('README.md', 'AGENTS.md', 'CONTRIBUTING.md')]
+    """Returns the README, CONTRIBUTING.md and the Markdown files of docs."""
+    files = [root / name for name in ('README.md', 'CONTRIBUTING.md')]
     files += sorted((root / 'docs').rglob('*.md'))
     return [path for path in files if path.is_file()]
 
@@ -184,7 +185,7 @@ def render_key(rest, fragment):
 
 
 def problem_of(link, root, anchors, used):
-    """Returns what is wrong with a link, or None, and notes each path of cuju-render it uses."""
+    """Returns what is wrong with a link, or None, and notes each sibling path it uses."""
     url = link.url
     if url.startswith(('mailto:', 'data:', 'tel:')):
         return None
@@ -196,11 +197,11 @@ def problem_of(link, root, anchors, used):
         if target is None:
             return None
         repository, rest = target
-        if repository == RENDER:
+        if repository in SIBLING_PATHS:
             key = render_key(rest, parsed.fragment)
-            used.add(key)
-            if key not in RENDER_PATHS:
-                return f'links into cuju-render at {key!r}, which RENDER_PATHS does not list'
+            used.add((repository, key))
+            if key not in SIBLING_PATHS[repository]:
+                return f'links into {repository} at {key!r}, which SIBLING_PATHS does not list'
             return None
         if repository != HERE:
             return f'links into an unknown repository {repository!r}'
@@ -246,9 +247,12 @@ def offline_problems(root=ROOT):
         problem = problem_of(link, root, anchors, used)
         if problem:
             problems.append(f'{link.where(root)}: {link.url}, {problem}')
-    for key in RENDER_PATHS:
-        if key not in used:
-            problems.append(f'RENDER_PATHS lists {key!r}, which no link uses any more')
+    for repository, keys in SIBLING_PATHS.items():
+        for key in keys:
+            if (repository, key) not in used:
+                problems.append(
+                    f'SIBLING_PATHS lists {repository} {key!r}, which no link uses any more'
+                )
     patterns = [(re.compile(pattern, re.IGNORECASE), pattern) for pattern in REMOVED]
     for path in markdown_files(root):
         for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
@@ -306,23 +310,23 @@ def check_online(url):
     return f'redirected more than {REDIRECTS} times', b''
 
 
-def render_problems():
-    """Checks each path of RENDER_PATHS, its anchor included."""
+def sibling_problems():
+    """Checks each path of SIBLING_PATHS, its anchor included."""
     problems = []
-    for key in RENDER_PATHS:
+    for repository, key in [(r, k) for r, keys in SIBLING_PATHS.items() for k in keys]:
         rest, _, fragment = key.partition('#')
-        url = f'https://github.com/{OWNER}/{RENDER}' + (f'/{rest}' if rest else '')
+        url = f'https://github.com/{OWNER}/{repository}' + (f'/{rest}' if rest else '')
         problem, _ = check_online(url)
         time.sleep(PAUSE_SECONDS)
         parts = rest.split('/')
         if problem is None and fragment and parts[:2] == ['blob', BRANCH]:
-            raw = f'https://raw.githubusercontent.com/{OWNER}/{RENDER}/{BRANCH}/'
+            raw = f'https://raw.githubusercontent.com/{OWNER}/{repository}/{BRANCH}/'
             problem, body = check_online(raw + '/'.join(parts[2:]))
             time.sleep(PAUSE_SECONDS)
             if problem is None and fragment not in anchors_of(body.decode('utf-8', 'replace')):
                 problem = f'has no anchor #{fragment}'
         if problem:
-            problems.append(f'RENDER_PATHS {key!r}, {url}, {problem}')
+            problems.append(f'SIBLING_PATHS {repository} {key!r}, {url}, {problem}')
     return problems
 
 
@@ -341,8 +345,10 @@ def online_problems(root=ROOT, report=print):
         if problem:
             places = ', '.join(link.where(root) for link in links)
             problems.append(f'{url}, {problem}, in {places}')
-    report(f'Checking the {len(RENDER_PATHS)} paths of cuju-render')
-    return problems + render_problems()
+    report(
+        f'Checking the {sum(map(len, SIBLING_PATHS.values()))} paths of the sibling repositories'
+    )
+    return problems + sibling_problems()
 
 
 def main(argv=None):

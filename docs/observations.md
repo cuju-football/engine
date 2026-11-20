@@ -17,7 +17,8 @@ every output is padded to the largest bundle.
 ## Representations
 
 A representation is the encoding of an observation, selected at creation with the option
-`representation`. The four representations differ in shape, type and content.
+`representation`. The four representations of GRF's simulation, and the two of its pictures,
+differ in shape, type and content.
 
 | Representation | Shape | Type | Content |
 | --- | --- | --- | --- |
@@ -25,6 +26,13 @@ A representation is the encoding of an observation, selected at creation with th
 | `simple115v2` | `[environment_count, agents, 115]` | `float32` | the same numbers with a fixed slot for each player |
 | `extracted` | `[environment_count, agents, height, width, 4]` | `uint8` | the SMM, four planes drawn on a grid |
 | `raw` | a dictionary of tensors `[environment_count, agents, ...]` | by array | every value of GRF's observation, by name |
+| `pixels` | `[environment_count, agents, height, width, 3]` | `uint8` | GRF's rendered frame, shrunk to `channel_dimensions` |
+| `pixels_gray` | `[environment_count, agents, height, width, 1]` | `uint8` | the same frame in gray |
+
+`pixels` and `pixels_gray` come from cuju's software renderer, which draws GRF's frames byte for byte
+and plays every environment as a rendering GRF does, at a few hundred milliseconds of processor time
+per frame, as [Frames and videos](rendering.md#rendering-batches) describes. The rest of this page concerns
+the four representations of the simulation.
 
 The default is `simple115v2`, while GRF's `create_environment` defaults to `extracted`. The default
 reflects the memory of the two encodings. A vector occupies 460 bytes per agent, while the two SMM
@@ -150,7 +158,10 @@ that GRF defines for them, which the second table describes.
 The roles are 0 goalkeeper, 1 centre back, 2 left back, 3 right back, 4 defensive midfielder,
 5 central midfielder, 6 left midfielder, 7 right midfielder, 8 attacking midfielder and 9 centre
 forward. In a batch of `5_vs_5_l1_r1`, each team array holds five players for each of the two
-agents.
+agents. A role is the one that the player plays at that step. When a goalkeeper is sent off, the
+first active player of the team takes over the keeper's formation entry and reads 0 from then on,
+as in GRF. The method `roles(index)` of a batch reports the same roles for one environment in any
+representation, as described in the [API reference](api.md#roles).
 
 ```python
 batch = cuju.BatchEnvironment(
@@ -338,7 +349,7 @@ print(batch.reset().shape)  # torch.Size([8, 115])
 `single_observation_space` and `single_action_space` describe one environment, as GRF's
 `observation_space` and `action_space` do for the same options. `observation_space` and
 `action_space` describe the whole batch, as in Gymnasium's vector environments. They require
-`gymnasium`, installed with `pip install 'cuju[spaces]'`, or `gym` when Gymnasium is absent. The
+`gymnasium`, installed with `pip install 'cuju-engine[spaces]'`, or `gym` when Gymnasium is absent. The
 observation spaces of `raw` are `None`, as GRF defines its raw observation as a dictionary without
 a space.
 

@@ -8,7 +8,7 @@ of the same scenario reach 32,582 steps per second, about 15% fewer than the 31 
 same machine, with the observations, the actions and the policy kept in device memory.
 
 GPU throughput rises with the number of environments until the device is full, and device memory,
-at about 0.37 MiB per environment plus a fixed reservation for the kernels, bounds the size of a
+at about 0.38 MiB per environment plus a fixed reservation for the kernels, bounds the size of a
 batch. On small GPUs under Windows and WSL2, memory beyond the capacity of the device spills into
 shared system memory, which slowed two concurrent training processes on a 4 GB laptop GPU by a
 factor of about ten. `cuju.memory_estimate` gives the memory of a batch and the reservation for the
@@ -75,6 +75,13 @@ the same commands gave the following rates over one round.
 
 ## GPU throughput
 
+The figures of the RTX 4090 and of the GPUs of Google Colab were measured on the wheel of cuju
+0.1.0, and the first table of the RTX 3050 Laptop GPU on a build of the same release tree, whose
+kernels kept a copy of the large lists of the simulation for every thread, as described in
+[Batch size](#batch-size). The compact kernels of this release were measured on the RTX 3050 Laptop
+GPU alone, against the kernels before them, and the table at the end of this section gives that
+comparison.
+
 On the RTX 4090, the machine code of the wheel for compute capability 8.9 was measured over two
 rounds, which agree within 0.6%.
 
@@ -115,6 +122,31 @@ need about 6 GiB of buffers besides the local memory of the kernels.
 | RTX 3050 Laptop GPU, 4 GB (8.6) | `5_vs_5`, 4 agents a side | 3,332 | 3,982 |
 | | `11_vs_11_stochastic`, 1 agent | 2,384 | 2,718 |
 
+The compact kernels of this release, which keep the large lists of the simulation in a work area of
+each environment, were measured against the kernels before them on the same RTX 3050 Laptop GPU,
+with builds of CUDA 12.0 for compute capability 8.6. The two builds alternated within each round,
+with 100 timed steps after 30 discarded ones in four rounds at 1,024 environments, and with 150
+timed steps in three rounds at 4,096. The compact kernels cost between 1.7% and 5.8% of the
+throughput, most in `5_vs_5` at 4,096 environments. The comparison of single changes showed no one
+change behind the cost, since a build with every list back in local memory, a build with the earlier
+sorts, a build with the earlier inlining and a build with two removed list copies restored each ran
+within 2% of the compact kernels.
+
+| Scenario | Environments | Earlier kernels | Compact kernels | Cost |
+| --- | --- | --- | --- | --- |
+| `5_vs_5_l4_r4` | 1,024 | 3,116 | 3,022 | 3.0% |
+| | 4,096 | 3,726 | 3,510 | 5.8% |
+| `11_vs_11_stochastic_l1_r0` | 1,024 | 2,348 | 2,310 | 1.7% |
+| | 4,096 | 2,662 | 2,600 | 2.3% |
+
+The compact kernels need 6,768 bytes of local memory per thread, where the earlier kernels needed
+51,312, in builds of CUDA 12.0 for each of the four compute capabilities of the wheel. Beyond the
+stack of 1 KB that the driver keeps for every thread, the reservation of a first batch therefore
+falls from 1.15 GiB to 135 MiB on the RTX 3050 Laptop GPU, which runs 24,576 threads at a time, and
+from 9.2 GiB to 1.05 GiB on a GPU of 128 multiprocessors, such as the RTX 4090, which runs 196,608.
+The drop in free memory around a first creation on the RTX 3050 Laptop GPU agreed with the estimate
+within 1.5 MiB for both builds.
+
 GRF runs on the CPU, so the GPU figures compare with the CPU of the same machine. At 16,384
 environments the 4090 steps `5_vs_5` about 15% slower than 31 processors, and `11_vs_11_stochastic`
 about 3% slower, and on the laptop the 12 threads step both scenarios faster than its GPU. The GPU
@@ -129,17 +161,35 @@ levels off. A search for the batch size starts conveniently at 4,096 environment
 count until the steps per second stop rising or the memory runs out. Past the point where the rate
 levels off, more environments add memory and latency per update without adding throughput.
 
-Each environment of `5_vs_5_l4_r0` with `simple115v2` occupies about 0.37 MiB of device memory, so
+Each environment of `5_vs_5_l4_r0` with `simple115v2` occupies about 0.38 MiB of device memory, so
 16,384 environments occupy about 6 GiB. Creating the first batch of a process on a GPU also makes
 the driver reserve the local memory of the kernels, which it then holds until the process ends. The
 driver keeps a stack of 1 KB for every thread that the GPU can run at a time from the creation of
-its context, and the first launch raises it to the local memory of the largest kernel, 49,776 bytes
-per thread in the build for the RTX 4090, so the reservation adds about 48 KB per thread. That
-amounts to about 8.9 GiB on an RTX 4090, which runs 196,608 threads at a time, and to about 1.1 GiB
-on a 4 GB RTX 3050 Laptop GPU, which runs 24,576. By default the library allocates outside the
-allocator of PyTorch, so `torch.cuda.memory_allocated` leaves this memory out, while
-`torch.cuda.mem_get_info` counts all of it. With `allocator='torch'`, PyTorch counts the buffers of
-the batch, as described in [Backends](backends.md).
+its context, and the first launch raises it to the local memory of the largest kernel, about 6,800
+bytes per thread, so the reservation adds about 5.6 KB per thread. That amounts to about 1.05 GiB
+on an RTX 4090, which runs 196,608 threads at a time, and to about 135 MiB on a 4 GB RTX 3050 Laptop
+GPU, which runs 24,576. By default the library allocates outside the allocator of PyTorch, so
+`torch.cuda.memory_allocated` leaves this memory out, while `torch.cuda.mem_get_info` counts all of
+it. With `allocator='torch'`, PyTorch counts the buffers of the batch, as described in
+[Backends](backends.md).
+
+The reservation depends on the size of the GPU and on nothing else. Every environment count, every
+scenario and every representation takes the same amount, so a small batch for evaluation reserves as
+much as a large one for training. The reservation was once nearly nine times larger, about 50 KB per
+thread or 9.2 GiB on a GPU of 128 multiprocessors, because each of the 32 threads that run an
+environment kept its own copy of the large lists of the simulation, such as the candidate animations
+of a selection and the commands queued for a player. Those threads all hold the same values, so the
+kernels now keep one copy of these lists per environment, in a work area of 12 KB of device memory
+that the batch allocates beside its worlds. The work area scales with the number of environments,
+like the rest of the batch, and `memory_bytes` and `memory_estimate` count it, while the reservation
+stays fixed. For 4,096 environments the work area takes 48 MiB, against a reservation that shrank by
+about 1.0 GiB on the RTX 3050 Laptop GPU and by about 8.2 GiB on the RTX 4090.
+
+Several batches in one process share one reservation. The driver makes it at the first launch of
+the kernels on a GPU and keeps it for the whole process, so a second batch on the same GPU, for
+evaluation or for another scenario, adds only its own buffers. Each process holds a reservation of
+its own, so several training processes on one GPU each pay it, and a process that runs several
+batches on one GPU pays it once.
 
 `cuju.memory_estimate` returns the bytes that a batch would request, for the same arguments as
 `BatchEnvironment`, without allocating them, and `batch.memory_bytes` returns the bytes that a
@@ -175,12 +225,12 @@ last observation of each ended episode in `final_observation`.
 
 | Scenario | Representation | MiB per environment | 1,024 environments | 4,096 |
 | --- | --- | --- | --- | --- |
-| `5_vs_5_l4_r4` | `simple115v2` | 0.37 | 407 MiB | 1,535 MiB |
-| | `extracted` | 0.78 | 833 MiB | 3,240 MiB |
-| | `raw` | 0.37 | 405 MiB | 1,527 MiB |
-| `11_vs_11_stochastic_l1_r0` | `simple115v2` | 0.36 | 401 MiB | 1,509 MiB |
-| | `extracted` | 0.41 | 456 MiB | 1,723 MiB |
-| | `raw` | 0.36 | 401 MiB | 1,511 MiB |
+| `5_vs_5_l4_r4` | `simple115v2` | 0.38 | 419 MiB | 1,583 MiB |
+| | `extracted` | 0.80 | 845 MiB | 3,288 MiB |
+| | `raw` | 0.38 | 417 MiB | 1,575 MiB |
+| `11_vs_11_stochastic_l1_r0` | `simple115v2` | 0.37 | 413 MiB | 1,557 MiB |
+| | `extracted` | 0.42 | 468 MiB | 1,771 MiB |
+| | `raw` | 0.37 | 413 MiB | 1,559 MiB |
 
 ## Small and shared GPUs
 
@@ -214,6 +264,20 @@ batch. A spill appears in the Windows Task Manager as shared GPU memory greater 
 with a drop in steps per second of an order of magnitude. With `CUJU_LOG=1`, each batch logs at
 creation the device memory it took, so a log of the run shows how the memory of the GPU was spent.
 
+## Rendering
+
+A batch that renders GRF's frames, with `pixels`, `pixels_gray` or `render_frames=True`, spends
+almost all of its time drawing, on the host's processors whatever the backend. On one core of a
+laptop's AMD Ryzen 5 7535HS at about 2.3 GHz, a frame of 1280 by 720 pixels of an eleven a side
+match takes about 0.56 seconds, and with four threads about 0.16 seconds, against 0.72 and 0.22
+seconds for llvmpipe on the same laptop. A batch of eight environments draws about nine to ten
+frames a second in all and a batch of 32 about ten, with each environment on a worker of its own
+and about 200 MB of memory per environment. The figures scale with the clock of the processor,
+which on that laptop ranges from about 2.3 to 4.5 GHz. The rates of the
+tables above therefore apply to batches that do not render, and
+[Frames and videos](rendering.md#speed) gives the figures of the renderer, the split of workers and threads,
+and advice on [training on pixels](rendering.md#training-on-pixels).
+
 ## Timing
 
 The first steps after a reset run faster than later ones, because the players spread out and the
@@ -228,3 +292,4 @@ to its number of players, as the single-processor rates of 2,018 and 914 steps p
 - [Exactness](exactness.md), for the equality of the CPU and GPU outputs that the figures compare
 - [Installation](installation.md), for the wheel and the GPUs it covers
 - [Recipes](recipes.md), for training loops that keep a batch on the GPU
+- [Frames and videos](rendering.md), for the speed and memory of GRF's frames

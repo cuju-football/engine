@@ -3,8 +3,9 @@
 In cuju, **exactness** is the property that every output equals, bit for bit, the output of Google
 Research Football, or GRF, for the same seed and actions. The claim covers every state, observation,
 reward and done flag, against GRF 2.10.3 without rendering on a reference build, GCC for x86-64
-Linux with glibc 2.39 on a processor with FMA, and it holds for both backends and any number of
-threads.
+Linux with glibc 2.39 on a processor with FMA, and against a rendering GRF in cuju's render mode,
+and it holds for both backends and any number of threads. The frames that cuju's software renderer
+draws equal, byte for byte, those of GRF on its reference renderer, Mesa 25.2.8's llvmpipe.
 
 The claim rests on code that performs GRF's floating-point operations in GRF's order, on ports of
 glibc's math functions, and on internal testing. Two public tools check it on any machine,
@@ -17,10 +18,10 @@ difference are welcome, and a reproduced difference is treated as a bug.
 The claim is stated in one sentence.
 
 > For the same seed and actions, every state, observation, reward and done flag of cuju equals, bit
-> for bit, what GRF 2.10.3, commit 3d9e754, produces without rendering, as built by GCC for x86-64
-> Linux with glibc 2.39 on a processor with FMA. The two backends give the same bits, whatever the
-> number of threads. The checkpoint reward takes the precision of the numpy beneath that GRF through
-> the option `numpy_legacy`.
+> for bit, what GRF 2.10.3, commit 3d9e754, produces without rendering, and in render mode what it
+> produces with rendering, as built by GCC for x86-64 Linux with glibc 2.39 on a processor with FMA.
+> The two backends give the same bits, whatever the number of threads. The checkpoint reward takes
+> the precision of the numpy beneath that GRF through the option `numpy_legacy`.
 
 "Every state" means the whole state of the match, as GRF's engine serializes it, with every player,
 the ball, the officials, the animations in progress, the built-in AI's memory and the clocks. Equal
@@ -49,16 +50,23 @@ given GRF installation falls in.
 
 ## Scope
 
-The claim covers GRF without rendering, the reference build, the GPU architectures of the wheel,
-and the options of cuju that extend GRF.
+The claim covers GRF with and without rendering, the reference build, the GPU architectures of the
+wheel, and the options of cuju that extend GRF.
 
-cuju equals GRF without rendering. A GRF that renders plays other matches, since its referee acts
-out each stoppage and its first rendered reset draws one more random number, so the representation
-`pixels`, which requires rendering, stays with GRF. The claim refers to the reference build of GRF,
-for the reasons given above.
+cuju equals GRF without rendering, and in render mode it equals the matches of a rendering GRF. A
+GRF that renders plays other matches than one that does not, since its referee acts out each
+stoppage and its graphics keep cached positions of the players' skeletons that a set piece leaves
+behind for a tick, as [Differences from GRF](differences-from-grf.md#grfs-python-package)
+describes. The engine of `cuju.gfootball` plays a rendering GRF's matches whenever GRF's Python
+renders, and a batch plays them in the environments that render. The claim refers to the reference
+build of GRF, for the reasons given above.
 
-The wheel carries machine code for the GPU architectures it was checked on. Another GPU runs a
-source build, which `cuju check --long` checks.
+The wheel carries machine code for compute capabilities 7.5, 8.0, 8.6 and 8.9, all compiled from the
+same source. The kernels of this release were proven bit-exact on the RTX 3050 Laptop GPU, compute
+capability 8.6, and the other compute capabilities of the wheel come from the same source with the
+same flags. `cuju check` verifies any GPU in about a minute, so a machine with another of these GPUs
+confirms the claim for itself before training. A GPU outside the wheel runs a source build, which
+`cuju check --long` checks.
 
 The checkpoint reward of `rewards='scoring,checkpoints'` depends on the numpy beneath GRF, since
 GRF adds it with numpy, and numpy 2 changed how a Python float combines with a `float32`. The
@@ -73,6 +81,32 @@ settings, as described in
 Options that only read, such as `with_raw`, leave every result unchanged. Resets of some
 environments with `reset(mask=...)`, or with chosen seeds, play GRF's episodes, each equal to one
 GRF run.
+
+## Frames
+
+The frames of cuju's software renderer have a claim of their own, stated in the same form.
+
+> For the same match, every frame of cuju's software renderer, and every `pixels` and `pixels_gray`
+> observation made from it, equals byte for byte what GRF 3d9e754 draws on the llvmpipe driver of
+> Mesa 25.2.8 with LLVM 20.1.2, on an x86-64 processor of AMD's Zen 3 generation with AVX2 and FMA,
+> whatever the number of threads and workers and on both backends.
+
+GRF's frames depend on the driver that draws them, so the claim names one, the software rasterizer
+that GRF draws with on a machine without a GPU driver. cuju draws that reference's frames on every
+machine, a machine with a GPU, another Mesa or an Intel or Arm processor included, as
+[Frames and videos](rendering.md#frames-equal-to-grfs) explains. The frames rest on the match, so they
+inherit the claim for the matches above, and the renderer adds its own transcription of llvmpipe's
+arithmetic, its own model of llvmpipe's flushes of tiny numbers to zero, and ports of OpenCV's
+resampling and of the text drawing of SDL_ttf.
+
+The claim is tested internally on rendered episodes of GRF, frame by frame and pass by pass, and end
+to end from cuju's own simulation, at nine sizes from 1920 by 1080 down to 96 by 54, and through the
+rare moments of a match, red cards, sendings off, every caption and loads into a rendering engine
+among them, as [Frames and videos](rendering.md#what-testing-covers) lists. Its tested envelope is narrower
+than that of the matches, and it widens with internal testing, so a frame that differs from the
+reference's, on any machine or at any size, is a welcome report. The points where rendering around
+the frames differs from GRF, such as `real_time`, are listed in [Differences from
+GRF](differences-from-grf.md#grfs-frames).
 
 ## Determinism in the code
 
@@ -159,6 +193,17 @@ passes `--long` before use.
 After a source build, `pytest tests/` runs the same digests and more. Skipped tests, such as the
 CUDA cases on a machine without a GPU, count as unchecked rather than passed.
 
+### The renderer's tests
+
+`cuju check` plays the matches and leaves the renderer to the repository's tests, which draw a
+stored episode of GRF and compare each frame, `pixels` and `pixels_gray` with digests of the
+reference's frames. They need the renderer's library and GRF's media, from the extra `pixels`.
+
+```sh
+pytest tests/test_render_frames.py
+CUJU_LONG=1 pytest tests/test_render_frames.py  # whole episodes, end to end, several minutes
+```
+
 ### Package files
 
 `python/cuju/data/SHA256SUMS` lists the SHA-256 of `animations.bin` and of every shipped bundle, in
@@ -224,6 +269,10 @@ most useful with seven items.
 - The actions from there on, the step where the two first differ, and what differs, the
     observation, the reward, the done flag or the state.
 - The build of the GRF under comparison, its version, the operating system, glibc and GCC.
+
+A report of a frame that differs from the reference's adds the scenario, the seed and the step of
+the frame, the resolution, the values of `CUJU_RENDER_THREADS` and `CUJU_RENDER_WORKERS`, the
+processor, and the frame itself or the output of `pytest tests/test_render_frames.py`.
 
 A difference that reproduces is a bug, and its fix brings cuju to GRF's result.
 

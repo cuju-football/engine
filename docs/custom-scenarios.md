@@ -42,9 +42,9 @@ The player still plays the role the file gives.
 
 `from . import *` gives the file GRF's names for the roles and the teams, as it does inside GRF, so
 GRF's own scenario files build as they stand. A file that names a package for these imports takes
-them from `cuju.gfootball.scenarios`, which holds the same names. GRF's `gfootball.scenarios` holds
-the role objects of GRF's compiled engine instead, and the builder answers them with a
-`ScenarioError` that names the role it expected.
+them from `cuju.gfootball.scenarios`, GRF's package over cuju's engine, whose roles the builder
+accepts. GRF's own `gfootball.scenarios` holds the role objects of GRF's compiled engine, and the
+builder answers them with a `ScenarioError` that names the role it expected.
 
 A batch takes the path in place of a bundle name. A scenario file gets one agent on the left, as
 GRF's `create_environment` gives, and `agent_counts` sets others.
