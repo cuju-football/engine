@@ -1,6 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks the distributions (`cuju`, `cuju-cpu`, rebuilds, images) and the hosts they run on."""
+"""Checks the distributions (`cuju-engine`, `cuju-engine-cpu`, rebuilds, images) and their hosts."""
 
 import importlib.util
 import json
@@ -43,14 +43,14 @@ def test_cpu_only_distribution_drops_only_the_cuda_backend(tmp_path):
     original = source_file('pyproject.toml')
     with open(original, 'rb') as handle:
         before = tomllib.load(handle)
-    if before['project']['name'] != 'cuju':
-        pytest.skip('the source tree is already the cuju-cpu project')
+    if before['project']['name'] != 'cuju-engine':
+        pytest.skip('the source tree is already the cuju-engine-cpu project')
     copy = tmp_path / 'pyproject.toml'
     shutil.copyfile(original, copy)
     subprocess.run([sys.executable, source_file('ci', 'cpu_only.py'), str(copy)], check=True)
     with open(copy, 'rb') as handle:
         after = tomllib.load(handle)
-    assert after['project']['name'] == 'cuju-cpu'
+    assert after['project']['name'] == 'cuju-engine-cpu'
     defines = after['tool']['scikit-build']['cmake']['define']
     assert defines['CUJU_CUDA'] == 'OFF'
     assert 'CMAKE_CUDA_ARCHITECTURES' not in defines
@@ -80,10 +80,10 @@ def test_missing_cuda_library_points_to_the_cpu(monkeypatch):
 
 def test_wheel_check_tells_the_distributions_apart(tmp_path):
     script = load_script('ci', 'check_wheel.py')
-    path = tmp_path / 'cuju_cpu-0.1.0-py3-none-manylinux_2_28_x86_64.whl'
+    path = tmp_path / 'cuju_engine_cpu-0.1.0-py3-none-manylinux_2_28_x86_64.whl'
     with zipfile.ZipFile(path, 'w') as wheel:
         for name in script.LICENSES:
-            wheel.writestr(f'cuju_cpu-0.1.0.dist-info/licenses/{name}', '')
+            wheel.writestr(f'cuju_engine_cpu-0.1.0.dist-info/licenses/{name}', '')
         wheel.writestr('cuju/libcuju_cpu.so', '')
     assert script.problems(path, cpu_only=True) == []
     assert script.problems(path, cpu_only=False) == ['missing the CUDA library']
@@ -143,6 +143,51 @@ def test_publishing_needs_a_tag_that_names_the_version():
     check = publish.index('"$GITHUB_REF_NAME" != "v$version"')
     assert publish.index("python/cuju/_version.py')['__version__']") < check
     assert check < publish.index('gh-action-pypi-publish')
+
+
+def test_each_trusted_publishing_job_checks_the_release_tag():
+    with open(source_file('.github', 'workflows', 'release.yml'), encoding='utf-8') as handle:
+        workflow = handle.read()
+    job_sections = re.split(r'(?m)^    ([\w-]+):[ \t]*$', workflow.split('\njobs:\n', 1)[1])
+    jobs = {
+        name: [step.strip() for step in re.split(r'(?m)^            - ', section)]
+        for name, section in zip(job_sections[1::2], job_sections[2::2], strict=True)
+    }
+    tag_check = next(
+        step
+        for step in jobs['publish'][1:]
+        if step.startswith('name: Check that the tag names the version of the package\n')
+    )
+    upload_action = 'uses: pypa/gh-action-pypi-publish@'
+    missing = []
+    for name, (settings, *steps) in jobs.items():
+        if not re.search(r'(?m)^            id-token: write[ \t]*$', settings):
+            continue
+        first_upload = next(
+            (index for index, step in enumerate(steps) if step.startswith(upload_action)),
+            None,
+        )
+        if first_upload is None or tag_check not in steps[:first_upload]:
+            missing.append(name)
+    assert not missing, f'Tag check missing before PyPI publishing in {", ".join(missing)}'
+
+
+def test_each_published_project_has_its_own_environment():
+    # PyPI holds one pending trusted publisher per repository, workflow and environment, and creates
+    # one new project per upload, so every project the release creates publishes from its own job
+    # and its own environment.
+    with open(source_file('.github', 'workflows', 'release.yml'), encoding='utf-8') as handle:
+        workflow = handle.read()
+    environments = {}
+    for job in ('publish', 'publish-gfootball', 'publish-grf-media'):
+        text = workflow[workflow.index(f'\n    {job}:') + 1 :]
+        text = text[: text.index('steps:')]
+        environments[job] = text.split('environment: ', 1)[1].split()[0]
+    assert environments == {
+        'publish': 'pypi',
+        'publish-gfootball': 'pypi-gfootball',
+        'publish-grf-media': 'pypi-grf-media',
+    }
 
 
 def test_apptainer_takes_the_image_of_this_version():

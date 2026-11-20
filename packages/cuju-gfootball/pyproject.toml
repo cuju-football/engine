@@ -1,0 +1,50 @@
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cuju-gfootball"
+# The version is `__version__` in `src/cuju_gfootball/_version.py`.
+dynamic = ["version"]
+description = "Imports cuju's port of Google Research Football under GRF's own names, gfootball and gfootball_engine"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "André Koraleski" }]
+keywords = [
+    "gfootball",
+    "google-research-football",
+    "football",
+    "reinforcement-learning",
+    "multi-agent",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Games/Entertainment :: Simulation",
+]
+# The alias maps GRF's names onto the module names of cuju 0.3, which the range holds.
+dependencies = ["cuju-engine>=0.3.0,<0.4"]
+
+[project.urls]
+Homepage = "https://github.com/cuju-football/engine"
+Documentation = "https://github.com/cuju-football/engine/blob/main/docs/migrating-from-grf.md"
+Issues = "https://github.com/cuju-football/engine/issues"
+Changelog = "https://github.com/cuju-football/engine/blob/main/CHANGELOG.md"
+
+[tool.hatch.version]
+path = "src/cuju_gfootball/_version.py"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cuju_gfootball"]
+
+# Python's `site` reads a `.pth` file only at the root of site-packages.
+[tool.hatch.build.targets.wheel.force-include]
+"src/cuju_gfootball.pth" = "cuju_gfootball.pth"
+
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/README.md", "/LICENSE"]

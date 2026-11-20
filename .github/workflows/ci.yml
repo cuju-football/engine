@@ -13,6 +13,7 @@ permissions:
 
 jobs:
     cpu:
+        needs: grf-media
         runs-on: ubuntu-24.04
         steps:
             - uses: actions/checkout@v7
@@ -22,11 +23,18 @@ jobs:
             - name: Install PyTorch for the CPU
               run: pip install torch --index-url https://download.pytorch.org/whl/cpu
             - name: Build and install the CPU backend
-              run: CMAKE_ARGS=-DCUJU_CUDA=OFF pip install '.[test,spaces]' ruff
+              # hatchling builds the wheel of cuju-gfootball in the tests.
+              run: CMAKE_ARGS=-DCUJU_CUDA=OFF pip install '.[test,spaces]' ruff hatchling opencv-python-headless
+            - uses: actions/download-artifact@v8
+              with:
+                  name: grf-media
+                  path: grf-media
+            - name: Install the pinned GRF media
+              run: pip install --no-index --find-links grf-media cuju-grf-media
             - name: Lint
               run: |
-                  ruff check python tests examples
-                  ruff format --check python tests examples
+                  ruff check python tests examples packages ci
+                  ruff format --check python tests examples packages ci
                   find include src -name '*.h' -o -name '*.cuh' -o -name '*.cpp' -o -name '*.cu' \
                       | xargs clang-format-18 --dry-run -Werror
             - name: Links of the README and the docs
@@ -45,12 +53,13 @@ jobs:
             - name: Install PyTorch for the CPU
               run: pip install torch --index-url https://download.pytorch.org/whl/cpu
             - name: Build and install the CPU backend
-              run: CMAKE_ARGS=-DCUJU_CUDA=OFF pip install '.[test,spaces]'
+              run: CMAKE_ARGS=-DCUJU_CUDA=OFF pip install '.[test,spaces]' opencv-python-headless
             - name: Self-check
               run: pytest tests
 
     # The same expected digests from MSVC on Windows, which a Windows wheel would need first.
     cpu-windows:
+        needs: grf-media
         runs-on: windows-2022
         steps:
             - uses: actions/checkout@v7
@@ -60,11 +69,47 @@ jobs:
             - name: Install PyTorch for the CPU
               run: pip install torch --index-url https://download.pytorch.org/whl/cpu
             - name: Build and install the CPU backend
-              run: pip install ".[test,spaces]"
+              run: pip install ".[test,spaces]" ruff hatchling opencv-python-headless
               env:
                   CMAKE_ARGS: -DCUJU_CUDA=OFF
+            - uses: actions/download-artifact@v8
+              with:
+                  name: grf-media
+                  path: grf-media
+            - name: Install the pinned GRF media
+              run: pip install --no-index --find-links grf-media cuju-grf-media
             - name: Self-check
               run: pytest tests
+
+    grf-media:
+        runs-on: ubuntu-24.04
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/checkout@v7
+              with:
+                  repository: google-research/football
+                  ref: 3d9e754720a95621bba6475c4d3b0d56fe919014
+                  path: grf
+                  persist-credentials: false
+            - uses: actions/setup-python@v7
+              with:
+                  python-version: '3.12'
+            - name: Render the glyph atlas with SDL_ttf
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libsdl2-2.0-0 libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b
+                  python ci/make_glyph_atlas.py grf/third_party/fonts/AlegreyaSansSC-ExtraBold.ttf generated
+            - name: Build and check the GRF media wheel
+              run: |
+                  python ci/make_render_media.py grf --generated generated
+                  pip install build
+                  python -m build --wheel --outdir grf-media packaging/cuju-grf-media
+                  python ci/check_wheel.py --grf-media grf-media/*.whl
+            - uses: actions/upload-artifact@v7
+              with:
+                  name: grf-media
+                  path: grf-media/*.whl
+                  if-no-files-found: error
 
     cuda-compile:
         runs-on: ubuntu-24.04
