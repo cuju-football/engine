@@ -1,30 +1,60 @@
-# Copyright 2026 The cuju Authors
+# coding=utf-8
+# Copyright 2019 Google LLC
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# Modified by the cuju Authors in 2026, in the import lines that ci/port_gfootball.py lists.
 # SPDX-License-Identifier: Apache-2.0
 
-"""GRF's import paths over cuju, so GRF's code runs with `gfootball` replaced by `cuju.gfootball`.
+"""Google Research Football."""
 
-    from cuju.gfootball import env as football_env
+from cuju.gfootball.env import scenario_builder
 
-    env = football_env.create_environment('academy_empty_goal_close', representation='simple115v2')
-    observation = env.reset()
-    observation, reward, done, info = env.step(env.action_space.sample())
-
-GRF's modules that need no rendering are here, as docs/migrating-from-grf.md lists. Importing
-`cuju` registers GRF's ids with gym and gymnasium, as importing `gfootball` does, each once it is
-imported itself.
-
-As in GRF, `import cuju.gfootball` binds `cuju.gfootball.env`, which imports at its first use, so
-that the import itself works without gymnasium or gym.
-"""
-
-from __future__ import annotations
-
-import importlib
-from typing import Any
+from cuju.gfootball import _gym as gym
+from cuju.gfootball._gym import register
 
 
-def __getattr__(name: str) -> Any:
-    # GRF: `import gfootball` imports `gfootball.env`, which needs gym, so here it waits for a use.
-    if name == 'env':
-        return importlib.import_module(f'{__name__}.env')
-    raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
+for env_name in scenario_builder.all_scenarios():
+  register(
+      id='GFootball-{env_name}-SMM-v0'.format(env_name=env_name),
+      entry_point='cuju.gfootball.env:create_environment',
+      kwargs={
+          'env_name': env_name,
+          'representation': 'extracted'
+      },
+  )
+
+  register(
+      id='GFootball-{env_name}-Pixels-v0'.format(env_name=env_name),
+      entry_point='cuju.gfootball.env:create_environment',
+      kwargs={
+          'env_name': env_name,
+          'representation': 'pixels'
+      },
+  )
+
+  register(
+      id='GFootball-{env_name}-simple115-v0'.format(env_name=env_name),
+      entry_point='cuju.gfootball.env:create_environment',
+      kwargs={
+          'env_name': env_name,
+          'representation': 'simple115'
+      },
+  )
+
+  register(
+      id='GFootball-{env_name}-simple115v2-v0'.format(env_name=env_name),
+      entry_point='cuju.gfootball.env:create_environment',
+      kwargs={
+          'env_name': env_name,
+          'representation': 'simple115v2'
+      },
+  )
