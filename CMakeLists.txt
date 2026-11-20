@@ -225,6 +225,13 @@ if(CUJU_CPU)
     target_link_libraries(cuju_cpu PRIVATE cuju_state Threads::Threads)
 endif()
 
+# The software renderer, libcuju_render, which draws GRF's frames on the CPU. It is its own library,
+# so no engine source is compiled with its flags.
+option(CUJU_RENDER "Build the renderer, libcuju_render.so" ON)
+if(CUJU_RENDER)
+    add_subdirectory(src/render)
+endif()
+
 # A DLL exports what a `.def` file lists: each `cuju_` function whose definition starts a line of
 # the C API headers, as `#pragma GCC visibility` exports them elsewhere.
 if(WIN32)
@@ -232,10 +239,10 @@ if(WIN32)
     list(SORT cuju_api_headers)
     set(cuju_exports "")
     foreach(header IN LISTS cuju_api_headers)
-        file(STRINGS ${header} lines REGEX "^[A-Za-z][^(]*[ *]cuju_[a-z0-9_]+\\(")
+        file(STRINGS ${header} lines REGEX "^[A-Za-z][^(]*[ *]cuju_[a-z0-9_]+[(]")
         # A `;` splits a line in two, and only the part that starts the line can name a definition.
         foreach(line IN LISTS lines)
-            if(line MATCHES "^[A-Za-z][^(]*[ *](cuju_[a-z0-9_]+)\\(")
+            if(line MATCHES "^[A-Za-z][^(]*[ *](cuju_[a-z0-9_]+)[(]")
                 list(APPEND cuju_exports ${CMAKE_MATCH_1})
             endif()
         endforeach()
