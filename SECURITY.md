@@ -4,13 +4,14 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.2.x   | :white_check_mark: |
-| 0.1.x   | :x:                |
+| 0.3.x   | Yes                |
+| 0.2.x   | Yes                |
+| 0.1.x   | No                 |
 
 ## Reporting a Vulnerability
 
 Report a vulnerability privately through GitHub's private vulnerability reporting. Open the
-[Security tab](https://github.com/AndreKoraleski/cuju/security) of the repository, then choose
+[Security tab](https://github.com/cuju-football/engine/security) of the repository, then choose
 Report a vulnerability. Please keep vulnerabilities out of public issues and discussions.
 
 A useful report names the version, the platform and the backend, and gives the steps or the file
@@ -42,4 +43,4 @@ The renderer, the package cuju-render, plays submitted code and serves an API on
 loopback interface. Its own [security policy][render-security] describes both and takes their
 reports.
 
-[render-security]: https://github.com/AndreKoraleski/cuju-render/blob/main/SECURITY.md
+[render-security]: https://github.com/cuju-football/render/blob/main/SECURITY.md

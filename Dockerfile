@@ -28,7 +28,7 @@ FROM nvidia/cuda:${CUDA_VERSION}-base-ubuntu24.04
 ARG TORCH_INDEX_URL=https://pypi.org/simple
 LABEL org.opencontainers.image.title="cuju" \
     org.opencontainers.image.description="Batched Google Research Football, bit for bit" \
-    org.opencontainers.image.source="https://github.com/AndreKoraleski/cuju" \
+    org.opencontainers.image.source="https://github.com/cuju-football/engine" \
     org.opencontainers.image.licenses="Apache-2.0 AND LGPL-2.1-or-later AND MIT AND SunPro AND BSL-1.0 AND BSD-3-Clause"
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get update && apt-get install --no-install-recommends -y python3 python3-venv \

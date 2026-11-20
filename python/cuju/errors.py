@@ -21,7 +21,9 @@ __all__ = [
     'Error',
     'LibraryError',
     'MissingFileError',
+    'SignatureError',
     'StateError',
+    'TrackerError',
     'UndefinedPathError',
 ]
 
@@ -66,6 +68,20 @@ class DeviceError(Error, RuntimeError):
 
     Such a device is a missing CUDA GPU, a GPU index past the last, or a processor without AVX2,
     BMI2 or FMA.
+    """
+
+
+class SignatureError(Error, TypeError):
+    """Arguments that a function of `cuju.gfootball_engine` does not take.
+
+    Its message is the one of GRF's `Boost.Python.ArgumentError`, which is a `TypeError` as well.
+    """
+
+
+class TrackerError(Error, RuntimeError):
+    """Two engines that GRF's tracker plays in lockstep and whose states differ.
+
+    GRF ends the process there, and cuju raises this in both threads.
     """
 
 

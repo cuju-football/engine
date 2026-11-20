@@ -1,6 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Turns pyproject.toml into the CPU-only distribution `cuju-cpu`, which has no CUDA library.
+"""Turns pyproject.toml into the CPU-only distribution `cuju-engine-cpu`, which has no CUDA library.
 
 The package it installs is the same `cuju`, with `libcuju_cpu.so` alone. Run it in a fresh
 checkout before building: `python ci/cpu_only.py [pyproject.toml]`.
@@ -11,7 +11,7 @@ import sys
 
 # Each pattern must match exactly once, so a change of pyproject.toml can't slip past silently.
 REPLACEMENTS = [
-    (r'(?m)^name = "cuju"$', 'name = "cuju-cpu"'),
+    (r'(?m)^name = "cuju-engine"$', 'name = "cuju-engine-cpu"'),
     (r'(?m)^(description = ".*), for CUDA and CPU"$', r'\1, for the CPU only"'),
     (r'(?m)^    "Environment :: GPU :: NVIDIA CUDA :: 12",\n', ''),
     (r'(?m)^CMAKE_CUDA_ARCHITECTURES = .*$', 'CUJU_CUDA = "OFF"'),
@@ -19,7 +19,7 @@ REPLACEMENTS = [
 
 
 def cpu_only(text):
-    """Returns the text of pyproject.toml for `cuju-cpu`.
+    """Returns the text of pyproject.toml for `cuju-engine-cpu`.
 
     Raises:
         ValueError: If a pattern doesn't match exactly once.

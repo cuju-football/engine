@@ -7,55 +7,21 @@ from __future__ import annotations
 
 import ctypes
 import os
-import platform
-import sys
 from typing import Any
 
 import torch
 
-from ..errors import ChoiceError, DeviceError, LibraryError, MissingFileError
-
-# The directory of the package, where the libraries sit.
-_PACKAGE_DIRECTORY = os.path.dirname(os.path.dirname(__file__))
-# The library of each device, and the environment variable that overrides its path.
-if os.name == 'nt':
-    _LIBRARY_FILE = '{}.dll'
-elif sys.platform == 'darwin':
-    _LIBRARY_FILE = 'lib{}.dylib'
-else:
-    _LIBRARY_FILE = 'lib{}.so'
-_LIBRARIES = {
-    'cuda': (_LIBRARY_FILE.format('cuju_cuda'), 'CUJU_CUDA_LIBRARY'),
-    'cpu': (_LIBRARY_FILE.format('cuju_cpu'), 'CUJU_CPU_LIBRARY'),
-}
-
-
-def _backend(device: Any) -> str:
-    """Returns `cuda` or `cpu`, the backend of a device such as `cuda:1` or a `torch.device`."""
-    if isinstance(device, str) and device in _LIBRARIES:
-        return device
-    try:
-        kind = torch.device(device).type
-    except (RuntimeError, TypeError):
-        kind = None
-    if kind not in _LIBRARIES:
-        raise ChoiceError(
-            f"expected the device 'cuda', 'cuda:N', 'cpu' or a torch.device, found {device!r}"
-        )
-    return kind
-
-
-def _automatic(device: Any) -> Any:
-    """Returns the CUDA device for `auto` if a GPU and the CUDA library exist, else `cpu`."""
-    if not (isinstance(device, str) and device == 'auto'):
-        return device
-    name, variable = _LIBRARIES['cuda']
-    library = os.environ.get(variable) or os.path.join(_PACKAGE_DIRECTORY, name)
-    # A `CUJU_CUDA_LIBRARY` that names no file still picks the GPU, whose load then says so.
-    present = bool(os.environ.get(variable)) or os.path.isfile(library)
-    if present and torch.cuda.is_available():
-        return f'cuda:{torch.cuda.current_device()}'
-    return 'cpu'
+from .._cli_contract import quote_path
+from .._library_path import (  # noqa: F401, the names that this module has always held
+    _LIBRARIES,
+    _PACKAGE_DIRECTORY,
+    _automatic,
+    _backend,
+    _check_processor,
+    _missing_processor_features,
+    library_path,
+)
+from ..errors import DeviceError, LibraryError, MissingFileError
 
 
 def _placement(device: Any) -> torch.device:
@@ -77,80 +43,6 @@ def _placement(device: Any) -> torch.device:
             'PyTorch sees only these GPUs (CUDA_VISIBLE_DEVICES may hide others)'
         )
     return torch.device('cuda', index)
-
-
-def library_path(device: Any = 'cuda') -> str:
-    """Returns the path of the library that `BatchEnvironment` loads by default for a device.
-
-    Args:
-        device: `cuda`, `cuda:N` or a `torch.device` for `libcuju_cuda.so`, `cpu` for
-            `libcuju_cpu.so`, or `auto` for the one that `device='auto'` picks (`cuju_cuda.dll`
-            and `cuju_cpu.dll` on Windows, `libcuju_cpu.dylib` on macOS). The library sits inside
-            the package unless `CUJU_CUDA_LIBRARY` or `CUJU_CPU_LIBRARY` names another path.
-
-    Raises:
-        ChoiceError: If `device` names neither. It is a `ValueError` and a `KeyError`.
-    """
-    name, variable = _LIBRARIES[_backend(_automatic(device))]
-    return os.environ.get(variable) or os.path.join(_PACKAGE_DIRECTORY, name)
-
-
-# The sysctl keys under which macOS reports each feature.
-_MACOS_FEATURES = (
-    ('AVX2', 'hw.optional.avx2_0'),
-    ('BMI2', 'hw.optional.bmi2'),
-    ('FMA', 'hw.optional.fma'),
-)
-
-
-def _macos_feature(key):
-    """Returns whether macOS reports the processor feature `key`, true when it cannot tell."""
-    try:
-        sysctl = ctypes.CDLL(None).sysctlbyname
-    except (OSError, AttributeError):
-        return True
-    value = ctypes.c_int(0)
-    size = ctypes.c_size_t(ctypes.sizeof(value))
-    if sysctl(key.encode(), ctypes.byref(value), ctypes.byref(size), None, ctypes.c_size_t(0)):
-        return True
-    return value.value != 0
-
-
-def _missing_processor_features():
-    """Returns the features among AVX2, BMI2 and FMA that the processor lacks, as far as known."""
-    if os.name == 'nt':
-        # Windows answers for AVX2 (`PF_AVX2_INSTRUCTIONS_AVAILABLE`, 40), not for BMI2 or FMA.
-        return [] if ctypes.windll.kernel32.IsProcessorFeaturePresent(40) else ['AVX2']
-    if sys.platform == 'darwin':
-        return [name for name, key in _MACOS_FEATURES if not _macos_feature(key)]
-    try:
-        with open('/proc/cpuinfo', encoding='ascii', errors='replace') as handle:
-            for line in handle:
-                if line.startswith('flags'):
-                    flags = set(line.partition(':')[2].split())
-                    return [name.upper() for name in ('avx2', 'bmi2', 'fma') if name not in flags]
-    except OSError:
-        pass
-    return []
-
-
-def _check_processor(path):
-    """Raises `DeviceError` for the packaged CPU library on a CPU without AVX2, BMI2 or FMA."""
-    # The packaged library targets x86-64-v3, so elsewhere it stops Python with an illegal
-    # instruction; a library at another path is a build of its own. An aarch64 build targets the
-    # base Armv8-A, which every aarch64 processor has.
-    if platform.machine().lower() not in ('x86_64', 'amd64'):
-        return
-    if os.path.abspath(path) != os.path.join(
-        os.path.abspath(_PACKAGE_DIRECTORY), _LIBRARIES['cpu'][0]
-    ):
-        return
-    missing = _missing_processor_features()
-    if missing:
-        raise DeviceError(
-            'the CPU library of cuju needs a processor with AVX2, BMI2 and FMA, and this one lacks '
-            + ', '.join(missing)
-        )
 
 
 class _Configuration(ctypes.Structure):
@@ -184,11 +76,13 @@ class _Configuration(ctypes.Structure):
         ('pin_threads', ctypes.c_int),
         ('numa', ctypes.c_int),
         ('page_aligned', ctypes.c_int),
+        ('render_mode', ctypes.c_int),
+        ('referee_animations', ctypes.c_int),
     ]
 
 
 # `CUJU_CONFIGURATION_VERSION` of the C API.
-_CONFIGURATION_VERSION = 2
+_CONFIGURATION_VERSION = 3
 
 
 def _load_library(path=None, device='cuda'):
@@ -196,7 +90,8 @@ def _load_library(path=None, device='cuda'):
     variable = _LIBRARIES[device][1]
     if path is None and os.environ.get(variable) and not os.path.isfile(os.environ[variable]):
         raise MissingFileError(
-            f'the environment variable {variable} names {os.environ[variable]!r}, which is no file'
+            f'the environment variable {variable} names {quote_path(os.environ[variable])}, '
+            'which is no file'
         )
     path = path or library_path(device)
     if not os.path.isfile(path):
@@ -207,8 +102,8 @@ def _load_library(path=None, device='cuda'):
             else 'build the package with that backend or pick the other device'
         )
         raise MissingFileError(
-            f'expected the library of the backend {device} at {path}, which this installation '
-            f'lacks; {advice}'
+            f'expected the library of the backend {device} at {quote_path(path)}, '
+            f'which this installation lacks; {advice}'
         )
     if device == 'cpu':
         _check_processor(path)
@@ -218,7 +113,7 @@ def _load_library(path=None, device='cuda'):
     backend = library.cuju_backend().decode()
     if backend != device:
         raise LibraryError(
-            f'expected the library of the backend {device} at {path}, found {backend}'
+            f'expected the library of the backend {device} at {quote_path(path)}, found {backend}'
         )
     library.cuju_last_error.restype = string
     library.cuju_environment_create.restype = pointer
@@ -238,6 +133,24 @@ def _load_library(path=None, device='cuda'):
     library.cuju_environment_set_difficulty.argtypes = [pointer, pointer]
     library.cuju_environment_difficulty.argtypes = [pointer, pointer]
     library.cuju_environment_difficulty.restype = None
+    library.cuju_environment_set_render.argtypes = [pointer, pointer, integer, integer]
+    library.cuju_engine_render_state_version.restype = ctypes.c_uint
+    library.cuju_engine_render_state_version.argtypes = []
+    library.cuju_engine_render_state_size.restype = ctypes.c_ulonglong
+    library.cuju_engine_render_state_size.argtypes = []
+    library.cuju_engine_internal_render_state.argtypes = [pointer, ctypes.c_ulonglong, integer]
+    library.cuju_environment_render_event_size.restype = ctypes.c_ulonglong
+    library.cuju_environment_render_event_size.argtypes = []
+    library.cuju_environment_enable_render_events.argtypes = [pointer, integer]
+    library.cuju_environment_render_events.argtypes = [pointer, integer, pointer, integer, pointer]
+    library.cuju_environment_render_states.argtypes = [
+        pointer,
+        pointer,
+        integer,
+        pointer,
+        ctypes.c_ulonglong,
+        pointer,
+    ]
     library.cuju_environment_reset.argtypes = [pointer, pointer, pointer, pointer]
     library.cuju_environment_reset_done.argtypes = [pointer, pointer]
     library.cuju_environment_reset_masked.argtypes = [
@@ -269,6 +182,7 @@ def _load_library(path=None, device='cuda'):
         ctypes.c_char_p,
         ctypes.c_ulonglong,
     ]
+    library.cuju_environment_roles.argtypes = [pointer, integer, pointer, integer]
     library.cuju_environment_buffer.restype = pointer
     library.cuju_environment_buffer.argtypes = [pointer, string]
     library.cuju_environment_raw_field.restype = string

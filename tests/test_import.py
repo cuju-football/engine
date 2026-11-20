@@ -39,6 +39,15 @@ def test_import_leaves_torch_out_until_a_batch_is_used():
     assert found == ['False', 'True', 'True', 'True', 'cuju', 'cuju', 'cuju', 'cuju']
 
 
+def test_scenarios_and_the_library_path_leave_torch_out():
+    # The scenario builder and the locator of the CPU library run without PyTorch.
+    found = run(
+        'import sys, cuju.scenarios, cuju._library_path as path; '
+        "path.library_path('cpu'); print('torch' in sys.modules)"
+    )
+    assert found == ['False']
+
+
 def test_every_public_name_of_cuju_resolves():
     found = run(
         'import cuju; missing = [name for name in cuju.__all__ if not hasattr(cuju, name)]; '
@@ -59,24 +68,19 @@ def test_import_of_gfootball_works_without_gym():
     found = run(
         "import sys; sys.modules['gym'] = sys.modules['gymnasium'] = None; "
         'import cuju.gfootball; '
-        "print('cuju.gfootball.env' in sys.modules, hasattr(cuju.gfootball, 'other'))"
+        "print('cuju.gfootball.env' in sys.modules, cuju.gfootball._gym.VENDORED)"
     )
-    assert found == ['False', 'False']
+    assert found == ['True', 'True']
 
 
-@pytest.mark.skipif(
-    importlib.util.find_spec('gymnasium') is None and importlib.util.find_spec('gym') is None,
-    reason='no gymnasium or gym',
-)
 def test_import_of_gfootball_binds_env():
-    # GRF: `import gfootball` binds `gfootball.env`, so the attribute serves at once.
+    # GRF: `import gfootball` imports `gfootball.env`, so the attribute serves at once.
     found = run(
         'import sys, cuju.gfootball; '
         "print('cuju.gfootball.env' in sys.modules, "
-        'callable(cuju.gfootball.env.create_environment), '
-        "'cuju.gfootball.env' in sys.modules)"
+        'callable(cuju.gfootball.env.create_environment))'
     )
-    assert found == ['False', 'True', 'True']
+    assert found == ['True', 'True']
 
 
 @pytest.mark.skipif(importlib.util.find_spec('gymnasium') is None, reason='no gymnasium')
@@ -88,26 +92,28 @@ def test_gymnasium_imported_later_gets_the_ids():
     assert found == ['True']
 
 
-def test_only_the_renderer_of_cuju_render_joins_the_package(tmp_path):
-    # A whole cuju later on the path, such as an older installation with its own renderer, stays
-    # out of the package, and a folder `cuju` that holds `render` and no `__init__.py`, as an
-    # editable cuju-render keeps, joins it as an absolute path, here the current directory's.
+def test_only_a_portion_of_a_package_joins_the_package(tmp_path):
+    # A whole cuju later on the path, such as an older installation with a module of its own, stays
+    # out of the package, and a folder `cuju` that holds a module and no `__init__.py`, as an
+    # editable install of a package beside cuju keeps, joins it as an absolute path, here the
+    # current directory's.
     stray = tmp_path / 'stray' / 'cuju'
-    (stray / 'render').mkdir(parents=True)
+    (stray / 'fakepkg').mkdir(parents=True)
     (stray / '__init__.py').write_text("raise SystemExit('the stray cuju was imported')\n")
-    (stray / 'render' / '__init__.py').write_text('STRAY = True\n')
+    (stray / 'fakepkg' / '__init__.py').write_text('STRAY = True\n')
     portion = tmp_path / 'portion' / 'cuju'
-    (portion / 'render').mkdir(parents=True)
-    (portion / 'render' / '__init__.py').write_text('PORTION = True\n')
+    (portion / 'fakepkg').mkdir(parents=True)
+    (portion / 'fakepkg' / '__init__.py').write_text('PORTION = True\n')
     home = os.path.dirname(os.path.dirname(importlib.util.find_spec('cuju').origin))
     code = (
         'import json, os, cuju\n'
         'path = list(cuju.__path__)\n'
-        'import cuju.render\n'
-        "print(json.dumps([path, os.path.dirname(cuju.__file__), hasattr(cuju.render, 'STRAY')]))\n"
+        'import cuju.fakepkg\n'
+        'stray = hasattr(cuju.fakepkg, "STRAY")\n'
+        'print(json.dumps([path, os.path.dirname(cuju.__file__), stray]))\n'
     )
     environment = dict(os.environ)
-    environment.pop('CUJU_RENDER', None)
+    environment.pop('CUJU_BATCH_HOOKS', None)
     environment['PYTHONPATH'] = os.pathsep.join([home, str(tmp_path / 'stray')])
     result = subprocess.run(
         [sys.executable, '-c', code],

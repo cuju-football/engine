@@ -3,19 +3,24 @@ requires = ["scikit-build-core>=0.12"]
 build-backend = "scikit_build_core.build"
 
 [project]
-name = "cuju"
+name = "cuju-engine"
 # The version is `__version__` in `python/cuju/_version.py`.
 dynamic = ["version"]
 description = "A bit-exact, batched reimplementation of Google Research Football, for CUDA and CPU"
 readme = "README.md"
 requires-python = ">=3.10"
-license = "Apache-2.0 AND LGPL-2.1-or-later AND MIT AND SunPro AND BSL-1.0 AND BSD-3-Clause"
-# The licenses of the engine. The others in LICENSES/ cover docs/assets, which no wheel holds.
+license = "Apache-2.0 AND LGPL-2.1-or-later AND MIT AND SunPro AND BSL-1.0 AND BSD-3-Clause AND Zlib"
+# The licenses of the engine. Of the others in LICENSES/, CC-BY-4.0 covers
+# docs/assets, which no wheel holds, and Unlicense and OFL-1.1 cover GRF's media, which the wheel of
+# cuju-grf-media holds.
 license-files = [
     "LICENSE",
     "NOTICE",
     "LICENSES/LGPL-2.1-or-later.txt",
     "LICENSES/MIT.txt",
+    "LICENSES/MIT-gym.txt",
+    "LICENSES/MIT-Mesa.txt",
+    "LICENSES/Zlib.txt",
     "LICENSES/SunPro.txt",
     "LICENSES/BSL-1.0.txt",
     "LICENSES/BSD-3-Clause.txt",
@@ -48,22 +53,33 @@ dependencies = [
     "torch>=2.2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "numpy; sys_platform != 'darwin' or platform_machine != 'x86_64'",
     "numpy<2; sys_platform == 'darwin' and platform_machine == 'x86_64'",
+    # GRF's Python package, which `cuju.gfootball` ports, imports both at the top of its modules.
+    "absl-py",
+    "six",
 ]
 
 [project.scripts]
 cuju = "cuju.__main__:main"
+# A name that cuju 0.2.1 lacks, so it survives an upgrade that deletes the engine, which see
+# `cuju.engine_status`.
+cuju-repair = "cuju.engine_status:main"
 
 [project.urls]
-Homepage = "https://github.com/AndreKoraleski/cuju"
-Documentation = "https://github.com/AndreKoraleski/cuju/tree/main/docs"
-Issues = "https://github.com/AndreKoraleski/cuju/issues"
-Changelog = "https://github.com/AndreKoraleski/cuju/blob/main/CHANGELOG.md"
+Homepage = "https://github.com/cuju-football/engine"
+Documentation = "https://github.com/cuju-football/engine/tree/main/docs"
+Issues = "https://github.com/cuju-football/engine/issues"
+Changelog = "https://github.com/cuju-football/engine/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 spaces = ["gymnasium>=0.29"]
-test = ["pytest>=8"]
-# The renderer is the package cuju-render, which installs into `cuju/render` and releases with cuju.
-render = ["cuju-render>=0.1.0,<0.2"]
+test = ["pytest>=8", "psutil"]
+# GRF's media, which cuju's software renderer draws, the package cuju-grf-media.
+pixels = ["cuju-grf-media>=0.3.0,<0.4"]
+# What GRF's Python package needs for frames and videos, for its game and keyboard players, and
+# for its remote environments. Its frames take GRF's media.
+gfootball-video = ["opencv-python", "cuju-grf-media>=0.3.0,<0.4"]
+gfootball-play = ["pygame"]
+gfootball-remote = ["grpcio", "protobuf"]
 
 [tool.scikit-build]
 minimum-version = "build-system.requires"
@@ -90,6 +106,20 @@ line-length = 100
 src = ["python", "tests"]
 indent-width = 4
 target-version = "py310"
+# GRF's Python package and gym's core, which stay as `ci/port_gfootball.py` writes them.
+# `_cv2.py` and `_gym/__init__.py` are cuju's own, so they stay checked.
+extend-exclude = [
+    "python/cuju/gfootball/__init__.py",
+    "python/cuju/gfootball/play_game.py",
+    "python/cuju/gfootball/replay.py",
+    "python/cuju/gfootball/dump_to_txt.py",
+    "python/cuju/gfootball/dump_to_video.py",
+    "python/cuju/gfootball/env",
+    "python/cuju/gfootball/scenarios",
+    "python/cuju/gfootball/eval_server",
+    "python/cuju/gfootball/examples",
+    "python/cuju/gfootball/_gym/_vendored",
+]
 
 [tool.ruff.format]
 quote-style = "single"
@@ -100,9 +130,10 @@ select = ["E", "F", "W", "I", "UP", "B", "N", "RUF"]
 [tool.ruff.lint.per-file-ignores]
 # GRF's scenario API keeps GRF's method names.
 "python/cuju/scenarios.py" = ["N802", "N815"]
-"python/cuju/gfootball/env/config.py" = ["N802"]
-"python/cuju/gfootball/env/scenario_builder.py" = ["N802"]
-"python/cuju/gfootball/scenarios.py" = ["N816"]
+"python/cuju/_grf_config.py" = ["N802"]
+# GRF's module names its enumerations and boost.python's base as GRF does, and its classes build
+# their properties from helpers in their bodies.
+"python/cuju/gfootball_engine/_gameplayfootball.py" = ["N801", "N805", "N816"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

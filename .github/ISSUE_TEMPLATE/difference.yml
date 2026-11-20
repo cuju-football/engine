@@ -14,7 +14,7 @@ body:
       id: cuju-version
       attributes:
           label: cuju version
-          description: "`python -c \"import importlib.metadata as m; print(m.version('cuju'))\"`"
+          description: "`python -c \"import importlib.metadata as m; print(m.version('cuju-engine'))\"`"
       validations:
           required: true
     - type: dropdown

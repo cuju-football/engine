@@ -250,7 +250,7 @@ class ActionLog:
     def save(self, path: str) -> None:
         """Writes the log to a ZIP file at `path`, which `replay` reads."""
         try:
-            version = importlib.metadata.version('cuju')
+            version = importlib.metadata.version('cuju-engine')
         except importlib.metadata.PackageNotFoundError:
             version = None
         header = {

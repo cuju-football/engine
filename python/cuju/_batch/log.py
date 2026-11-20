@@ -12,8 +12,10 @@ import logging
 import os
 import sys
 import time
+from typing import TYPE_CHECKING
 
-import torch
+if TYPE_CHECKING:
+    import torch
 
 LOGGER = logging.getLogger('cuju')
 
@@ -64,9 +66,12 @@ def start(device: str, torch_device: torch.device | None = None) -> tuple[float,
         return None
     _handler()
     free = None
-    if device == 'cuda' and torch.cuda.is_available():
-        index = None if torch_device is None else torch_device.index
-        free = torch.cuda.mem_get_info(index)[0]
+    if device == 'cuda':
+        import torch
+
+        if torch.cuda.is_available():
+            index = None if torch_device is None else torch_device.index
+            free = torch.cuda.mem_get_info(index)[0]
     return time.perf_counter(), free
 
 
@@ -77,6 +82,8 @@ def created(batch, assets, library, started) -> None:
     began, free = started
     seconds = time.perf_counter() - began
     if batch.device == 'cuda':
+        import torch
+
         index = batch._torch_device.index
         major, minor = torch.cuda.get_device_capability(index)
         place = (

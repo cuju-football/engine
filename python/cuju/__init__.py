@@ -27,7 +27,9 @@ from .errors import (
     Error,
     LibraryError,
     MissingFileError,
+    SignatureError,
     StateError,
+    TrackerError,
     UndefinedPathError,
 )
 
@@ -46,7 +48,9 @@ __all__ = [
     'LibraryError',
     'MissingFileError',
     'MultiDeviceBatch',
+    'SignatureError',
     'StateError',
+    'TrackerError',
     'UndefinedPathError',
     '__version__',
     'bundled_assets',
@@ -63,7 +67,7 @@ for _name in (bundled_assets, bundled_scenarios):
 del _name
 
 # The names that build on PyTorch load on first use, so that `import cuju` and the commands of the
-# renderer that step no batch start without importing PyTorch. Each maps to its module.
+# commands that step no batch start without importing PyTorch. Each maps to its module.
 _LAZY = {
     'BatchEnvironment': '_batch.environment',
     'memory_estimate': '_batch.environment',
@@ -113,7 +117,7 @@ def __dir__() -> list[str]:
 
 
 class _RegisteringLoader:
-    """Runs the loader of gymnasium or gym, then registers GRF's ids with the module."""
+    """Runs the loader of gymnasium, then registers the ids of `cuju.env` with it."""
 
     def __init__(self, loader, name):
         self._loader = loader
@@ -132,7 +136,7 @@ class _RegisteringLoader:
 
 
 class _RegistrationFinder:
-    """Hands gymnasium and gym, when imported, a loader that then registers GRF's ids."""
+    """Hands gymnasium, when imported, a loader that then registers the ids of `cuju.env`."""
 
     waiting: ClassVar[set[str]] = set()
     # The names being looked up by the other finders, which this one then leaves to them.
@@ -161,15 +165,15 @@ def _register_ids(module):
 
 
 def _register_gymnasium_ids():
-    """Registers GRF's ids with gymnasium and gym before 0.26, as importing `gfootball` does.
+    """Registers the ids of `cuju.env` with gymnasium once it is imported.
 
-    Each gets them once it is imported, so that `import cuju` imports neither.
+    gym gets GRF's ids from `cuju.gfootball`, as importing `gfootball` registers them, so that
+    `import cuju` imports neither.
     """
-    for module in ('gymnasium', 'gym'):
-        if module in sys.modules:
-            _register_ids(module)
-        else:
-            _RegistrationFinder.waiting.add(module)
+    if sys.modules.get('gymnasium') is not None:
+        _register_ids('gymnasium')
+    else:
+        _RegistrationFinder.waiting.add('gymnasium')
     if not any(isinstance(finder, _RegistrationFinder) for finder in sys.meta_path):
         sys.meta_path.insert(0, _RegistrationFinder())
 
@@ -177,14 +181,16 @@ def _register_gymnasium_ids():
 _register_gymnasium_ids()
 
 
-def _with_renderer_portions(path):
-    """Returns `path` and, after it, every folder of the renderer that `sys.path` holds elsewhere.
+def _with_portions(path):
+    """Returns `path` and, after it, every folder `cuju` that `sys.path` holds elsewhere and that
+    is a portion of the package.
 
-    The renderer, the package cuju-render, installs its files into this folder, and an editable
-    install of it keeps them in its own checkout, whose `cuju` folder holds `render` and no
-    `__init__.py`. Such a folder joins the package as an absolute path. A folder `cuju` with an
-    `__init__.py` of its own is a whole cuju, such as an older installation or a checkout in the
-    current directory, and stays out, so that its renderer never stands in for a missing one.
+    A package that installs beside cuju puts its files into this folder, and
+    an editable install of it keeps them in its own checkout, whose `cuju` folder holds its modules
+    and no `__init__.py`. Such a folder joins the package as an absolute path, as
+    `pkgutil.extend_path` joins it. A folder `cuju` with an `__init__.py` of its own is a whole
+    cuju, such as an older installation or a checkout in the current directory, and stays out, so
+    that its modules never stand in for missing ones.
     """
     import os
 
@@ -197,15 +203,15 @@ def _with_renderer_portions(path):
         key = os.path.normcase(folder)
         if key in seen or os.path.isfile(os.path.join(folder, '__init__.py')):
             continue
-        if os.path.isdir(os.path.join(folder, 'render')):
+        if os.path.isdir(folder):
             seen.add(key)
             folders.append(folder)
     return folders
 
 
-__path__ = _with_renderer_portions(__path__)
+__path__ = _with_portions(__path__)
 
-# The renderer is optional, so importing it where it is missing names the package that installs it.
-from . import _renderer  # noqa: E402
+# A module `cuju.<name>` that no package provides names the package that may.
+from . import _plugins  # noqa: E402
 
-_renderer.install_finder()
+_plugins.install_finder()

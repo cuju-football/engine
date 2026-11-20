@@ -5,12 +5,13 @@
     cuju check                # every case on the CPU and on every visible GPU
     cuju check --long         # also the long cases, later episodes and the second half
     cuju check --device cuda  # one backend, which must then be present
-    cuju check --list         # the setup and the cases, without playing them
+    cuju check --list         # the cases, without playing them
 
 It prints the setup, checks the package data against `data/SHA256SUMS`, and plays each case of
 `data/digests.json`, four environments with fixed actions whose outputs and final states hash into
 one SHA-256, against the digest of a build that matches GRF. The exit status is 0 when everything
-that ran matched, else 1. An absent backend is reported and skipped unless `--device` names it.
+that ran matched, else 1. An absent backend is reported and skipped unless `--device` names it,
+when the status is 3.
 """
 
 from __future__ import annotations
@@ -22,16 +23,20 @@ import importlib.metadata
 import json
 import os
 import platform
+import shutil
 import struct
 import sys
+import textwrap
 import time
 
 import torch
 
 import cuju
 
-from . import _checksums
+from . import _checksums, _cli_parsers
+from . import _cli_contract as contract
 from ._batch import library as _libraries
+from .errors import Error
 
 DIGESTS = os.path.join(_checksums.DATA_DIRECTORY, 'digests.json')
 # The processor features that the packaged CPU library needs.
@@ -280,7 +285,7 @@ def _library(device):
 
 def diagnostics() -> list[str]:
     """Returns lines on this installation's versions, processor, libraries and GPUs."""
-    version = getattr(cuju, '__version__', None) or _version('cuju') or 'from a source tree'
+    version = getattr(cuju, '__version__', None) or _version('cuju-engine') or 'from a source tree'
     lines = [
         f'cuju {version} at {os.path.dirname(os.path.abspath(cuju.__file__))}',
         f'Python {platform.python_version()}, torch {torch.__version__} '
@@ -374,13 +379,13 @@ def _devices(requested):
         if problem is None:
             devices.append(('cpu', 'cpu', None))
         else:
-            notes.append(f'the CPU cases did not run: {problem}')
+            notes.append(f'the CPU cases did not run, {problem}')
     if requested in ('all', 'cuda'):
         problem = _loads('cuda')
         if problem is not None:
-            notes.append(f'the GPU cases did not run: {problem}')
+            notes.append(f'the GPU cases did not run, {problem}')
         elif not torch.cuda.is_available():
-            notes.append('the GPU cases did not run: no GPU that PyTorch can use')
+            notes.append('the GPU cases did not run, no GPU that PyTorch can use')
         else:
             devices += [
                 (f'cuda:{index}', 'cuda', index) for index in range(torch.cuda.device_count())
@@ -398,79 +403,193 @@ def run_case(entry, device, index):
         return play_digest(*arguments, **options)
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Runs the check and returns its exit status, 0 if everything that ran matched, else 1."""
+def _list_cases(cases, arguments):
+    if arguments.json:
+        contract.emit(
+            'engine.check.list/1',
+            {
+                'cases': [
+                    {
+                        'name': name,
+                        'assets': entry['assets'],
+                        'steps': entry['steps'],
+                        'options': entry['options'],
+                    }
+                    for name, entry in cases.items()
+                ]
+            },
+        )
+    elif cases:
+        rows = [
+            (name, str(entry['assets']), f'{entry["steps"]} steps', str(entry['options'] or ''))
+            for name, entry in cases.items()
+        ]
+        widths = [max(map(len, column)) for column in zip(*rows, strict=True)]
+        if sys.stdout.isatty():
+            columns = shutil.get_terminal_size().columns
+            widths[0] = min(widths[0], max(1, (columns - widths[2] - 6) // 2))
+            widths[1] = min(widths[1], max(1, columns - widths[0] - widths[2] - 6))
+            widths[3] = min(widths[3], max(0, columns - sum(widths[:3]) - 6))
+        for row in rows:
+            cells = []
+            for value, width in zip(row, widths, strict=True):
+                if width and len(value) > width:
+                    value = value[: width - 1] + '…'
+                cells.append(f'{value:<{width}}' if width else '')
+            print('  '.join(cells).rstrip())
+    if not cases and not getattr(arguments, 'quiet', False):
+        print(
+            'No cases are listed. Run cuju check --list --long to include the long cases.',
+            file=sys.stderr,
+        )
+    return 0
 
-    parser = argparse.ArgumentParser(prog='cuju check', description=__doc__.splitlines()[0])
-    parser.add_argument('--device', choices=['all', 'cpu', 'cuda'], default='all')
-    parser.add_argument(
-        '--long', action='store_true', help='also play the long cases, several minutes'
-    )
-    parser.add_argument(
-        '--case', action='append', help='play only this case (repeatable); see --list'
-    )
-    parser.add_argument('--list', action='store_true', help='list the cases and play none')
-    arguments = parser.parse_args(argv)
 
-    for line in diagnostics():
-        print(line)
+def _run(arguments: argparse.Namespace) -> int:
     cases = load_cases(arguments.long or bool(arguments.case))
     if arguments.case:
-        unknown = [name for name in arguments.case if name not in cases]
-        if unknown:
-            parser.error(f'no case {", ".join(unknown)}; --list lists them')
+        for name in arguments.case:
+            if name not in cases:
+                arguments._command_parser.error(
+                    f'expected a named check case, found {name!r}',
+                    hint='run cuju check --list --long to list the cases.',
+                )
         cases = {name: cases[name] for name in arguments.case}
-    if arguments.list:
-        for name, entry in cases.items():
-            print(f'{name}: {entry["assets"]}, {entry["steps"]} steps, {entry["options"] or ""}')
-        return 0
 
-    failures = 0
+    if arguments.list:
+        return _list_cases(cases, arguments)
+
+    quiet = getattr(arguments, 'quiet', False)
+    interactive = not quiet and sys.stderr.isatty()
+    columns = shutil.get_terminal_size().columns if interactive else 0
+    line_width = 0
+
+    def progress(text: str, *, update: bool = False) -> None:
+        nonlocal line_width
+        if quiet:
+            return
+        if interactive and update:
+            text = text[: max(1, columns - 1)]
+            print(f'\r{text:<{line_width}}', end='', file=sys.stderr, flush=True)
+            line_width = max(line_width, len(text))
+        else:
+            if line_width:
+                print(f'\r{" " * line_width}\r', end='', file=sys.stderr)
+                line_width = 0
+            print(text, file=sys.stderr)
+
+    setup = diagnostics()
+    for line in setup:
+        if interactive:
+            line = textwrap.fill(
+                line,
+                columns,
+                subsequent_indent='  ',
+                break_long_words=False,
+                break_on_hyphens=False,
+                replace_whitespace=False,
+            )
+        progress(line)
+
     problems = check_data()
-    print(
-        f'package data: {len(_checksums.data_files())} files match data/SHA256SUMS'
-        if not problems
-        else 'package data: ' + '; '.join(problems)
-    )
-    failures += len(problems)
+    if not arguments.json:
+        detail = (
+            ', '.join(problems)
+            if problems
+            else f'{len(_checksums.data_files())} files match data/SHA256SUMS'
+        )
+        print(f'package data: {detail}')
+
+    failures = len(problems)
     devices, notes = _devices(arguments.device)
-    if arguments.device != 'all':
-        failures += len(notes)
+    results = []
     for label, device, index in devices:
         matched, started = 0, time.perf_counter()
         for name, entry in cases.items():
             begun = time.perf_counter()
+            found, error = None, None
             try:
                 found = run_case(entry, device, index)
-            except Exception as error:
-                print(f'{label:8} {name}: FAILED with {type(error).__name__}: {error}')
+            except Error as problem:
+                error = str(problem)
+            expected = entry['digest']
+            equal = error is None and expected is not None and found == expected
+            matched += equal
+            results.append(
+                {
+                    'device': label,
+                    'case': name,
+                    'expected': expected,
+                    'found': found,
+                    'matched': equal,
+                    'error': error,
+                }
+            )
+            if error is not None:
+                progress(f'{label:8} {name}: FAILED, {error}')
                 if device == 'cuda':
-                    # A failure on the GPU may leave its context unusable for the other cases.
-                    print(f'{label:8} the other cases of this GPU did not run')
+                    progress(f'{label:8} the other cases of this GPU did not run')
                     break
-                continue
-            if found == entry['digest']:
-                matched += 1
-                print(f'{label:8} {name}: ok ({time.perf_counter() - begun:.1f} s)')
-            elif entry['digest'] is None:
-                print(f'{label:8} {name}: no expected digest yet; this build gives {found}')
+            elif equal:
+                progress(f'{label:8} {name}: ok ({time.perf_counter() - begun:.1f} s)', update=True)
+            elif expected is None:
+                progress(f'{label:8} {name}: no expected digest yet, this build gives {found}')
             else:
-                print(f'{label:8} {name}: DIFFERENT, {found} instead of {entry["digest"]}')
+                progress(f'{label:8} {name}: DIFFERENT, {found} instead of {expected}')
         failures += len(cases) - matched
-        print(
+        progress(
             f'{label:8} {matched} of {len(cases)} cases match '
             f'({time.perf_counter() - started:.0f} s)'
         )
-    for note in notes:
-        print(note)
-    if failures:
-        print(
-            f'FAILED: {failures} checks differ or did not run, so this installation does not '
-            'reproduce the expected outputs'
+
+    unavailable = not devices
+    if unavailable and not failures:
+        expected = (
+            'a usable backend'
+            if arguments.device == 'all'
+            else (f'an available {arguments.device} backend')
         )
-        return 1
-    print('PASSED: every case that ran gave the expected digest')
-    return 0
+        return contract.fail(
+            'cuju check',
+            f'expected {expected}, found none. ' + ', '.join(notes),
+            hint='run cuju check --device all to check the available backends.'
+            if arguments.device != 'all'
+            else 'run python -m pip show cuju-engine to check the installation.',
+            as_json=arguments.json,
+            status=contract.EXIT_ENVIRONMENT,
+            error_id='check.backend_unavailable',
+            values={'device': arguments.device},
+        )
+
+    status = contract.EXIT_NO if failures else 0
+    if unavailable:
+        contract.fail('cuju check', ', '.join(notes), status=status)
+    else:
+        for note in notes:
+            progress(note)
+
+    if arguments.json:
+        contract.emit(
+            'engine.check/1',
+            {
+                'diagnostics': setup,
+                'data_problems': problems,
+                'results': results,
+                'backend_notes': notes,
+                'failures': failures,
+                'exit': status,
+            },
+        )
+    elif failures:
+        print(f'FAILED: {failures} checks differ or did not run')
+    else:
+        print('PASSED: every case that ran gave the expected digest')
+    return status
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Runs the self-check and returns its exit status."""
+    return contract.run_command(_cli_parsers.check(), _run, argv)
 
 
 if __name__ == '__main__':

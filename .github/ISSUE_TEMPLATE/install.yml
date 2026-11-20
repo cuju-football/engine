@@ -9,7 +9,7 @@ body:
       id: route
       attributes:
           label: How you installed
-          options: [pip install cuju, from source, Docker, WSL2]
+          options: [pip install cuju, pip install cuju-engine, from source, Docker, WSL2]
       validations:
           required: true
     - type: textarea

@@ -30,7 +30,7 @@ from typing import Any
 
 from . import _checksums
 from ._batch import log as _log
-from ._batch.library import _automatic, _backend, _check_processor, library_path
+from ._library_path import _automatic, _backend, _check_processor, library_path
 from .errors import ConfigurationError, _from_library
 
 __all__ = [
@@ -143,6 +143,10 @@ class FormationEntry:
     def __init__(self, x, y, role, lazy, controllable):
         self.x = _to_float('x', x)
         self.y = _to_float('y', y)
+        engine = sys.modules.get('cuju.gfootball_engine._gameplayfootball')
+        # The roles of `cuju.gfootball.scenarios` are those of cuju's `gfootball_engine`.
+        if engine is not None and isinstance(role, engine.e_PlayerRole) and 0 <= role <= 9:
+            role = PlayerRole(int(role))
         if not isinstance(role, PlayerRole):
             raise ScenarioError(f'expected a role such as e_PlayerRole_GK, found {role!r}')
         self.role = role
