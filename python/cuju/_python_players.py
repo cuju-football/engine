@@ -6,7 +6,8 @@
 
 The player `<name>` of a definition such as `<name>:right_players=1` loads from the module
 `cuju.gfootball.env.players.<name>`, else from the module path `<name>`, and its class
-`Player(player_config, env_config)` acts on the host each step on GRF's raw observations.
+`Player(player_config, env_config)` acts on the host each step on GRF's raw observations. The
+player `replay` is cuju's, which reads its dump with `cuju.dumps`.
 """
 
 from __future__ import annotations
@@ -42,7 +43,9 @@ def player_module(name: str) -> ModuleType | None:
     """Returns the module that defines the player `name`, or `None`."""
     if not _MODULE_PATH.fullmatch(name):
         return None
-    for candidate in (f'{_PACKAGE}.{name}', name):
+    # The replay player reads its dump with `cuju.dumps`, which takes the names of GRF's classes.
+    candidates = ('cuju._replay_player',) if name == 'replay' else (f'{_PACKAGE}.{name}', name)
+    for candidate in candidates:
         module = _import(candidate)
         if module is not None:
             return module
@@ -174,7 +177,7 @@ class PythonPlayers:
             config: GRF's `Config` of the environment, as it stands before the core's first reset.
             action_set: The name of the action set.
         """
-        from .gfootball.env.config import parse_player_definition
+        from ._grf_config import parse_player_definition
 
         self.config = config
         others = {name for name, *_ in parsed if name not in ('agent', 'bot', 'lazy')}
@@ -184,6 +187,12 @@ class PythonPlayers:
             _, parameters = parse_player_definition(definition)
             key = f'player_{name}'
             shared[key] = shared[key] + 1 if key in shared else 0
+            if name in ('keyboard', 'gamepad'):
+                raise ValueError(
+                    f'expected a player that acts on observations, found {definition!r}, one of '
+                    "GRF's keyboard and gamepad players, which take a person's input in GRF's "
+                    'rendered game'
+                )
             if name in others:
                 player_config = copy.deepcopy(shared)
                 player_config.update(parameters)

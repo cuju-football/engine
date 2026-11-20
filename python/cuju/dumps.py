@@ -845,6 +845,10 @@ _READ_GLOBALS = {
     ('gfootball.env.football_action_set', 'CoreAction'): _ReadAction,
     ('_gameplayfootball', 'e_BackendAction'): _ReadBackendAction,
     ('gfootball_engine', 'e_BackendAction'): _ReadBackendAction,
+    # The names of the same classes in the dumps of GRF's Python under `cuju.gfootball`.
+    ('cuju.gfootball.env.football_action_set', 'CoreAction'): _ReadAction,
+    ('cuju.gfootball_engine._gameplayfootball', 'e_BackendAction'): _ReadBackendAction,
+    ('cuju.gfootball_engine', 'e_BackendAction'): _ReadBackendAction,
     ('numpy.core.multiarray', '_reconstruct'): _read_reconstruct,
     ('numpy._core.multiarray', '_reconstruct'): _read_reconstruct,
     ('numpy.core.numeric', '_frombuffer'): _read_frombuffer,
@@ -900,10 +904,39 @@ def read_dump(path: str) -> list[dict[str, Any]]:
     Raises:
         pickle.UnpicklingError: If the file holds other objects.
     """
+    return _read_dump(path, strict=False)
+
+
+def _read_dump(path: str, *, strict: bool) -> list[dict[str, Any]]:
     steps = []
     with open(path, 'rb') as handle:
-        while True:
+        while not strict or handle.peek(1):
             try:
-                steps.append(_converted(_DumpUnpickler(handle).load()))
+                step = _converted(_DumpUnpickler(handle).load())
             except EOFError:
+                if strict:
+                    raise pickle.UnpicklingError('the final step is incomplete') from None
                 return steps
+            if strict and not isinstance(step, dict):
+                raise pickle.UnpicklingError('expected each step to be a dictionary')
+            steps.append(step)
+    if not steps:
+        raise pickle.UnpicklingError('the dump is empty')
+    return steps
+
+
+def _read_cli_dump(path: str) -> list[dict[str, Any]]:
+    """Reads a complete dump for the command line."""
+    try:
+        return _read_dump(path, strict=True)
+    except (
+        AttributeError,
+        IndexError,
+        KeyError,
+        OverflowError,
+        RuntimeError,
+        TypeError,
+        ValueError,
+        pickle.UnpicklingError,
+    ) as error:
+        raise ValueError(str(error)) from error

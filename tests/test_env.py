@@ -14,6 +14,8 @@ from conftest import CUDA
 gymnasium = pytest.importorskip('gymnasium')
 np = pytest.importorskip('numpy')
 cuju_env = pytest.importorskip('cuju.env')
+# GRF: gym's spaces where an older gym is installed, else gymnasium's.
+SPACES = (cuju_env._legacy_gym() or gymnasium).spaces
 
 
 def grf_draws(seed, count):
@@ -25,8 +27,8 @@ def grf_draws(seed, count):
 def test_defaults_follow_grf():
     random.seed(0)
     env = cuju_env.create_environment('academy_empty_goal_close')
-    assert env.observation_space == gymnasium.spaces.Box(0, 255, (72, 96, 4), np.uint8)
-    assert env.action_space == gymnasium.spaces.Discrete(19)
+    assert env.observation_space == SPACES.Box(0, 255, (72, 96, 4), np.uint8)
+    assert env.action_space == SPACES.Discrete(19)
     # GRF: gym's interface, `reset` returns the observation and `step` four values.
     observation = env.reset()
     assert observation.shape == (72, 96, 4) and observation.dtype == np.uint8
@@ -133,7 +135,7 @@ def test_several_agents_and_stacks():
         number_of_right_players_agent_controls=1,
     )
     assert env.observation_space.shape == (3, 460)
-    assert env.action_space == gymnasium.spaces.MultiDiscrete([19, 19, 19])
+    assert env.action_space == SPACES.MultiDiscrete([19, 19, 19])
     observation = env.reset()
     assert observation.shape == (3, 460)
     _, reward, _, _ = env.step(np.array([0, 1, 2]))
@@ -329,3 +331,23 @@ def test_gpu_equals_cpu():
         outputs.append(b''.join(observation.tobytes() for observation in observations))
         env.close()
     assert outputs[0] == outputs[1]
+
+
+def test_cuju_env_leaves_gym_to_cuju_gfootball(monkeypatch):
+    # gym gets GRF's own environments under the ids from `cuju.gfootball`, as from `gfootball`.
+    def refuse(name):
+        raise AssertionError(f'imported {name}')
+
+    monkeypatch.setattr(cuju_env.importlib, 'import_module', refuse)
+    cuju_env._register_with('gym')
+
+
+def test_a_step_without_agents_takes_an_empty_list():
+    # GRF: an environment without agents steps with `step([])`, its built-in AI playing both sides.
+    env = cuju_env.create_environment(
+        'academy_empty_goal_close', representation='raw', number_of_left_players_agent_controls=0
+    )
+    env.reset()
+    _, _, done, info = env.step([])
+    assert isinstance(done, bool) and 'score_reward' in info
+    env.close()

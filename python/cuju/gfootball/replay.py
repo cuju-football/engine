@@ -1,80 +1,43 @@
-# Copyright 2026 The cuju Authors
+# coding=utf-8
 # Copyright 2019 Google LLC
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# Modified by the cuju Authors in 2026, in the import lines that ci/port_gfootball.py lists.
 # SPDX-License-Identifier: Apache-2.0
 
-"""GRF's `gfootball.replay` without rendering, which plays a dump again and checks it.
 
-    cuju replay --trace_file=/tmp/dumps/episode_done_20261026-120000000000.dump
+"""Script allowing to replay a given trace file.
+   Example usage:
+   python replay.py --trace_file=/tmp/dumps/shutdown_20190521-165136974075.dump
 
-It replays cuju's and GRF's dumps alike and compares every step with the dump's bit for bit, apart
-from the wall-clock time. It prints the first difference and exits 1 if there is one, and
-`check(trace_file)` does the same from Python.
 """
 
-from __future__ import annotations
+from __future__ import absolute_import
+from __future__ import division
+from __future__ import print_function
 
-import argparse
-import sys
-from typing import Any
+from cuju.gfootball.env import script_helpers
 
-from .. import _replays, dumps
+from absl import app
+from absl import flags
 
-__all__ = ['check', 'main']
+FLAGS = flags.FLAGS
 
+flags.DEFINE_string('trace_file', None, 'Trace file to replay')
+flags.DEFINE_integer('fps', 10, 'How many frames per second to render')
+flags.mark_flag_as_required('trace_file')
 
-def check(trace_file: str, device: Any = 'cpu', threads: int = 1) -> _replays.ReplayResult:
-    """Plays a dump again and compares every step with the dump's.
-
-    Args:
-        trace_file: A dump that starts at the start of its episode.
-        device: The device that plays the replay. Every device plays the same match.
-        threads: The CPU threads of the replay.
-
-    Returns:
-        `(steps, ended, difference)`, the steps found equal, whether the replay's episode ended
-        with the dump's last step, and the first difference as a text, or `None` if the replay
-        equals the dump.
-
-    Raises:
-        ValueError: If the dump holds no configuration, does not start at the start of its
-            episode, or holds an action outside its action set.
-    """
-    return _replays.replay(trace_file, device=device, threads=threads)
-
-
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog='cuju replay', description='Replays a dump and checks it.'
-    )
-    parser.add_argument('--trace_file', required=True, help='Trace file to replay')
-    parser.add_argument(
-        '--fps',
-        type=int,
-        default=None,
-        help="Frames per second of GRF's replay, where only 10 plays the match of a dump of 10 "
-        'ticks a step. The default replays any dump at its own ticks.',
-    )
-    parser.add_argument('--device', default='cpu', help='cpu or cuda, which play the same match')
-    arguments = parser.parse_args(argv)
-    if arguments.fps is not None:
-        steps = dumps.read_dump(arguments.trace_file)
-        ticks = steps[0]['debug']['config']['physics_steps_per_frame'] if steps else None
-        # GRF: other rates add idle steps, or play steps of 100 / fps ticks.
-        if arguments.fps != ticks or 100 // arguments.fps != ticks:
-            print(
-                f"at {arguments.fps} frames per second GRF's replay plays another match than the "
-                f'dump of {ticks} ticks a step',
-                file=sys.stderr,
-            )
-            return 2
-    result = check(arguments.trace_file, device=arguments.device)
-    if result.difference is not None:
-        print(f'The replay differs from the dump at {result.difference}')
-        return 1
-    ending = 'and ends the episode there' if result.ended else 'before the end of the episode'
-    print(f"The replay equals the dump's {result.steps} steps, {ending}.")
-    return 0
-
+def main(_):
+  script_helpers.ScriptHelpers().replay(FLAGS.trace_file, FLAGS.fps)
 
 if __name__ == '__main__':
-    sys.exit(main())
+  app.run(main)

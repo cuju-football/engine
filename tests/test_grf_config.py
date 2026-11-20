@@ -1,6 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks GRF's `Config` and its scenario hooks in `cuju.gfootball.env.config`."""
+"""Checks the `Config` of `cuju.env`, GRF's with bundles and paths, in `cuju._grf_config`."""
 
 import os
 import random
@@ -8,8 +8,8 @@ import random
 import pytest
 
 import cuju
+from cuju import _grf_config as config
 from cuju import scenarios
-from cuju.gfootball.env import config
 
 ASSETS = os.path.join(os.path.dirname(cuju.__file__), 'data', 'assets')
 

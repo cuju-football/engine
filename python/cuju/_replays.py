@@ -42,7 +42,7 @@ def _difficulty(text):
 
 def agent_counts(players: list[str]) -> tuple[int, int]:
     """Returns the left and right players of GRF's player definitions, as its replay counts them."""
-    from .gfootball.env.config import count_left_players, count_right_players
+    from ._grf_config import count_left_players, count_right_players
 
     return (
         sum(count_left_players(player) for player in players),
@@ -364,7 +364,10 @@ def replay(
         ValueError: If the dump holds no configuration, does not start at the start of its
             episode, or holds an action outside its action set.
     """
-    steps = dumps.read_dump(path)
+    return _replay_steps(dumps.read_dump(path), path, device, threads, overrides)
+
+
+def _replay_steps(steps, path, device='cpu', threads=1, overrides=None) -> ReplayResult:
     if not steps or 'config' not in steps[0].get('debug', {}):
         raise ValueError(f'expected a dump whose first step holds the configuration in {path}')
     if steps[0]['debug']['frame_cnt'] != 0:

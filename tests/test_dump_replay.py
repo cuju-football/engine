@@ -1,15 +1,17 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks `cuju.gfootball.replay` and GRF's `ScriptHelpers().replay(dump, render=False)`."""
+"""Checks `cuju replay` and replay through `ScriptHelpers`."""
+
+import json
 
 import pytest
 
 import cuju
 import cuju.dumps
 from conftest import CUDA, actions_at
+from cuju import _replay_command as replay
 from cuju import _replays
-from cuju.gfootball import replay
-from cuju.gfootball.env import script_helpers
+from cuju import _script_helpers as script_helpers
 
 
 def episode_dump(directory, scenario='academy_3_vs_1_with_keeper_l1_r1', **options):
@@ -36,6 +38,15 @@ def test_a_dump_replays_equal(tmp_path, capsys):
     script_helpers.ScriptHelpers().replay(path, render=False)
     assert replay.main(['--trace_file', path]) == 0
     assert f"equals the dump's {len(rows)} steps" in capsys.readouterr().out
+    assert replay.main(['--trace_file', path, '--json']) == 0
+    out, err = capsys.readouterr()
+    assert json.loads(out) == {
+        'schema': 'engine.replay/1',
+        'steps': len(rows),
+        'ended': True,
+        'difference': None,
+    }
+    assert err == ''
 
 
 def regenerated(path, rows):

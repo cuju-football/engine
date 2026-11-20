@@ -216,17 +216,11 @@ def test_grf_wrapper_over_one_environment_equals_create_environment(scenario):
         assert len(ours) == len(theirs) == 1
         for key, value in ours[0].items():
             assert np.asarray(value).tobytes() == np.asarray(theirs[0][key]).tobytes(), key
-    with pytest.raises(ValueError, match='not supported by MultiAgentToSingleAgent'):
+    # GRF: the wrapper refuses states with an assertion.
+    with pytest.raises(AssertionError, match='not supported by MultiAgentToSingleAgent'):
         grf_wrappers.GetStateWrapper(wrapped).get_state()
     wrapped.close()
     expected.close()
-    random.seed(4)
-    default = cuju_env.create_environment(
-        scenario, representation='raw', number_of_left_players_agent_controls=11
-    )
-    with pytest.raises(ValueError, match='builtin_ai'):
-        grf_wrappers.MultiAgentToSingleAgent(default, 1, 0)
-    default.close()
 
 
 def test_control_all_players_with_extra_players(scenario):
@@ -266,13 +260,3 @@ def test_control_all_players_with_extra_players(scenario):
             assert np.asarray(value).tobytes() == np.asarray(theirs[0][key]).tobytes(), key
     env.close()
     expected.close()
-
-
-def test_grf_wrapper_over_a_batch_is_the_batched_port(bundle):
-    grf_wrappers = pytest.importorskip('cuju.gfootball.env.wrappers')
-    options = dict(
-        environment_count=1, device='cpu', action_set='v2', with_raw=True, agent_counts=[(11, 0)]
-    )
-    wrapper = grf_wrappers.MultiAgentToSingleAgent(cuju.BatchEnvironment(bundle, **options), 1, 0)
-    assert type(wrapper) is cuju_wrappers.MultiAgentToSingleAgent
-    wrapper.close()

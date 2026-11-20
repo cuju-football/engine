@@ -7,7 +7,7 @@
 `create_environment` takes GRF's arguments with GRF's defaults and returns GRF's gym interface,
 or gymnasium's with `api='gymnasium'`. It draws the seed of every episode from Python's `random` as
 GRF does, so after the same `random.seed(...)` it plays GRF's matches. Importing `cuju` registers
-the ids `GFootball-<scenario>-<representation>-v0`, which `gymnasium.make` and `gym.make` take.
+the ids `GFootball-<scenario>-<representation>-v0` with gymnasium, for `gymnasium.make`.
 """
 
 from __future__ import annotations
@@ -36,13 +36,13 @@ except ImportError:
         import gym as _gym
     except ImportError:
         raise ImportError(
-            "cuju.env needs gymnasium, from pip install 'cuju[spaces]', or GRF's gym"
+            "cuju.env needs gymnasium, from pip install 'cuju-engine[spaces]', or GRF's gym"
         ) from None
 
 from . import BatchEnvironment, _replays, bundled_scenarios
 from ._batch import frame_stack as _frame_stack
 from ._batch.state import _pickle_episode, _StateUnpickler
-from .errors import StateError
+from .errors import ChoiceError, StateError
 from .players import Bot, Lazy
 from .raw import grf_observation, grf_observations
 from .wrappers import MultiAgentToSingleAgent
@@ -347,7 +347,7 @@ class FootballEnvironment(_gym.Env):
         observation_space, action_space: GRF's spaces for the same arguments. The raw
             representation has no observation space, as in GRF, so its `observation_space` is
             `None`.
-        _config: GRF's `Config` of the environment, `cuju.gfootball.env.config.Config`, which
+        _config: GRF's `Config` of the environment, of the private module `cuju._grf_config`, which
             counts the episodes and holds the seed of each as GRF's does.
         _num_actions: The number of actions of the action set, as GRF's attribute.
         reward_range: The bounds of the reward, unbounded, as gym's `Env` gives GRF's.
@@ -390,19 +390,19 @@ class FootballEnvironment(_gym.Env):
         self._played = self._episode_steps.reset()
         count = settings['action_count']
         agents = len(self._slots) if self._wrapper is None else self._wrapper.players
+        # GRF's gym interface takes gym's spaces where an older gym is installed.
+        spaces = (_legacy_gym() or _gym).spaces if settings['api'] == 'gym' else _gym.spaces
         self.action_space = (
-            _gym.spaces.MultiDiscrete([count] * agents)
-            if agents > 1
-            else _gym.spaces.Discrete(count)
+            spaces.MultiDiscrete([count] * agents) if agents > 1 else spaces.Discrete(count)
         )
         width, height = settings['channel_dimensions']
         stacked = settings['stacked']
         if self._representation == 'extracted':
             shape = _space_shape((height, width, 4), agents, self._single, stacked)
-            self.observation_space = _gym.spaces.Box(low=0, high=255, shape=shape, dtype=np.uint8)
+            self.observation_space = spaces.Box(low=0, high=255, shape=shape, dtype=np.uint8)
         elif self._representation != 'raw':
             shape = _space_shape((115,), agents, self._single, stacked)
-            self.observation_space = _gym.spaces.Box(
+            self.observation_space = spaces.Box(
                 low=-np.inf, high=np.inf, shape=shape, dtype=np.float32
             )
         else:
@@ -802,6 +802,12 @@ def create_environment(
         raise ValueError('expected the name of a scenario in env_name')
     if render or write_video:
         raise ValueError('cuju renders nothing, so it supports neither render nor write_video')
+    if representation in ('pixels', 'pixels_gray'):
+        # GRF: these need its render switch, which `cuju.gfootball` plays as GRF does.
+        raise ChoiceError(
+            f"cuju.env renders nothing, so it has no representation {representation!r}; GRF's "
+            'pixels come from cuju.gfootball, and a BatchEnvironment draws them for its episodes'
+        )
     options = dict(other_config_options or {})
     unknown = sorted(set(options) - _OPTIONS)
     if unknown:
@@ -855,7 +861,37 @@ def create_environment(
         threads=threads,
         api=api,
     )
-    return FootballEnvironment(batch, settings)
+    legacy = _legacy_gym() if api == 'gym' else None
+    if legacy is None:
+        return FootballEnvironment(batch, settings)
+    return _legacy_class(legacy)(batch, settings)
+
+
+def _legacy_gym():
+    """Returns gym where a gym before 0.26 is installed beside gymnasium, else `None`.
+
+    GRF's gym interface is that of gym 0.21, so code written for GRF checks gym's classes.
+    """
+    if _gym.__name__ == 'gym' or not _gym_before_026():
+        return None
+    try:
+        return importlib.import_module('gym')
+    except Exception:
+        return None
+
+
+_LEGACY_CLASSES: dict[str, type] = {}
+
+
+def _legacy_class(gym) -> type:
+    """Returns `FootballEnvironment` that is also gym's `Env`, for GRF's gym interface."""
+    cls = _LEGACY_CLASSES.get(gym.__version__)
+    if cls is None:
+        cls = type('FootballEnvironment', (FootballEnvironment, gym.Env), {})
+        cls.__module__ = __name__
+        cls.__doc__ = FootballEnvironment.__doc__
+        _LEGACY_CLASSES[gym.__version__] = cls
+    return cls
 
 
 def _create(
@@ -1050,7 +1086,7 @@ def _grf_config(values, config, deterministic, fixed_seed, creation):
 
 def _grf_config_values(values, config, deterministic, fixed_seed, creation):
     """Returns GRF's `Config` of an environment before the core's first reset, for `_grf_config`."""
-    from .gfootball.env import config as grf_config
+    from . import _grf_config as grf_config
 
     if config is None:
         values = dict(values)
@@ -1077,44 +1113,47 @@ _GYM_REPRESENTATIONS = (
 _ENTRY_POINT = 'cuju.env:create_environment'
 
 
-def _gym_before_026() -> bool:
-    """Returns whether the installed gym precedes 0.26, which took gymnasium's interface."""
+def _gym_version() -> tuple[int, int] | None:
+    """Returns the major and minor version of the installed gym, or `None` without one."""
     try:
         version = importlib.metadata.version('gym')
     except importlib.metadata.PackageNotFoundError:
-        return False
+        return None
     match = re.match(r'(\d+)\.(\d+)', version)
-    return match is not None and (int(match[1]), int(match[2])) < (0, 26)
+    return (int(match[1]), int(match[2])) if match else None
+
+
+def _gym_before_026() -> bool:
+    """Returns whether the installed gym precedes 0.26, which took gymnasium's interface."""
+    version = _gym_version()
+    return version is not None and version < (0, 26)
 
 
 def register_environments() -> None:
     """Registers GRF's ids `GFootball-<scenario>-<representation>-v0` for the shipped scenarios.
 
-    It registers them as importing `gfootball` does, with gymnasium and with gym, each where
-    installed. `import cuju` imports neither, and registers the ids with each as soon as it is
-    imported. The gymnasium ids give gymnasium's interface and the gym ids GRF's. Gym 0.26 and
-    later expect gymnasium's interface, so only an older gym, such as GRF's 0.21, gets the ids. The
-    `Pixels` ids are registered as in GRF, and making one raises, since cuju renders nothing.
+    It registers them with gymnasium, where installed, with gymnasium's interface. `import cuju`
+    imports no gymnasium, and registers the ids as soon as it is imported. gym gets GRF's own
+    environments under the same ids from `import cuju.gfootball`, as importing `gfootball`
+    registers them in GRF. The `Pixels` ids are registered as in GRF, and making one raises, since
+    cuju renders nothing.
     """
-    for module in ('gymnasium', 'gym'):
-        if importlib.util.find_spec(module) is not None:
-            _register_with(module)
+    if importlib.util.find_spec('gymnasium') is not None:
+        _register_with('gymnasium')
 
 
 def _register_with(module: str) -> None:
-    """Registers GRF's ids with `gymnasium` or `gym`, as `register_environments` does."""
-    if module == 'gym' and not _gym_before_026():
+    """Registers GRF's ids with `gymnasium`, as `register_environments` does."""
+    if module != 'gymnasium':
         return
     registration = importlib.import_module(f'{module}.envs.registration')
     registry = registration.registry
-    # Gym 0.21 keeps its specs in `env_specs`, and later gyms and gymnasium in the registry.
     specs = registry if isinstance(registry, dict) else registry.env_specs
     for scenario in bundled_scenarios():
         for suffix, representation in _GYM_REPRESENTATIONS:
             name = f'GFootball-{scenario}-{suffix}-v0'
-            spec = specs.get(name)
-            # Older gym versions refuse an id twice, so a gym id that GRF holds stays GRF's.
-            if spec is not None and (module == 'gym' or spec.entry_point == _ENTRY_POINT):
+            spec = specs[name] if name in specs else None
+            if spec is not None and spec.entry_point == _ENTRY_POINT:
                 continue
             registration.register(
                 id=name,
@@ -1123,8 +1162,7 @@ def _register_with(module: str) -> None:
             )
 
 
-# A gymnasium or gym that this module's own imports brought in gets the ids here, since `cuju`
-# cannot take them from a module that is still importing.
-for _module in ('gymnasium', 'gym'):
-    if sys.modules.get(_module) is not None:
-        _register_with(_module)
+# A gymnasium that this module's own imports brought in gets the ids here, since `cuju` cannot
+# take them from a module that is still importing.
+if sys.modules.get('gymnasium') is not None:
+    _register_with('gymnasium')
