@@ -345,9 +345,11 @@ debugging, while training relies on distinct matches.
 batch would request, without allocating them, so a program can choose the number of environments
 from the free memory of its GPU before it creates the batch. The first batch of a process on a GPU
 also reserves the local memory of the kernels, which the estimate gives as `local_memory_bytes`, so
-the budget sets that reservation aside once. The search in this program doubles the count from 1,024
-while the next count fits the budget, and stops at 16,384, the largest count that
-[Performance](performance.md) measures.
+the budget sets that reservation aside once. It comes to about 5.6 KB for each thread that the GPU
+runs at a time, about 135 MiB on a 4 GB laptop GPU and about 1.05 GiB on an RTX 4090, whatever the
+number of environments, so it matters most on a small GPU and when several processes share one. The
+search in this program doubles the count from 1,024 while the next count fits the budget, and stops
+at 16,384, the largest count that [Performance](performance.md) measures.
 
 ```python
 import cuju
@@ -374,14 +376,21 @@ which bounds a large batch of `extracted` observations on a machine with little 
 ## Batches per process
 
 The arrangement with the fewest interactions is one batch per process and GPU, with as many
-environments as fit. More environments per batch cost less than more batches. On an RTX 4090,
-16,384 environments of `5_vs_5` run 32,582 steps per second and 1,024 environments run 9,920, so
-one step of the large batch takes about 30% of the time of the 16 steps of the small one that cover
-the same number of environments. On the
-CPU, one batch with `threads=0` already uses every core. On a small GPU under Windows or WSL2, a
-single process with one batch avoids the tenfold slowdown that two processes with a batch each cause
-when the driver spills device memory into system memory, as described in
-[Performance](performance.md).
+environments as fit. More environments per batch cost less than more batches. On an RTX 4090, 16,384
+environments of `5_vs_5` run 32,582 steps per second and 1,024 environments run 9,920, so one step
+of the large batch takes about 30% of the time of the 16 steps of the small one that cover the same
+number of environments. On the CPU, one batch with `threads=0` already uses every core. On a small
+GPU under Windows or WSL2, a single process with one batch avoids the tenfold slowdown that two
+processes with a batch each cause when the driver spills device memory into system memory, as
+described in [Performance](performance.md).
+
+A process that needs a second batch on the same GPU, for evaluation against a fixed opponent or for
+another scenario, can create it beside the first at the cost of its own buffers alone. The driver
+reserves the local memory of the kernels once per process and GPU, at the first batch, and every
+later batch of that process on that GPU runs within the same reservation, as the
+`local_memory_bytes` of 0 that `memory_estimate` gives after the first creation shows. Separate
+processes each make a reservation of their own, so several training runs that share one GPU each set
+it aside, about 1 GiB per process on a GPU of 128 multiprocessors.
 
 ## Compiled step
 
@@ -415,7 +424,7 @@ the operators behind the compiled step.
 
 For code written against the environment of GRF, `cuju.env.create_environment` takes the arguments
 of GRF and returns one environment with the gym 0.21 interface of GRF, or the Gymnasium interface
-with `api='gymnasium'`. It builds its spaces with Gymnasium, from `pip install 'cuju[spaces]'`.
+with `api='gymnasium'`. It builds its spaces with Gymnasium, from `pip install 'cuju-engine[spaces]'`.
 [Migrating from GRF](migrating-from-grf.md) gives the details.
 
 ## See also
