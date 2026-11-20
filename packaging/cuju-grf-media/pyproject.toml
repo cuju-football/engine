@@ -1,0 +1,39 @@
+# The data wheel of GRF's media for cuju's renderer. `ci/make_render_media.py` fills
+# `src/cuju_grf_media` and the license files from a GRF tree, and only then does the wheel build.
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cuju-grf-media"
+# The version is `__version__` in `src/cuju_grf_media/__init__.py`.
+dynamic = ["version"]
+description = "The media of Google Research Football that cuju's software renderer draws, unchanged"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0 AND Unlicense AND OFL-1.1"
+license-files = ["LICENSE", "NOTICE", "LICENSES/Unlicense.txt", "LICENSES/OFL-1.1.txt"]
+authors = [{ name = "André Koraleski" }]
+keywords = ["gfootball", "google-research-football", "cuju", "rendering"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Games/Entertainment :: Simulation",
+    "Topic :: Multimedia :: Graphics :: 3D Rendering",
+]
+
+[project.urls]
+Homepage = "https://github.com/cuju-football/engine"
+Documentation = "https://github.com/cuju-football/engine/blob/main/docs/rendering.md"
+Issues = "https://github.com/cuju-football/engine/issues"
+
+[tool.hatch.version]
+path = "src/cuju_grf_media/__init__.py"
+
+# The converter's output is ignored by git, so the build takes its files from the folder.
+[tool.hatch.build]
+ignore-vcs = true
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cuju_grf_media"]

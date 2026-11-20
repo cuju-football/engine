@@ -1,0 +1,31 @@
+cuju-grf-media
+Copyright 2026 The cuju Authors (the contributors in the git history of cuju).
+
+This package holds media files of Google Research Football
+(https://github.com/google-research/football), commit 3d9e754720a95621bba6475c4d3b0d56fe919014,
+copied byte for byte for the software renderer of cuju. cuju_grf_media/manifest.json names each
+file, its path in Google Research Football, its size, its SHA-256 and its license.
+
+The models, textures, scene files and menu images descend from Gameplay Football by Bastiaan Konings
+Schuiling, 2008 to 2015, which its author dedicated to the public domain under the Unlicense.
+LICENSES/Unlicense.txt holds that dedication, and the manifest marks these files Unlicense.
+
+Google Research Football, Copyright 2019 Google LLC, Apache License 2.0, modified Gameplay Football
+and its data and converted its images to BMP. Google's changes are licensed under the Apache License
+2.0, and the two team logos, which Google added, are marked Apache-2.0 in the manifest. LICENSE
+holds that license.
+
+fonts/AlegreyaSansSC-ExtraBold.ttf is Alegreya Sans SC ExtraBold 2.003, Copyright 2013 The Alegreya
+Sans Project Authors (https://github.com/huertatipografica/Alegreya-Sans), licensed under the SIL
+Open Font License 1.1, which LICENSES/OFL-1.1.txt holds. Files that cuju derives from the font, such
+as a glyph atlas, are licensed under the same license.
+
+The 16 adboard images in data/media/textures/adboards are those that Google Research Football
+ships. Most of them show the names and logos of third parties, which may be trademarks of their
+owners. A dedication to the public domain concerns copyright alone and grants no right in a
+trademark. cuju ships the boards so that its frames match those of Google Research Football, and
+neither cuju nor this package is affiliated with or endorsed by the owners of those names. The
+names of the team images follow those of Google Research Football, and the images show fictional
+teams.
+
+cuju is not affiliated with or endorsed by Google.

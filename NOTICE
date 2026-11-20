@@ -6,9 +6,10 @@ That license grants no right to use the name or the logo of cuju to suggest endo
 
 cuju reimplements Google Research Football (https://github.com/google-research/football),
 Copyright 2019 Google LLC, Apache License 2.0. Its engine descends from Gameplay Football by
-Bastiaan Konings Schuiling, dedicated to the public domain. Files that carry a Google line were
-rewritten from that code by the cuju Authors in 2026. animations.bin and the asset bundles are
-derived from the data and scenarios of Google Research Football.
+Bastiaan Konings Schuiling, dedicated to the public domain. Files that carry a Google line, apart
+from those of python/cuju/gfootball, were rewritten from that code by the cuju Authors in 2026.
+animations.bin and the asset bundles are derived from the data and scenarios of Google Research
+Football.
 cuju is not affiliated with or endorsed by Google.
 
 include/cuju/libm ports math functions of the GNU C Library 2.39 (LGPL 2.1 or later). Where Arm
@@ -17,7 +18,39 @@ Microsystems, Inc.) holds the same code, the port is taken from there under that
 reproduces its upstream notices and names its license. The libraries of cuju compile these
 functions in, and the complete source of each release is published with it.
 
+python/cuju/gfootball holds the Python package of Google Research Football 2.10.3, commit 3d9e754,
+Copyright 2019 Google LLC, Apache License 2.0, with its import lines changed by the cuju Authors.
+ci/port_gfootball.py lists each change, and every Python file keeps Google's header.
+
+python/cuju/gfootball/_gym/_vendored holds the core of gym 0.21.0, Copyright 2016 OpenAI, MIT
+License, with its import lines and its plugin loader changed by the cuju Authors.
+LICENSES/MIT-gym.txt holds its license.
+
+packages/cuju-gfootball holds the package cuju-gfootball, the cuju Authors' own code under the
+Apache License 2.0, which maps GRF's module names onto python/cuju/gfootball and holds none of GRF's
+files. Its wheel carries a copy of LICENSE.
+
 The world RNG follows Boost.Random (Boost Software License 1.0). The episode seeds follow MT19937
 by Makoto Matsumoto and Takuji Nishimura (BSD-3-Clause), as CPython's random module uses it.
+
+src/render, cuju's software renderer, reproduces the frames that GRF draws on Mesa 25.2.8's
+llvmpipe driver. It ports algorithms of Mesa's llvmpipe, gallivm, draw and u_blitter code
+(https://mesa3d.org, MIT License, Copyright VMware, Inc. and other Mesa authors), and its programs
+follow GRF's shaders (Apache License 2.0) as llvmpipe compiles them. LICENSES/MIT-Mesa.txt holds
+Mesa's license. src/render/pixels.cpp ports RGB to gray conversion and area resizing from OpenCV 5.0
+(https://opencv.org, Apache License 2.0, the OpenCV authors). src/render/overlay2d ports the alpha
+blit of SDL 2.30.0, Copyright 1997-2024 Sam Lantinga, the smoothed zoom of SDL2_gfx 1.0.4, Copyright
+2012-2014 Andreas Schiffler, and the text layout of SDL_ttf 2.22.0, Copyright 2001-2024 Sam
+Lantinga, all under the zlib License, which LICENSES/Zlib.txt holds. The cuju Authors wrote these
+ports in 2026, and each ported file names its source and is marked as altered.
+
+packaging/cuju-grf-media builds the data package cuju-grf-media, which ci/make_render_media.py
+fills with media of Google Research Football copied unchanged, for cuju's software renderer. Its
+models, textures and images descend from Gameplay Football and are dedicated to the public domain
+under the Unlicense, Google's changes are licensed under the Apache License 2.0, and its font,
+Alegreya Sans SC, Copyright 2013 The Alegreya Sans Project Authors, is licensed under the SIL Open
+Font License 1.1. LICENSES/Unlicense.txt and LICENSES/OFL-1.1.txt hold the two licenses, and
+packaging/cuju-grf-media/NOTICE gives the details, among them a note on the trademarks that its
+adboard images show. No wheel of cuju holds these files.
 
 License texts: LICENSE and LICENSES/.
