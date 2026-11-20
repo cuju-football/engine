@@ -7,6 +7,7 @@
 #pragma once
 
 #include "../warp.h"
+#include "../work_area.h"
 
 #include "../profiling.h"
 
@@ -26,6 +27,13 @@ namespace simulation {
 using animation::AnimationDerived;
 
 enum SelectResult { SELECT_FALSE = 0, SELECT_TRUE = 1, UNSUPPORTED = 2 };
+
+// A selection holds its candidates and positions inside the command queue of its humanoid, and the
+// candidates of an idle movement inside those.
+static_assert(WorkAreaRound(sizeof(CommandQueue)) + WorkAreaRound(sizeof(PositionList)) +
+                      2 * WorkAreaRound(sizeof(AnimationList)) <=
+                  WORK_AREA_BYTES,
+              "the work area holds a selection");
 
 struct SelectContext {
     World &world;
@@ -200,66 +208,79 @@ CUJU_FUNCTION inline Vector3 GetFrontOfFootOffsetRelative(float velocity, float 
     return (forwardOffset + angled) * (1.0f - clamp((height - 0.11f) / 4.0f, 0.0f, 0.5f));
 }
 
+#if CUJU_WARP_LANES
+// Speed: a stable rank sort in registers, 4 keys per lane, fits every list of the simulation.
+// `mine` holds the keys of this lane's elements, one per chunk of 32.
+constexpr int RANK_SORT_CAPACITY = 128;
+template <class Key>
+CUJU_FUNCTION_NO_INLINE inline void RankSortByLaneKeys(AnimationList &dataSet, const Key *mine,
+                                                       int lane) {
+    const int count = dataSet.count;
+    Key laneKeys[4];
+    int laneValues[4], rank[4] = {0, 0, 0, 0};
+    for (int chunk = 0; chunk < 4; chunk++) {
+        const int element = chunk * 32 + lane;
+        laneValues[chunk] = element < count ? dataSet[element] : 0;
+        laneKeys[chunk] = element < count ? mine[chunk] : Key();
+    }
+    const int chunkCount = (count + 31) / 32;
+    for (int otherChunk = 0; otherChunk < chunkCount; otherChunk++)
+        for (int sourceLane = 0; sourceLane < 32; sourceLane++) {
+            const int other = otherChunk * 32 + sourceLane;
+            if (other >= count) break;
+            const Key otherKey = __shfl_sync(0xffffffffu, laneKeys[otherChunk], sourceLane);
+            for (int chunk = 0; chunk < 4; chunk++) {
+                const int element = chunk * 32 + lane;
+                if (element < count && (otherKey < laneKeys[chunk] ||
+                                        (!(laneKeys[chunk] < otherKey) && other < element)))
+                    rank[chunk]++;
+            }
+        }
+    for (int chunk = 0; chunk < chunkCount; chunk++)
+        for (int sourceLane = 0; sourceLane < 32; sourceLane++) {
+            const int element = chunk * 32 + sourceLane;
+            if (element >= count) break;
+            const int sortedPosition = __shfl_sync(0xffffffffu, rank[chunk], sourceLane);
+            dataSet[sortedPosition] = __shfl_sync(0xffffffffu, laneValues[chunk], sourceLane);
+        }
+    __syncwarp();
+}
+#endif
+
+#if defined(__CUDA_ARCH__)
+// A binary insertion sort that computes each key again where it needs it, so it takes no room for
+// the keys and every thread needs little local memory. The device uses it for the lists that the
+// rank sort leaves, longer than any that a match has made.
+template <class KeyFunction>
+CUJU_FUNCTION_NO_INLINE inline void InsertionSortByKey(AnimationList &dataSet, KeyFunction key) {
+    const int count = dataSet.count;
+    for (int element = 1; element < count; element++) {
+        const int16_t value = dataSet[element];
+        const auto valueKey = key(value);
+        // After every equal key, so equal keys keep their order.
+        int low = 0, high = element;
+        while (low < high) {
+            const int middle = (low + high) / 2;
+            if (valueKey < key(dataSet[middle]))
+                high = middle;
+            else
+                low = middle + 1;
+        }
+        for (int position = element; position > low; position--)
+            dataSet[position] = dataSet[position - 1];
+        dataSet[low] = value;
+    }
+}
+#else
 // Speed: 16-bit positions take a third of the stack of key-animation pairs, and every sort of
 // one key type shares this instance.
 template <class Key>
-CUJU_FUNCTION_NO_INLINE inline void SortByLaneKeys(AnimationList &dataSet, const Key *mine,
-                                                   int lane, int step) {
+CUJU_FUNCTION_NO_INLINE inline void MergeSortByKeys(AnimationList &dataSet, const Key *keys) {
     static_assert(MAXIMUM_ANIMATIONS <= 32767, "int16 positions");
     const int count = dataSet.count;
-#if !defined(__CUDA_ARCH__)
     for (int element = 0; element < count; element++)
-        if (mine[element] != mine[element]) CUJU_FATAL("an animation sort key is NaN");
-#endif
-#if CUJU_WARP_LANES
-    // Speed: a stable rank sort in registers, 4 keys per lane, fits every list of the simulation.
-    if (step == 32 && count <= 128) {
-        Key laneKeys[4];
-        int laneValues[4], rank[4] = {0, 0, 0, 0};
-        for (int chunk = 0; chunk < 4; chunk++) {
-            const int element = chunk * 32 + lane;
-            laneValues[chunk] = element < count ? dataSet[element] : 0;
-            laneKeys[chunk] = element < count ? mine[chunk] : Key();
-        }
-        const int chunkCount = (count + 31) / 32;
-        for (int otherChunk = 0; otherChunk < chunkCount; otherChunk++)
-            for (int sourceLane = 0; sourceLane < 32; sourceLane++) {
-                const int other = otherChunk * 32 + sourceLane;
-                if (other >= count) break;
-                const Key otherKey = __shfl_sync(0xffffffffu, laneKeys[otherChunk], sourceLane);
-                for (int chunk = 0; chunk < 4; chunk++) {
-                    const int element = chunk * 32 + lane;
-                    if (element < count && (otherKey < laneKeys[chunk] ||
-                                            (!(laneKeys[chunk] < otherKey) && other < element)))
-                        rank[chunk]++;
-                }
-            }
-        for (int chunk = 0; chunk < chunkCount; chunk++)
-            for (int sourceLane = 0; sourceLane < 32; sourceLane++) {
-                const int element = chunk * 32 + sourceLane;
-                if (element >= count) break;
-                const int sortedPosition = __shfl_sync(0xffffffffu, rank[chunk], sourceLane);
-                dataSet[sortedPosition] = __shfl_sync(0xffffffffu, laneValues[chunk], sourceLane);
-            }
-        __syncwarp();
-        return;
-    }
-#endif
-    Key keys[MAXIMUM_ANIMATIONS];
+        if (keys[element] != keys[element]) CUJU_FATAL("an animation sort key is NaN");
     int16_t positions[2][MAXIMUM_ANIMATIONS];
-#if CUJU_WARP_LANES
-    if (step == 32) {
-#pragma unroll 1
-        for (int element = 0; element < count; element++) {
-            const int chunk = element >> 5;
-            keys[element] = __shfl_sync(
-                0xffffffffu, chunk * 32 + lane < count ? mine[chunk] : Key(), element & 31);
-        }
-    } else
-#endif
-    {
-        for (int element = 0; element < count; element++) keys[element] = mine[element];
-    }
     for (int element = 0; element < count; element++) positions[0][element] = (int16_t)element;
     int source = 0;
     for (int width = 1; width < count; width *= 2, source ^= 1) {
@@ -281,28 +302,35 @@ CUJU_FUNCTION_NO_INLINE inline void SortByLaneKeys(AnimationList &dataSet, const
         sorted[element] = (int16_t)dataSet[positions[source][element]];
     for (int element = 0; element < count; element++) dataSet[element] = sorted[element];
 }
+#endif
 
 // Exact: each sort compares a pure key of one animation with `<`, a strict weak order without
-// NaN, so any stable sort of the precomputed keys gives GRF's order.
+// NaN, so any stable sort of the keys gives GRF's order.
 template <class Key, class KeyFunction>
 CUJU_FUNCTION_NO_INLINE inline void StableSortByKey(AnimationList &dataSet, KeyFunction key) {
     CUJU_PROFILE_SCOPE(STABLE_SORT);
     const int count = dataSet.count;
     if (count < 2) return;
+#if defined(__CUDA_ARCH__)
+#if CUJU_WARP_LANES
+    if (!WarpNested() && count <= RANK_SORT_CAPACITY) {
+        Key mine[RANK_SORT_CAPACITY / 32];
+        const int lane = Lane();
+        WarpRegionBegin();
+        int keyCount = 0;
+        for (int element = lane; element < count; element += 32)
+            mine[keyCount++] = key(dataSet[element]);
+        WarpRegionEnd();
+        RankSortByLaneKeys<Key>(dataSet, mine, lane);
+        return;
+    }
+#endif
+    InsertionSortByKey(dataSet, [&](int animationIndex) -> Key { return key(animationIndex); });
+#else
     Key mine[MAXIMUM_ANIMATIONS];
-    int lane = 0, step = 1;
-#if CUJU_WARP_LANES
-    bool nested;
-    WarpSplit(nested, lane, step);
-    if (!nested) WarpRegionBegin();
+    for (int element = 0; element < count; element++) mine[element] = key(dataSet[element]);
+    MergeSortByKeys<Key>(dataSet, mine);
 #endif
-    int keyCount = 0;
-    for (int element = lane; element < count; element += step)
-        mine[keyCount++] = key(dataSet[element]);
-#if CUJU_WARP_LANES
-    if (!nested) WarpRegionEnd();
-#endif
-    SortByLaneKeys<Key>(dataSet, mine, lane, step);
 }
 
 constexpr int MAXIMUM_CHAIN_KEYS = 8;
@@ -1174,7 +1202,8 @@ struct Selector {
         query.incomingVelocity = e_Velocity_Idle;
         query.byOutgoingVelocity = true;
         query.outgoingVelocity = e_Velocity_Idle;
-        AnimationList dataSet;
+        WarpLocal<AnimationList> dataSetLocal;
+        AnimationList &dataSet = *dataSetLocal;
         CrudeSelection(SC(), query, dataSet);
         // GRF: sorts by idle level, incoming body direction, incoming velocity, direction and then
         // movement similarity. Each key reads only its own predicates, so all are set first.
@@ -1622,9 +1651,12 @@ struct Selector {
         return false;
     }
 
+    CUJU_FUNCTION static Vector3 CalculateOutgoingMovement(const Vector3 *positions, int count) {
+        if (count < 2) return Vector3(0);
+        return (positions[count - 1] - positions[count - 2]) * 100.0f;
+    }
     CUJU_FUNCTION static Vector3 CalculateOutgoingMovement(const PositionList &positions) {
-        if (positions.size() < 2) return Vector3(0);
-        return (positions.at(positions.size() - 1) - positions.at(positions.size() - 2)) * 100.0f;
+        return CalculateOutgoingMovement(positions.elements, positions.count);
     }
 
     CUJU_FUNCTION_NO_INLINE void CalculatePredictedSituation(Vector3 &predictedPosition,
@@ -1679,9 +1711,8 @@ struct Selector {
         uint32_t futureTimeMilliseconds = std::max(
             animationTimeMilliseconds + DEFAULT_TOUCH_OFFSET_MILLISECONDS, timeToBallMilliseconds);
 
-        PositionList positions;
-        for (const Vector3 &position : currentAnimation.positions) positions.push_back(position);
-        Vector3 predictedOutgoingMovement = CalculateOutgoingMovement(positions);
+        Vector3 predictedOutgoingMovement = CalculateOutgoingMovement(
+            currentAnimation.positions.elements, currentAnimation.positions.count);
         Vector3 predictedPosition;
         float predictedAngle;
         CalculatePredictedSituation(predictedPosition, predictedAngle);
@@ -1936,18 +1967,16 @@ struct Selector {
             Vector3 outgoingMovement = RotatedBy(CalculateOutgoingMovement(positionsResult), back);
             adaptedOutgoingMovement = outgoingMovement;
             const int totalTouches = (int)animationData.football.size();
-            AnimationList touchIDs;
-            for (int touch = totalTouches / 2; touch > -1; touch--) touchIDs.push_back(touch);
-            for (int touch = totalTouches / 2 + 1; touch < totalTouches; touch++)
-                touchIDs.push_back(touch);
             int defaultTouchFrame = GetDerived(animationIndex).touchFrame;
 
+            // GRF: tries the middle touch first, then the earlier ones backwards and the later
+            // ones forwards.
+            const int middleTouch = totalTouches / 2;
             for (int touchNumber = 0; touchNumber < totalTouches && !found; touchNumber++) {
-                if (touchIDs[touchNumber] >= totalTouches)
-                    CUJU_FATAL("a touch of an animation lies past its ball keys");
-                Vector3 animationBallPosition =
-                    animationData.football[touchIDs[touchNumber]].position;
-                int animationTouchFrame = animationData.football[touchIDs[touchNumber]].frame;
+                const int touchID =
+                    touchNumber <= middleTouch ? middleTouch - touchNumber : touchNumber;
+                Vector3 animationBallPosition = animationData.football[touchID].position;
+                int animationTouchFrame = animationData.football[touchID].frame;
 
                 if (!retainerIsMe) {
                     Vector3 absoluteBallPosition =
@@ -2230,7 +2259,8 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::BaseSelectAnimation(
     if (current.outgoingSpecialState != animation::STRING_EMPTY)
         query.incomingVelocity = e_Velocity_Idle;
 
-    AnimationList dataSet;
+    WarpLocal<AnimationList> dataSetLocal;
+    AnimationList &dataSet = *dataSetLocal;
     CrudeSelection(SC(), query, dataSet);
     if (dataSet.empty()) {
         if (functionType == e_FunctionType_Movement)
@@ -2265,7 +2295,8 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::BaseSelectAnimation(
             RotatedBy(command.desiredTripDirection, BackTurn(angle));
 
     int selectedAnimationID = -1;
-    PositionList temporaryPositions;
+    WarpLocal<PositionList> temporaryPositionsLocal;
+    PositionList &temporaryPositions = *temporaryPositionsLocal;
     float temporaryRotationSmuggle = 0;
     if (dataSet.empty()) return SELECT_FALSE;
     const bool byTripDirection = command.useDesiredTripDirection,
@@ -2555,7 +2586,8 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::SelectAnimation(
     if (current.outgoingSpecialState != animation::STRING_EMPTY)
         query.incomingVelocity = e_Velocity_Idle;
 
-    AnimationList dataSet;
+    WarpLocal<AnimationList> dataSetLocal;
+    AnimationList &dataSet = *dataSetLocal;
     CrudeSelection(SC(), query, dataSet);
     if (dataSet.empty()) {
         if (functionType == e_FunctionType_Movement)
@@ -2660,7 +2692,8 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::SelectAnimation(
         });
 
     int selectedAnimationID = -1;
-    PositionList temporaryPositions;
+    WarpLocal<PositionList> temporaryPositionsLocal;
+    PositionList &temporaryPositions = *temporaryPositionsLocal;
     int temporaryTouchFrame = -1;
     Vector3 temporaryTouchPosition;
     Vector3 temporaryActionSmuggle;

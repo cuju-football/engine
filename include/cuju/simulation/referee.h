@@ -20,9 +20,6 @@ CUJU_FUNCTION inline bool RefereePrepareSetPiece(World &world, const SimulationC
                                                  int setPiece);
 
 enum e_MatchPhase { e_MatchPhase_PreMatch, e_MatchPhase_FirstHalf, e_MatchPhase_SecondHalf };
-// GRF: without referee animations, the clock skips the wait of a stoppage at once.
-constexpr bool REFEREE_ANIMATIONS = false;
-
 // `time` is in milliseconds.
 CUJU_FUNCTION_NO_INLINE inline void BumpActualTime(World &world, const SimulationContext &context,
                                                    uint64_t time) {
@@ -92,10 +89,10 @@ CUJU_FUNCTION_NO_INLINE inline void RefereeStop(World &world, const SimulationCo
     buffer.desiredSetPiece = setPiece;
     buffer.stopTime = match.actualTimeMilliseconds;
     buffer.prepareTime = match.actualTimeMilliseconds + 2000;
-    if (!REFEREE_ANIMATIONS) BumpActualTime(world, context, 1900);
+    if (!world.refereeAnimations) BumpActualTime(world, context, 1900);
     if (extraPrepareMilliseconds) {
         buffer.prepareTime += extraPrepareMilliseconds;
-        if (!REFEREE_ANIMATIONS) BumpActualTime(world, context, extraPrepareMilliseconds);
+        if (!world.refereeAnimations) BumpActualTime(world, context, extraPrepareMilliseconds);
     }
     buffer.startTime = buffer.prepareTime + 2000;
 }
@@ -153,6 +150,11 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeCheckFoul(World &world,
             offender.cards += 3;
             offender.cardEffectiveTimeMilliseconds = match.actualTimeMilliseconds + 6000;
         }
+        SpamMessage(world,
+                    foul.foulType == 2   ? e_Message_FoulYellow
+                    : foul.foulType == 3 ? e_Message_FoulRed
+                                         : e_Message_Foul,
+                    -1, -1);
         foul.hasBeenProcessed = true;
         return true;
     }
@@ -210,7 +212,7 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeProcess(World &world, const Simulatio
                     buffer.desiredSetPiece = e_GameMode_KickOff;
                     buffer.stopTime = match.actualTimeMilliseconds;
                     buffer.prepareTime = match.actualTimeMilliseconds + 500;
-                    if (!REFEREE_ANIMATIONS) BumpActualTime(world, context, 400);
+                    if (!world.refereeAnimations) BumpActualTime(world, context, 400);
                     buffer.startTime = buffer.prepareTime + 500;
                     buffer.restartPosition = Vector3(0, 0, 0);
                     buffer.teamID = world.FirstTeamID();
@@ -319,6 +321,7 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeBallTouched(World &world,
                 buffer.restartPosition = PitchPosition(world, ballOwner);
                 buffer.teamID = 1 - lastTouchTeamID;
                 buffer.active = true;
+                SpamMessage(world, e_Message_Offside, -1, -1);
             }
         }
     }

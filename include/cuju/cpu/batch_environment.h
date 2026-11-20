@@ -394,6 +394,13 @@ public:
             StepEnvironment(buffers, variants, environment, actions, autoReset);
         });
     }
+    void RenderStates(const EnvironmentBuffers &buffers, const Variants &variants,
+                      const RenderBuffers &render) {
+        Steps().Settle();
+        Pool().For(
+            render.count, [&](int output) { WriteRenderState(buffers, variants, render, output); },
+            LIGHT_GRAIN);
+    }
     void Outputs(const EnvironmentBuffers &buffers, const uint8_t *mask, bool afterStep) {
         Steps().Settle();
         Pool().For(

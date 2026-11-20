@@ -123,6 +123,20 @@ CUJU_FUNCTION inline void DeriveNodes(const Skeleton &skeleton, const state::Nod
     }
 }
 
+// As `DeriveNodes`, with `root` in place of node 0.
+CUJU_FUNCTION inline void DeriveNodesWithRoot(const Skeleton &skeleton,
+                                              const state::NodeState *nodes,
+                                              const state::NodeState &root,
+                                              Derived derived[state::HUMANOID_NODES]) {
+    for (size_t node = 0; node < skeleton.nodes.size(); node++) {
+        const state::NodeState &local = node == 0 ? root : nodes[node];
+        const Derived *parent =
+            skeleton.nodes[node].parent >= 0 ? &derived[skeleton.nodes[node].parent] : nullptr;
+        derived[node] =
+            DeriveChild(parent, local.localMode, local.position, local.rotation, local.scale);
+    }
+}
+
 struct AxisAlignedBoundingBox {
     Vector3 minimumCorner, maximumCorner;
 

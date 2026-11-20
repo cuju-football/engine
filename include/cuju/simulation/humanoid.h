@@ -20,6 +20,7 @@
 #include "access.h"
 #include "containers.h"
 #include "enumerations.h"
+#include "render_mode.h"
 #include "static_data.h"
 #include "world.h"
 
@@ -105,9 +106,11 @@ struct SimulationContext {
     const Vector3 *smoothedMovement = nullptr;
 };
 
-CUJU_FUNCTION inline int FormationSource(const World &world, int player) {
-    const int formationOverride = world.formationOverride[player];
+CUJU_FUNCTION inline int FormationSource(int formationOverride, int player) {
     return formationOverride ? formationOverride - 1 : player;
+}
+CUJU_FUNCTION inline int FormationSource(const World &world, int player) {
+    return FormationSource(world.formationOverride[player], player);
 }
 CUJU_FUNCTION inline const StaticFormation &Formation(const World &world,
                                                       const SimulationContext &context,

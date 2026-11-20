@@ -87,7 +87,8 @@ CUJU_FUNCTION_NO_INLINE inline bool CheckBallCollisions(World &world,
 
         const animation::Skeleton &skeleton = context.skeletons[player];
         animation::Derived derived[state::HUMANOID_NODES];
-        animation::DeriveNodes(skeleton, humanoid.nodes, derived);
+        DeriveHumanoidNodes(world, player, skeleton, humanoid.nodes, derived);
+        ReadRootCache(world, player, humanoid.nodes[0]);
         for (size_t node = 0; node < skeleton.nodes.size(); node++) {
             for (const animation::SkeletonGeometry &geometry : skeleton.nodes[node].geometries) {
                 animation::WorldGeometry worldGeometry =
@@ -253,6 +254,9 @@ struct PlayerBounce {
     float force;
 };
 using PlayerBounceList = InlineVector<PlayerBounce, state::MAXIMUM_PLAYERS>;
+struct PlayerBounces {
+    PlayerBounceList lists[state::MAXIMUM_PLAYERS];
+};
 
 CUJU_FUNCTION inline bool BoundingBoxesIntersect(const animation::AxisAlignedBoundingBox &box,
                                                  const animation::AxisAlignedBoundingBox &other) {
@@ -270,12 +274,16 @@ struct PlayerGeometry {
 };
 using PlayerGeometryList =
     InlineVector<PlayerGeometry, state::HUMANOID_NODES * animation::MAXIMUM_GEOMETRIES_PER_NODE>;
+static_assert(WorkAreaRound(sizeof(PlayerBounces)) +
+                      2 * WorkAreaRound(sizeof(PlayerGeometryList)) <=
+                  WORK_AREA_BYTES,
+              "the work area holds the collisions of the humanoids");
 CUJU_FUNCTION_NO_INLINE inline void PlayerGeometries(const World &world,
                                                      const SimulationContext &context, int player,
                                                      PlayerGeometryList &out) {
     const animation::Skeleton &skeleton = context.skeletons[player];
     animation::Derived derived[state::HUMANOID_NODES];
-    animation::DeriveNodes(skeleton, Humanoid(world, player).nodes, derived);
+    DeriveHumanoidNodes(world, player, skeleton, Humanoid(world, player).nodes, derived);
     out.clear();
     for (size_t node = 0; node < skeleton.nodes.size(); node++)
         for (const animation::SkeletonGeometry &geometry : skeleton.nodes[node].geometries)
@@ -551,7 +559,9 @@ CUJU_FUNCTION_NO_INLINE inline void CheckHumanoidCollision(World &world,
     if (distance < 2.0f && tackle > 0 && tackle < 3) {
         const int tackler = tackle == 1 ? firstPlayer : secondPlayer,
                   victim = tackle == 1 ? secondPlayer : firstPlayer;
-        PlayerGeometryList tacklerGeometries, victimGeometries;
+        WarpLocal<PlayerGeometryList> tacklerGeometriesLocal, victimGeometriesLocal;
+        PlayerGeometryList &tacklerGeometries = *tacklerGeometriesLocal,
+                           &victimGeometries = *victimGeometriesLocal;
         PlayerGeometries(world, context, tackler, tacklerGeometries);
         PlayerGeometries(world, context, victim, victimGeometries);
         for (auto &tacklerGeometry : tacklerGeometries) {
@@ -584,7 +594,8 @@ CUJU_FUNCTION_NO_INLINE inline bool CheckHumanoidCollisions(World &world,
     CUJU_PROFILE_SCOPE(CHECK_HUMANOID_COLLISIONS);
     PlayerList players = TeamActivePlayers(world, world.FirstTeamID());
     for (int player : TeamActivePlayers(world, 1 - world.FirstTeamID())) players.push_back(player);
-    PlayerBounceList playerBounces[state::MAXIMUM_PLAYERS];
+    WarpLocal<PlayerBounces> playerBouncesLocal;
+    PlayerBounceList *playerBounces = (*playerBouncesLocal).lists;
     for (size_t firstIndex = 0; firstIndex + 1 < players.size(); firstIndex++)
         for (size_t secondIndex = firstIndex + 1; secondIndex < players.size(); secondIndex++)
             CheckHumanoidCollision(world, context, players[firstIndex], players[secondIndex],

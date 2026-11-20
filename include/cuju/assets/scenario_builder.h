@@ -314,7 +314,8 @@ inline state::FormationEntry ScenarioEntry(const ScenarioPlayer &player) {
 
 // GRF: `TeamData::TeamData` builds the spots from the fixed slots. The role, start position and
 // flags come from the scenario afterwards, so a player's spot follows its index, not its role.
-inline std::vector<state::FormationEntry> TeamFormation(const std::vector<ScenarioPlayer> &team) {
+inline std::vector<state::FormationEntry> TeamFormation(
+    const std::vector<state::FormationEntry> &team) {
     const int count = (int)team.size();
     std::vector<state::FormationEntry> formation(count);
     for (int slot = 0; slot < count; slot++) {
@@ -353,19 +354,21 @@ inline std::vector<state::FormationEntry> TeamFormation(const std::vector<Scenar
         }
     }
     for (int slot = 0; slot < count; slot++) {
-        const state::FormationEntry scenario = ScenarioEntry(team[slot]);
-        formation[slot].startPosition = scenario.startPosition;
-        formation[slot].lazy = scenario.lazy;
-        formation[slot].role = scenario.role;
-        formation[slot].controllable = scenario.controllable;
+        formation[slot].startPosition = team[slot].startPosition;
+        formation[slot].lazy = team[slot].lazy;
+        formation[slot].role = team[slot].role;
+        formation[slot].controllable = team[slot].controllable;
     }
     return formation;
 }
 
-inline void CheckDescription(const ScenarioDescription &description) {
-    for (const std::vector<ScenarioPlayer> *team :
-         {&description.leftTeam, &description.rightTeam}) {
-        const char *side = team == &description.leftTeam ? "left" : "right";
+// The two teams as the formation entries of GRF's `ScenarioConfig`, left first.
+using ScenarioTeams = std::vector<state::FormationEntry>[2];
+
+inline void CheckTeams(const ScenarioTeams &teams) {
+    for (int index = 0; index < 2; index++) {
+        const std::vector<state::FormationEntry> *team = &teams[index];
+        const char *side = index == 0 ? "left" : "right";
         if (team->empty())
             throw std::invalid_argument(std::string("the ") + side +
                                         " team is empty; the scenario module adds its goalkeeper");
@@ -378,7 +381,7 @@ inline void CheckDescription(const ScenarioDescription &description) {
                                         std::to_string(team->size()) + " players, more than the " +
                                         std::to_string(state::MAXIMUM_TEAM_PLAYERS) +
                                         " of this build (CUJU_TEAM_PLAYERS)");
-        for (const ScenarioPlayer &player : *team)
+        for (const state::FormationEntry &player : *team)
             if (player.role < 0 || player.role >= PLAYER_ROLES)
                 throw std::invalid_argument("expected a player role from 0 to 9, found " +
                                             std::to_string(player.role));
@@ -566,10 +569,12 @@ inline BuilderTables LoadBuilderTables(const std::string &animationBytes) {
 }
 
 // GRF: the template is the state that `GameEnv::reset` leaves before the ticks that bring the match
-// into play. Each field is set as the GRF constructors named below set it.
-inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool reverse,
-                                 const BuilderTables &tables) {
-    CheckDescription(description);
+// into play. Each field is set as the GRF constructors named below set it. `teams` and `ball`, the
+// ball position as `ScenarioConfig` holds it before `GameEnv::setConfig` scales it, stand in for
+// the teams and ball of `description`.
+inline BuiltVariant BuildVariant(const ScenarioDescription &description, const ScenarioTeams &teams,
+                                 const Vector3 &ball, bool reverse, const BuilderTables &tables) {
+    CheckTeams(teams);
     using simulation::World;
     auto world = std::make_unique<World>();
     state::EnvironmentStateFull &environment = world->serialized;
@@ -589,10 +594,11 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool re
     memcpy(environment.rng + 2504, distribution, sizeof(distribution));
 
     // GRF: `GameEnv::setConfig` scales the ball position in double.
-    scenario.ballPosition = Vector3((float)((double)(float)description.ballX * 54.4),
-                                    (float)((double)(float)description.ballY * -83.6), 0);
-    scenario.leftTeamSize = (int32_t)description.leftTeam.size();
-    scenario.rightTeamSize = (int32_t)description.rightTeam.size();
+    scenario.ballPosition =
+        Vector3((float)((double)ball.coordinates[0] * 54.4),
+                (float)((double)ball.coordinates[1] * -83.6), ball.coordinates[2]);
+    scenario.leftTeamSize = (int32_t)teams[0].size();
+    scenario.rightTeamSize = (int32_t)teams[1].size();
     scenario.leftAgents = scenario.rightAgents = 0;
     scenario.useMagnet = description.useMagnet;
     scenario.offsides = description.offsides;
@@ -609,21 +615,20 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool re
     scenario.gameEngineRandomSeed = seed;
     scenario.reverseTeamProcessing = reverse;
     for (int player = 0; player < scenario.leftTeamSize; player++)
-        scenario.leftTeam[player] = ScenarioEntry(description.leftTeam[player]);
+        scenario.leftTeam[player] = teams[0][player];
     for (int player = 0; player < scenario.rightTeamSize; player++)
-        scenario.rightTeam[player] = ScenarioEntry(description.rightTeam[player]);
+        scenario.rightTeam[player] = teams[1][player];
 
     // Slot 0 holds the team processed first, the right team when reversed.
     match.firstTeam = 0;
     match.secondTeam = 1;
     match.playerCount = scenario.leftTeamSize + scenario.rightTeamSize;
     const int firstTeamID = reverse ? 1 : 0;
-    const std::vector<ScenarioPlayer> *teams[2] = {&description.leftTeam, &description.rightTeam};
     std::vector<state::FormationEntry> formation;
     std::vector<int> teamIndex;
     for (int slot = 0; slot < 2; slot++) {
         const std::vector<state::FormationEntry> entries =
-            TeamFormation(*teams[slot == 0 ? firstTeamID : 1 - firstTeamID]);
+            TeamFormation(teams[slot == 0 ? firstTeamID : 1 - firstTeamID]);
         for (int index = 0; index < (int)entries.size(); index++) {
             formation.push_back(entries[index]);
             teamIndex.push_back(index);
@@ -631,7 +636,7 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool re
     }
 
     // GRF: as `Player::Player` and `Player::Activate` leave them, first team first.
-    const int firstTeamSize = (int)teams[firstTeamID]->size();
+    const int firstTeamSize = (int)teams[firstTeamID].size();
     for (int player = 0; player < match.playerCount; player++) {
         const int slot = player < firstTeamSize ? 0 : 1;
         state::PlayerState &entry = match.players[player];
@@ -751,6 +756,18 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool re
         nodes.push_back(played->serialized.match.officials[official].humanoid.nodes);
     variant.skeletons = SkeletonBytes(nodes);
     return variant;
+}
+
+// The template of a scenario file's description, each player as `FormationEntry(x, y, ...)` and
+// the ball as `SetBallPosition` sets it.
+inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool reverse,
+                                 const BuilderTables &tables) {
+    ScenarioTeams teams;
+    for (int side = 0; side < 2; side++)
+        for (const ScenarioPlayer &player : side ? description.rightTeam : description.leftTeam)
+            teams[side].push_back(ScenarioEntry(player));
+    const Vector3 ball((float)description.ballX, (float)description.ballY, 0);
+    return BuildVariant(description, teams, ball, reverse, tables);
 }
 
 // The four variants of an agentless `l0_r0` bundle, as `LoadAssets` reads it. The loader adds the

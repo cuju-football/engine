@@ -334,10 +334,9 @@ CUJU_FUNCTION inline bool StickyActionState(World &world, int action, bool leftT
     return false;
 }
 
-CUJU_FUNCTION_NO_INLINE inline bool EnvironmentStep(World &world,
-                                                    const SimulationContext &context) {
-    for (int tick = 0; tick < context.ticksPerStep; tick++)
-        if (!GameTaskProcessPhase(world, context)) return false;
+// GRF: the end of `GameEnv::step`, after its ticks. A step in play counts and releases the buttons
+// that a press holds for one step only.
+CUJU_FUNCTION_NO_INLINE inline void EnvironmentFinishStep(World &world) {
     if (world.serialized.match.inPlay) {
         world.serialized.step++;
         for (int controller = 0; controller < 2 * MAXIMUM_TEAM_CONTROLLERS; controller++)
@@ -347,6 +346,22 @@ CUJU_FUNCTION_NO_INLINE inline bool EnvironmentStep(World &world,
                                    e_ButtonFunction_Sliding, e_ButtonFunction_Switch})
                     keyboard->buttonsPressed[button] = false;
     }
+}
+
+// A render point of GRF's `GameEnv::step`, which a batch that renders follows.
+struct NoRender {
+    CUJU_FUNCTION void operator()() const {}
+};
+
+template <class RenderHook = NoRender>
+CUJU_FUNCTION_NO_INLINE inline bool EnvironmentStep(World &world, const SimulationContext &context,
+                                                    RenderHook renderHook = RenderHook()) {
+    for (int tick = 0; tick < context.ticksPerStep; tick++)
+        if (!GameTaskProcessPhase(world, context)) return false;
+    // GRF: `GameEnv::step` renders after its ticks.
+    MatchPut(world);
+    renderHook();
+    EnvironmentFinishStep(world);
     return true;
 }
 
@@ -467,6 +482,11 @@ CUJU_FUNCTION_NO_INLINE inline bool EnvironmentResetFromTemplate(World &world,
                                                                  uint32_t seed) {
     world.serialized.scenario.gameEngineRandomSeed = seed;
     Randomize(world, seed);
+    // GRF: a new match, with an empty message caption and every root cache to compute.
+    world.message = MatchMessage();
+    world.scoreboardGoals[0] = world.scoreboardGoals[1] = 0;
+    for (bool &hidden : world.humanoidHidden) hidden = false;
+    InvalidateRootCaches(world);
     const int playerCount = world.serialized.match.playerCount;
     for (int player = 0; player < playerCount; player++) {
         const int side = TeamDynamicSide(world, world.playerTeamID[player]);
@@ -475,7 +495,7 @@ CUJU_FUNCTION_NO_INLINE inline bool EnvironmentResetFromTemplate(World &world,
             Formation(world, context, player).position * 25 * Vector3(-side, -side, 0);
         if (!HumanoidResetPosition(world, context, player, position, Vector3(0))) return false;
     }
-    RandomInRange(world.serialized.rng, 1, 4);  // The skin colour of the officials.
+    world.draws.officialSkin = RandomInRange(world.serialized.rng, 1, 4);  // The officials' skin.
     for (int official = 0; official < 3; official++)
         for (int draw = 0; draw < 2; draw++)
             if (!HumanoidResetPosition(world, context, playerCount + official, Vector3(0),
@@ -487,16 +507,18 @@ CUJU_FUNCTION_NO_INLINE inline bool EnvironmentResetFromTemplate(World &world,
                                    Vector3(0)))
             return false;
     // GRF: the lighting draws six times and affects nothing else.
-    RandomInRange(world.serialized.rng, -1.7f, 1.7f);
-    RandomInRange(world.serialized.rng, -1.7f, 1.7f);
-    RandomInRange(world.serialized.rng, 0, 1);
+    world.draws.light[0] = RandomInRange(world.serialized.rng, -1.7f, 1.7f);
+    world.draws.light[1] = RandomInRange(world.serialized.rng, -1.7f, 1.7f);
+    world.draws.light[2] = RandomInRange(world.serialized.rng, 0, 1);
     for (int draw = 0; draw < 3; draw++)
-        RandomInRange(world.serialized.rng, (float)-0.1, (float)0.1);
+        world.draws.light[3 + draw] = RandomInRange(world.serialized.rng, (float)-0.1, (float)0.1);
     return true;
 }
 
+template <class RenderHook = NoRender>
 CUJU_FUNCTION inline bool EnvironmentCoreAfterReset(World &world, const SimulationContext &context,
-                                                    struct EnvironmentCore &core);
+                                                    struct EnvironmentCore &core,
+                                                    RenderHook renderHook = RenderHook());
 
 struct EnvironmentCore {
     int previousScoreDifference = 0;
@@ -506,15 +528,16 @@ struct EnvironmentCore {
 };
 
 // `actions` holds one `Action` per agent, the left agents first. `reward` is the left team's
-// change of score difference. `tickHook` runs after every tick and returns `false` to stop.
+// change of score difference. `tickHook` runs after every tick and returns `false` to stop, and
+// `renderHook` at each render point.
 // GRF: after 20 steps in a set piece every agent short-passes, then the ball owner's agent runs
 // to one side and back while the rest idle.
-template <class TickHook>
+template <class TickHook, class RenderHook = NoRender>
 CUJU_FUNCTION_NO_INLINE inline bool EnvironmentCoreStep(World &world,
                                                         const SimulationContext &context,
                                                         EnvironmentCore &core, const int *actions,
-                                                        int &reward, bool &done,
-                                                        TickHook tickHook) {
+                                                        int &reward, bool &done, TickHook tickHook,
+                                                        RenderHook renderHook = RenderHook()) {
     const state::ScenarioState &scenario = world.serialized.scenario;
     size_t actionIndex = 0;
     for (bool leftTeam : {true, false}) {
@@ -544,6 +567,8 @@ CUJU_FUNCTION_NO_INLINE inline bool EnvironmentCoreStep(World &world,
             if (!GameTaskProcessPhase(world, context)) return false;
             if (!tickHook()) return false;
         }
+        MatchPut(world);
+        renderHook();
         if (world.serialized.match.inPlay) {
             world.serialized.step++;
             for (int controller = 0; controller < 2 * MAXIMUM_TEAM_CONTROLLERS; controller++)
@@ -579,13 +604,14 @@ CUJU_FUNCTION_NO_INLINE inline bool EnvironmentCoreStep(World &world,
     return true;
 }
 
+template <class RenderHook>
 CUJU_FUNCTION inline bool EnvironmentCoreAfterReset(World &world, const SimulationContext &context,
-                                                    EnvironmentCore &core) {
+                                                    EnvironmentCore &core, RenderHook renderHook) {
     core = EnvironmentCore();
     while (true) {
         EnvironmentGetState(world, context, core.observation);
         if (core.observation.isInPlay) return true;
-        if (!EnvironmentStep(world, context)) return false;
+        if (!EnvironmentStep(world, context, renderHook)) return false;
     }
 }
 

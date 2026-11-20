@@ -15,11 +15,13 @@
 
 #include "../animation/skeleton.h"
 #include "../file_path.h"
+#include "../render/extract_render_state.h"
 #include "../simulation/environment.h"
 #include "../simulation/observation_encoding.h"
 #include "../simulation/state_io.h"
 #include "../simulation/static_data.h"
 #include "../warp.h"
+#include "../work_area.h"
 #include "agent_setup.h"
 
 // Threads per environment. A loop from `Lane()` with this stride runs each index once.
@@ -256,6 +258,9 @@ struct BatchEnvironmentConfiguration {
     bool pinThreads = false, numa = false;
     // On the CPU every buffer takes whole pages of its own, which `cudaHostRegister` can pin.
     bool pageAligned = false;
+    // The render mode and the referee animations of every environment until `SetRender`.
+    int renderMode = 0;
+    bool refereeAnimations = false;
 };
 
 // GRF: the episode seeds come from Python's `random`, the MT19937 of CPython's C code.
@@ -355,12 +360,33 @@ struct EnvironmentSlot {
     // Each team's designated player in the observation that ended the last episode, which an
     // automatic reset replaces. GRF's dumps hold it for a team without agents too.
     int32_t finalDesignated[2];
+    // GRF's render mode, kept for the renderer, and the `animations` flag of each later reset.
+    int32_t renderMode, refereeAnimations;
 };
 
 // The templates in backend memory, indexed by `bundle * 4 + reverse * 2 + parity`.
 struct Variants {
     const simulation::SimulationContext *contexts;
     const simulation::World *const *templates;
+};
+
+// The renders of a batch in render mode, in the order GRF's GameEnv makes them, for a renderer that
+// draws them after the call: the start of each match and each render, with the RenderState of each.
+constexpr int32_t RENDER_EVENT_START = 1, RENDER_EVENT_RENDER = 2;
+struct RenderEvent {
+    int32_t kind;
+    uint32_t seed;  // GRF's `game_engine_random_seed` of the match.
+    render::RenderState state;
+};
+// Backend memory. A reset or a step appends to each environment's events until the host moves
+// them out. A count of -1 says more than `capacity` events came, which were lost.
+struct RenderEvents {
+    RenderEvent *events;  // `[environmentCount][capacity]`
+    int32_t *counts;      // `[environmentCount]`
+    // `[environmentCount]`, what GRF's widgets carry from render to render.
+    render::RenderState *states;
+    const uint8_t *animationMirrored;  // One byte per animation, nonzero for a "mirror" name.
+    int capacity;
 };
 
 // The batch buffers, in backend memory. Each environment has `agents` agent slots, the most agents
@@ -394,7 +420,68 @@ struct EnvironmentBuffers {
     uint8_t *agentMask;  // `[environmentCount][agents]`
     // `[environmentCount][2]` from 0 to 1, set on every reset, negative or null for the scenario's.
     const float *teamDifficulty;
+    // Null `events` records none.
+    RenderEvents renderEvents;
+    WorkArea *workAreas;  // `[environmentCount]` on the device, null on the host.
 };
+
+// The engine's last message as the renderer reads it.
+CUJU_FUNCTION inline void MakeRenderMessage(const simulation::World &world,
+                                            render::RenderMessage &message) {
+    message.spammed = world.message.spammed;
+    message.removeTimeMilliseconds = world.message.removeTimeMilliseconds;
+    // The caption's text, empty when no message reached it.
+    message.text[0] = 0;
+    if (world.message.drawn) {
+        simulation::MatchMessage shown;
+        shown.kind = world.message.drawnKind;
+        shown.team = world.message.drawnTeam;
+        shown.player = world.message.drawnPlayer;
+        simulation::MessageText(world, shown, message.text);
+    }
+}
+
+CUJU_FUNCTION inline render::RenderMatchDraws MakeRenderDraws(const simulation::World &world) {
+    render::RenderMatchDraws draws;
+    draws.officialSkin = world.draws.officialSkin;
+    for (int draw = 0; draw < 6; draw++) draws.light[draw] = world.draws.light[draw];
+    return draws;
+}
+
+// Records GRF's `StartMatch` of a new match, or a render, of an environment in render mode.
+// Speed: out of line, so that its locals stay off the stack of the simulation.
+CUJU_FUNCTION_NO_INLINE inline void PushRenderEvent(const EnvironmentBuffers &buffers,
+                                                    const Variants &variants, int environment,
+                                                    bool start) {
+    const RenderEvents &render = buffers.renderEvents;
+    const simulation::World &world = buffers.worlds[environment];
+    if (!render.events || world.renderMode != simulation::e_Render_On) return;
+    EnvironmentSync();
+    if (Lane() == 0) {
+        int32_t &count = render.counts[environment];
+        if (count >= 0 && count >= render.capacity) count = -1;
+        if (count >= 0) {
+            render::RenderMessage message;
+            MakeRenderMessage(world, message);
+            render::RenderContext context;
+            context.simulation = &variants.contexts[buffers.slots[environment].variant];
+            context.animationMirrored = render.animationMirrored;
+            context.message = &message;
+            render::RenderState &state = render.states[environment];
+            RenderEvent &event = render.events[(size_t)environment * render.capacity + count++];
+            if (start) {
+                render::ResetRenderState(world, context, MakeRenderDraws(world), state);
+                event.kind = RENDER_EVENT_START;
+            } else {
+                render::ExtractRenderState(world, context, state);
+                event.kind = RENDER_EVENT_RENDER;
+            }
+            event.seed = world.serialized.scenario.gameEngineRandomSeed;
+            event.state = state;
+        }
+    }
+    EnvironmentSync();
+}
 
 // GRF: a right agent's view negates both axes, a left agent's none.
 CUJU_HOST_DEVICE int SideNegation(bool right) {
@@ -481,6 +568,11 @@ CUJU_FUNCTION inline void ResetEnvironment(const EnvironmentBuffers &buffers,
     const int variant = slot.variant;
     simulation::World &world = buffers.worlds[environment];
     CopyWorld(&world, variants.templates[variant]);
+    if (Lane() == 0) {
+        world.refereeAnimations = slot.refereeAnimations != 0;
+        world.renderMode =
+            slot.renderMode != 0 ? simulation::e_Render_On : simulation::e_Render_Off;
+    }
     // The difficulty goes in before the ticks that bring the match into play, which read it.
     if (buffers.teamDifficulty && Lane() == 0) {
         state::ScenarioState &scenario = world.serialized.scenario;
@@ -490,17 +582,21 @@ CUJU_FUNCTION inline void ResetEnvironment(const EnvironmentBuffers &buffers,
         if (right >= 0.0f) scenario.rightTeamDifficulty = right;
     }
     EnvironmentSync();
-    if (!simulation::EnvironmentResetFromTemplate(world, variants.contexts[variant], slot.seed) ||
-        !simulation::EnvironmentCoreAfterReset(world, variants.contexts[variant],
-                                               buffers.cores[environment]))
+    if (!simulation::EnvironmentResetFromTemplate(world, variants.contexts[variant], slot.seed))
+        StopAtUndefinedPath(environment);
+    PushRenderEvent(buffers, variants, environment, true);
+    if (!simulation::EnvironmentCoreAfterReset(
+            world, variants.contexts[variant], buffers.cores[environment],
+            [&] { PushRenderEvent(buffers, variants, environment, false); }))
         StopAtUndefinedPath(environment);
     for (int agent = 0; agent < MAXIMUM_AGENTS; agent++) slot.collected[agent] = 0;
     UpdateStickyActions(buffers, world, slot);
 }
 
 // Runs on one thread for one agent. A step that ends an episode also writes the `final*` buffers.
-CUJU_FUNCTION inline void WriteAgentOutputs(const EnvironmentBuffers &buffers, int environment,
-                                            int agent, bool afterStep) {
+// Speed: out of line, so that its view stays off the stack of the simulation.
+CUJU_FUNCTION_NO_INLINE inline void WriteAgentOutputs(const EnvironmentBuffers &buffers,
+                                                      int environment, int agent, bool afterStep) {
     const size_t output = (size_t)environment * buffers.agents + agent;
     EnvironmentSlot &slot = buffers.slots[environment];
     const bool right = agent >= slot.leftAgents;
@@ -626,9 +722,10 @@ CUJU_HOST_DEVICE void StepEnvironment(const EnvironmentBuffers &buffers, const V
     int reward = 0;
     bool done = false;
     simulation::World &world = buffers.worlds[environment];
-    if (!simulation::EnvironmentCoreStep(world, variants.contexts[slot.variant],
-                                         buffers.cores[environment], engineActions, reward, done,
-                                         [] { return true; }))
+    if (!simulation::EnvironmentCoreStep(
+            world, variants.contexts[slot.variant], buffers.cores[environment], engineActions,
+            reward, done, [] { return true; },
+            [&] { PushRenderEvent(buffers, variants, environment, false); }))
         StopAtUndefinedPath(environment);
     UpdateStickyActions(buffers, world, slot);
     if (Lane() == 0) {
@@ -682,6 +779,35 @@ inline std::string SaveScenario(const simulation::World &world) {
     return archive.data();
 }
 
+// One variant from its static data, reset state and skeletons, the parts of a bundle. With `setup`,
+// `SetupAgents` gives it `left` and `right` agents, and `name` names it in errors. `codec` keeps
+// the controller count of the variants loaded before.
+inline AssetVariant LoadVariant(const std::string &staticBlob, const std::string &stateBlob,
+                                const std::string &skeletonBlob, int reverse, int parity,
+                                bool setup, int left, int right, const std::string &name,
+                                simulation::StateCodec &codec) {
+    AssetVariant variant;
+    variant.reverse = reverse;
+    variant.parity = parity;
+    variant.staticData = simulation::ParseStatic(staticBlob);
+    variant.world = std::make_unique<simulation::World>();
+    if (!codec.LoadFrame(stateBlob, 0, *variant.world))
+        throw std::runtime_error("asset bundle: bad reset state");
+    variant.freeControllerCount = codec.freeControllerCount;
+    if (setup) {
+        SetupAgents(*variant.world, variant.staticData, left, right, name);
+        variant.freeControllerCount = variant.world->serialized.match.freeControllerCount;
+    }
+    variant.scenario = SaveScenario(*variant.world);
+    variant.skeletons = animation::ParseSkeletons(skeletonBlob);
+    // The simulation reads one skeleton per player and per official.
+    if (variant.skeletons.size() != (size_t)variant.staticData.count)
+        throw std::runtime_error("asset bundle: expected " +
+                                 std::to_string(variant.staticData.count) + " skeletons, found " +
+                                 std::to_string(variant.skeletons.size()));
+    return variant;
+}
+
 // `CUJASSET1`, the scenario name, the two agent counts, the variant count, then 4 variants of flag,
 // parity, static data, reset state and skeletons. Integers are `int32_t`, blocks length-prefixed.
 // `SetupAgents` handles other agent counts, where -1 keeps the bundle's. Static data and skeletons
@@ -724,25 +850,10 @@ inline Assets LoadAssets(const std::string &path, int leftAgents = -1, int right
         const int reverse = readInteger(), parity = readInteger();
         if ((reverse != 0 && reverse != 1) || (parity != 0 && parity != 1))
             throw std::runtime_error("asset bundle: bad variant");
-        AssetVariant &variant = assets.variants[reverse * 2 + parity];
-        variant.reverse = reverse;
-        variant.parity = parity;
-        variant.staticData = simulation::ParseStatic(readBlob());
-        variant.world = std::make_unique<simulation::World>();
-        if (!codec.LoadFrame(readBlob(), 0, *variant.world))
-            throw std::runtime_error("asset bundle: bad reset state");
-        variant.freeControllerCount = codec.freeControllerCount;
-        if (setup) {
-            SetupAgents(*variant.world, variant.staticData, left, right, path);
-            variant.freeControllerCount = variant.world->serialized.match.freeControllerCount;
-        }
-        variant.scenario = SaveScenario(*variant.world);
-        variant.skeletons = animation::ParseSkeletons(readBlob());
-        // The simulation reads one skeleton per player and per official.
-        if (variant.skeletons.size() != (size_t)variant.staticData.count)
-            throw std::runtime_error(
-                "asset bundle: expected " + std::to_string(variant.staticData.count) +
-                " skeletons, found " + std::to_string(variant.skeletons.size()));
+        const std::string staticBlob = readBlob(), stateBlob = readBlob(),
+                          skeletonBlob = readBlob();
+        assets.variants[reverse * 2 + parity] = LoadVariant(
+            staticBlob, stateBlob, skeletonBlob, reverse, parity, setup, left, right, path, codec);
     }
     for (const AssetVariant &variant : assets.variants)
         if (!variant.world) throw std::runtime_error("asset bundle: missing variant");

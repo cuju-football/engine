@@ -24,6 +24,15 @@
 namespace cuju {
 namespace simulation {
 
+// A dribble holds its force field and opponents inside the opponents of the commands on the ball,
+// and those inside the command queue of the humanoid.
+static_assert(
+    WorkAreaRound(sizeof(CommandQueue)) + WorkAreaRound(sizeof(ImageList)) +
+            WorkAreaRound(sizeof(ForceField)) +
+            WorkAreaRound(sizeof(InlineVector<state::PlayerImage, state::MAXIMUM_PLAYERS>)) <=
+        WORK_AREA_BYTES,
+    "the work area holds a dribble");
+
 CUJU_FUNCTION inline float GetMindSet(int role) {
     float mindSet = 0.5f;
     if (role == e_PlayerRole_Goalkeeper) mindSet = 0.0f;
@@ -1201,7 +1210,8 @@ struct AIController {
         const int designatedPlayer = Team().designatedTeamPossessionPlayer;
         Vector3 currentPosition = Position() + Movement() * 0.1f;
         Vector3 mainManPosition = Position(designatedPlayer) + Movement(designatedPlayer) * 0.1f;
-        ForceField forceField;
+        WarpLocal<ForceField> forceFieldLocal;
+        ForceField &forceField = *forceFieldLocal;
         float dynamicMindSet = GetMindSet(DynamicRole());
         bool forceNoOffside = true;
         float basePositionWeight = 0.7f, overallWeight = 1.0f;
@@ -1664,7 +1674,10 @@ struct AIController {
         float powerMultiplier = 1.0f;
         float futureSeconds = 0.25f;
         PlayerList opponents = GetClosestPlayers(world, context, opponentID, myPosition, false, 5);
-        InlineVector<state::PlayerImage, state::MAXIMUM_PLAYERS> opponentPlayerImages;
+        WarpLocal<InlineVector<state::PlayerImage, state::MAXIMUM_PLAYERS>>
+            opponentPlayerImagesLocal;
+        InlineVector<state::PlayerImage, state::MAXIMUM_PLAYERS> &opponentPlayerImages =
+            *opponentPlayerImagesLocal;
         for (int opponent : opponents)
             opponentPlayerImages.push_back(MentalPlayerImage(world, mentalImageIndex, opponent));
         float nearBackline =
@@ -1675,7 +1688,8 @@ struct AIController {
         Vector3 opponentGoalPosition = Vector3(
             -side * PITCH_HALF_LENGTH,
             myPosition.coordinates[1] * (1.0f - DRIBBLE_CENTER_MAGNET) * centerModifierInverse, 0);
-        ForceField forceField;
+        WarpLocal<ForceField> forceFieldLocal;
+        ForceField &forceField = *forceFieldLocal;
         for (const state::PlayerImage &opponentImage : opponentPlayerImages) {
             ForceSpot spot;
             spot.origin = opponentImage.position + opponentImage.movement * futureSeconds;
@@ -1723,7 +1737,8 @@ struct AIController {
             NormalizedClamp((match.ball.momentum - Movement()).GetLength(), 0.0f, 10.0f);
         float oneTouchIsHard = movementDifference - Statistic(e_Statistic_TechnicalShortPass) *
                                                         movementDifference * 0.8f;
-        ImageList opponentPlayerImages;
+        WarpLocal<ImageList> opponentPlayerImagesLocal;
+        ImageList &opponentPlayerImages = *opponentPlayerImagesLocal;
         MentalTeamPlayerImages(world, mentalImageIndex, opponentID, opponentPlayerImages);
         float possessionTimeFactor =
             NormalizedClamp((float)playerState.possessionDurationMilliseconds, 0, 5000);

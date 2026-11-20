@@ -119,6 +119,8 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidResetPosition(World &world,
     const animation::Skeleton &skeleton = context.skeletons[humanoidIndex];
     for (int bodyPart = 0; bodyPart < state::BODY_PARTS - 1; bodyPart++)
         humanoid.nodes[skeleton.nodeMap[bodyPart]].rotation = Quaternion();
+    // GRF: the root moves without an invalidation, and the joints' invalidations read it.
+    ReadRootCache(world, humanoidIndex, humanoid.nodes[0]);
     return true;
 }
 
@@ -138,7 +140,8 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidSelectRetainAnimation(World &world,
     query.outgoingVelocity = e_Velocity_Idle;
     // The crude selection filters by the incoming retain state only.
     query.incomingRetainState = animation::STRING_RIGHT_ELBOW;
-    AnimationList candidates;
+    WarpLocal<AnimationList> candidatesLocal;
+    AnimationList &candidates = *candidatesLocal;
     CrudeSelection(selector.SC(), query, candidates);
     if (candidates.empty()) return Unsupported("no animation retains the ball for the restart");
     selector.SetMovementSimilarityPredicate(Vector3(0, -1, 0), e_Velocity_Idle);
@@ -654,7 +657,13 @@ CUJU_FUNCTION_NO_INLINE inline bool PlayerSendOff(World &world, const Simulation
     state::MatchState &match = world.serialized.match;
     state::PlayerState &playerState = match.players[player];
     const int teamID = world.playerTeamID[player];
-    RandomInRange(world.serialized.rng, 0, 3);  // GRF: the referee's message draws once.
+    // GRF: the message draws its wording.
+    const float wording = RandomInRange(world.serialized.rng, 0, 3);
+    SpamMessage(world,
+                wording < 1.0f   ? e_Message_EarlyShower
+                : wording < 2.0f ? e_Message_SentOff
+                                 : e_Message_AllOver,
+                teamID, player);
     auto currentPosition = [&]() { return playerState.base.humanoid.spatialState.position; };
     if (!PlayerResetSituation(world, context, player, currentPosition())) return false;
     if (playerState.base.externalController >= 0) {
@@ -672,6 +681,7 @@ CUJU_FUNCTION_NO_INLINE inline bool PlayerSendOff(World &world, const Simulation
     if (!PlayerResetSituation(world, context, player, currentPosition())) return false;
     playerState.base.isActive = false;
     playerState.base.externalController = -1;
+    world.humanoidHidden[player] = true;
     TeamByID(world, teamID).designatedTeamPossessionPlayer =
         GetClosestPlayer(world, context, teamID, BallPredict(match.ball, 0).Get2D(), false);
     if (Formation(world, context, player).role == e_PlayerRole_Goalkeeper) {

@@ -36,6 +36,7 @@ __global__ void CUJU_ENVIRONMENT_KERNEL_BOUNDS ResetKernel(EnvironmentBuffers bu
     const int environment = EnvironmentIndex();
     if (environment >= buffers.environmentCount || (mask && !mask[environment])) return;
     WarpInitialize();
+    WarpWorkInitialize(buffers.workAreas + environment);
     ResetAndWriteEnvironment(buffers, variants, environment, seeds, reverse);
 }
 
@@ -47,6 +48,7 @@ __global__ void CUJU_ENVIRONMENT_KERNEL_BOUNDS StepKernel(EnvironmentBuffers buf
     const int environment = EnvironmentIndex();
     if (environment >= buffers.environmentCount) return;
     WarpInitialize();
+    WarpWorkInitialize(buffers.workAreas + environment);
     StepEnvironment(buffers, variants, environment, actions, autoReset);
 }
 
@@ -59,6 +61,14 @@ __global__ void OutputKernel(EnvironmentBuffers buffers, const uint8_t *mask, bo
     const EnvironmentSlot &slot = buffers.slots[environment];
     if (agent >= slot.leftAgents + slot.rightAgents) return;
     WriteAgentOutputs(buffers, environment, agent, afterStep);
+}
+
+// One thread per requested environment.
+__global__ void RenderStateKernel(EnvironmentBuffers buffers, Variants variants,
+                                  RenderBuffers render) {
+    const int output = blockIdx.x * blockDim.x + threadIdx.x;
+    if (output >= render.count) return;
+    WriteRenderState(buffers, variants, render, output);
 }
 
 // Device-memory buffers. `Reset` and `Step` launch on the caller's stream without waiting.
@@ -130,12 +140,16 @@ public:
         for (const cudaError_t status : {cudaGetLastError(), cudaDeviceSynchronize()}) {
             // The driver reserves the local memory of every thread that the GPU runs at once.
             if (status == cudaErrorMemoryAllocation) {
-                size_t stack = 0;
-                cudaDeviceGetLimit(&stack, cudaLimitStackSize);
-                throw OutOfMemory("the local memory of the kernels, about " + ByteCount(stack) +
-                                      " for each of the " + std::to_string(ResidentThreads()) +
-                                      " threads that the GPU runs at once,",
-                                  stack * ResidentThreads(), held_);
+                cudaGetLastError();
+                const size_t perThread = KernelLocalBytes();
+                size_t limit = 0;
+                cudaDeviceGetLimit(&limit, cudaLimitStackSize);
+                cudaGetLastError();
+                throw OutOfMemory(
+                    "the local memory of the kernels, " + ByteCount(perThread) +
+                        " for each of the " + std::to_string(ResidentThreads()) +
+                        " threads that the GPU runs at once,",
+                    (perThread > limit ? perThread - limit : perThread) * ResidentThreads(), held_);
             }
             CheckCuda(status, "cannot launch the kernels of cuju");
         }
@@ -146,15 +160,21 @@ public:
     // memory of the kernel and keeps it, so this is 0 once a batch has launched on the device.
     static size_t LocalMemoryBytes() {
         RequireKernels();
-        size_t perThread = 0, limit = 0;
+        const size_t perThread = KernelLocalBytes();
+        size_t limit = 0;
+        CheckCuda(cudaDeviceGetLimit(&limit, cudaLimitStackSize), "cannot read the CUDA stack");
+        return perThread > limit ? (perThread - limit) * ResidentThreads() : 0;
+    }
+    // The local memory of one thread of the largest kernel.
+    static size_t KernelLocalBytes() {
+        size_t perThread = 0;
         for (const void *kernel :
              {(const void *)ResetKernel, (const void *)StepKernel, (const void *)OutputKernel}) {
             cudaFuncAttributes attributes;
             CheckCuda(cudaFuncGetAttributes(&attributes, kernel), "cannot read the CUDA kernels");
             perThread = std::max(perThread, attributes.localSizeBytes);
         }
-        CheckCuda(cudaDeviceGetLimit(&limit, cudaLimitStackSize), "cannot read the CUDA stack");
-        return perThread > limit ? (perThread - limit) * ResidentThreads() : 0;
+        return perThread;
     }
     void Synchronize(Stream stream) const { CUJU_CUDA_CHECK(cudaStreamSynchronize(stream)); }
     void SynchronizeAll() const { CUJU_CUDA_CHECK(cudaDeviceSynchronize()); }
@@ -169,6 +189,12 @@ public:
               bool autoReset, Stream stream) {
         StepKernel<<<EnvironmentGrid(buffers.environmentCount), threadsPerBlock_, 0, stream>>>(
             buffers, variants, actions, autoReset);
+        CUJU_CUDA_CHECK(cudaGetLastError());
+    }
+    void RenderStates(const EnvironmentBuffers &buffers, const Variants &variants,
+                      const RenderBuffers &render) {
+        const int grid = std::max(1, (render.count + 63) / 64);
+        RenderStateKernel<<<grid, 64>>>(buffers, variants, render);
         CUJU_CUDA_CHECK(cudaGetLastError());
     }
     void Outputs(const EnvironmentBuffers &buffers, const uint8_t *mask, bool afterStep) {

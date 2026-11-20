@@ -44,7 +44,7 @@ const char *cuju_last_error() { return lastError.c_str(); }
 const char *cuju_backend() { return CUJU_BACKEND_NAME; }
 
 // `cuju_environment_create` refuses a `cuju_configuration` of another version.
-#define CUJU_CONFIGURATION_VERSION 2
+#define CUJU_CONFIGURATION_VERSION 3
 
 struct cuju_configuration {
     int version;                // `CUJU_CONFIGURATION_VERSION`
@@ -92,6 +92,11 @@ struct cuju_configuration {
     // On the CPU nonzero gives every buffer whole pages of its own, so that `cudaHostRegister` can
     // pin the output buffers one by one.
     int page_aligned;
+    // GRF's render mode of every environment, stored for the renderer, and GRF's `animations` flag
+    // of `GameEnv::reset`, nonzero for the referee animations of every reset, until
+    // `cuju_environment_set_render`.
+    int render_mode;
+    int referee_animations;
 };
 
 // Creates a batch, which `cuju_environment_destroy` frees.
@@ -140,6 +145,8 @@ void *cuju_environment_create(const cuju_configuration *settings) {
         configuration.pinThreads = settings->pin_threads != 0;
         configuration.numa = settings->numa != 0;
         configuration.pageAligned = settings->page_aligned != 0;
+        configuration.renderMode = settings->render_mode;
+        configuration.refereeAnimations = settings->referee_animations != 0;
         lastError.clear();
         if (memoryEstimate) {
             using Backend =
@@ -247,6 +254,20 @@ void cuju_environment_difficulty(void *environment, float *difficulty) {
 // Starts the next episode of every environment and waits for it. `seeds` and `reverse` are host
 // arrays of one entry per environment, null to draw the seeds and to follow them. Only the first
 // reset of an environment reads `reverse`, a `reverseTeamProcessing` flag of 0 or 1.
+// Sets the render mode and the referee animations of every later reset of each environment whose
+// `mask` entry, `[environment_count]` host bytes, is nonzero, or of every environment for a null
+// `mask`. The episodes under way keep the flags of their reset.
+int cuju_environment_set_render(void *environment, const unsigned char *mask, int render_mode,
+                                int referee_animations) {
+    try {
+        static_cast<BatchEnvironment *>(environment)
+            ->SetRender(mask, render_mode, referee_animations != 0);
+        return 0;
+    } catch (const std::exception &exception) {
+        return Fail(exception);
+    }
+}
+
 int cuju_environment_reset(void *environment, const unsigned int *seeds, const int *reverse,
                            void *stream) {
     try {
@@ -403,6 +424,25 @@ int cuju_environment_set_state(void *environment, int index, const char *bytes,
     }
 }
 
+// Writes the role of each player of environment `index`, an `e_PlayerRole`, into `roles`, room for
+// `capacity`, the left team's players then the right team's in the order of the raw observation,
+// and returns their count, or -1 on failure. A goalkeeper sent off hands its formation entry and
+// role to a teammate outside the state, and the roles follow the hand-over. It copies outside the
+// caller's streams.
+int cuju_environment_roles(void *environment, int index, int *roles, int capacity) {
+    try {
+        int32_t written[cuju::state::MAXIMUM_PLAYERS];
+        const int count = static_cast<BatchEnvironment *>(environment)->Roles(index, written);
+        if (count > capacity)
+            throw std::invalid_argument("expected room for " + std::to_string(count) +
+                                        " roles, found " + std::to_string(capacity));
+        for (int player = 0; player < count; player++) roles[player] = written[player];
+        return count;
+    } catch (const std::exception &exception) {
+        return Fail(exception);
+    }
+}
+
 // Writes the observation stack of environment `index`, as a stacked state of GRF holds it in its
 // `FrameStack`, after `cuju_environment_set_state`. `frames` holds the environment's agents, the
 // oldest frame first along the last axis, `[agents][115 * stack]` `float32` for `name` `simple115`
@@ -520,6 +560,61 @@ const char *cuju_environment_scenario(void *environment, int bundle) {
     const BatchEnvironment *batch = static_cast<BatchEnvironment *>(environment);
     if (bundle < 0 || bundle >= (int)batch->Bundles().size()) return nullptr;
     return batch->Bundles()[bundle].scenario.c_str();
+}
+
+// The bytes of one render event, an `int32` kind, 1 for GRF's `StartMatch` of a new match and 2
+// for a render, the match's `uint32` game_engine_random_seed, and the RenderState.
+unsigned long long cuju_environment_render_event_size() { return sizeof(cuju::batch::RenderEvent); }
+
+// From the next reset on, records the renders of every environment in render mode, at most
+// `capacity` events a call of a reset or a step.
+int cuju_environment_enable_render_events(void *environment, int capacity) {
+    try {
+        static_cast<BatchEnvironment *>(environment)->EnableRenderEvents(capacity);
+        return 0;
+    } catch (const std::exception &exception) {
+        return Fail(exception);
+    }
+}
+
+// Moves the render events of environment `index` since the last move into `events`, host memory
+// with room for `capacity`, and writes their count into `count`, -1 when a call made more events
+// than the batch records. Waits for the device.
+int cuju_environment_render_events(void *environment, int index, void *events, int capacity,
+                                   int *count) {
+    try {
+        *count =
+            static_cast<BatchEnvironment *>(environment)
+                ->RenderEventsOf(index, static_cast<cuju::batch::RenderEvent *>(events), capacity);
+        return 0;
+    } catch (const std::exception &exception) {
+        return Fail(exception);
+    }
+}
+
+// Fills `states`, `count` RenderStates in host memory, `size` bytes, with the environments of
+// `environments`, a host array, as GRF's graphics side reads them at a render, and `processed`,
+// `count` host entries, with each one's count of state saves and loads, after each of which GRF
+// uploads the nets again. On CUDA the extraction runs on the device. Each environment carries its
+// RenderState from call to call, as GRF's widgets do, so a renderer calls this after each step it
+// draws, and after a render-mode environment's `get_state` or `set_state`.
+int cuju_environment_render_states(void *environment, const int *environments, int count,
+                                   void *states, unsigned long long size, unsigned int *processed) {
+    try {
+        cuju::DefaultFloatingPoint floatingPoint;
+        if (count < 0 || size != (unsigned long long)count * sizeof(cuju::render::RenderState))
+            throw std::invalid_argument("expected " + std::to_string(count) + " RenderStates of " +
+                                        std::to_string(sizeof(cuju::render::RenderState)) +
+                                        " bytes, version " +
+                                        std::to_string(cuju::render::RENDER_STATE_VERSION) +
+                                        ", found " + std::to_string(size) + " bytes");
+        static_cast<BatchEnvironment *>(environment)
+            ->RenderStates(environments, count, static_cast<cuju::render::RenderState *>(states),
+                           processed);
+        return 0;
+    } catch (const std::exception &exception) {
+        return Fail(exception);
+    }
 }
 
 }  // extern "C"

@@ -1,13 +1,15 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// `libcuju_cpu.so`, the C API of `environment_api.h` over the CPU batch.
+// `libcuju_cpu.so`, the C API of `environment_api.h` over the CPU batch, and the engine of
+// `engine_api.h`.
 #include "cuju/cpu/batch_environment.h"
 
 using cuju::cpu::BatchEnvironment;
 #define CUJU_BACKEND_NAME "cpu"
 
 #include "environment_api.h"
+#include "engine_api.h"
 #include "scenario_api.h"
 #include "state_api.h"
 

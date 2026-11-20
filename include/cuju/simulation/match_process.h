@@ -215,6 +215,10 @@ CUJU_FUNCTION_NO_INLINE inline bool MatchProcess(World &world, const SimulationC
             // order.
             const int scoringTeam = firstTeamGoal ? second : first;
             match.goalCount[scoringTeam == first ? 0 : 1] += 1;
+            // GRF: `SetGoalCount`'s caption changes only while rendering.
+            if (world.renderMode == e_Render_On)
+                world.scoreboardGoals[scoringTeam == first ? 0 : 1] =
+                    match.goalCount[scoringTeam == first ? 0 : 1];
             match.goalScored = true;
             match.lastGoalTeam = TeamSlot(world, scoringTeam);
             if (!TeamUpdateTactics(world, scoringTeam)) return ok = false;
@@ -227,6 +231,12 @@ CUJU_FUNCTION_NO_INLINE inline bool MatchProcess(World &world, const SimulationC
                 ownGoal = false;
             match.lastGoalScorer =
                 TeamByID(world, ownGoal ? 1 - goalTeam : goalTeam).lastTouchPlayer;
+            const bool scorer = match.lastGoalScorer != -1;
+            SpamMessage(world,
+                        ownGoal  ? (scorer ? e_Message_OwnGoal : e_Message_OwnGoalNoScorer)
+                        : scorer ? e_Message_Goal
+                                 : e_Message_GoalNoScorer,
+                        goalTeam, match.lastGoalScorer, 4000);
         }
     }
 
@@ -342,18 +352,26 @@ CUJU_FUNCTION inline bool MatchFetchPutBuffers(World &world, const SimulationCon
     const int first = world.FirstTeamID(), second = 1 - first;
     const animation::Skeleton *skeletons[animation::MAXIMUM_PUT_HUMANOIDS];
     state::HumanoidState *humanoids[animation::MAXIMUM_PUT_HUMANOIDS];
+    int indices[animation::MAXIMUM_PUT_HUMANOIDS];
     int count = 0;
     for (int team : {first, second})
         for (int player : TeamActivePlayers(world, team)) {
             skeletons[count] = &context.skeletons[player];
+            indices[count] = player;
             humanoids[count++] = &world.serialized.match.players[player].base.humanoid;
         }
     const int playerCount = world.serialized.match.playerCount;
     for (int official = 0; official < 3; official++) {
         skeletons[count] = &context.skeletons[playerCount + official];
+        indices[count] = playerCount + official;
         humanoids[count++] = &world.serialized.match.officials[official].humanoid;
     }
     animation::FetchPutBuffersBatch(*context.animations, skeletons, humanoids, count);
+    // GRF: `FetchPutBuffers` ends with an invalidation of the root.
+    if (world.renderMode)
+        WarpFor(count, [&](int index) {
+            InvalidateRoot(world, indices[index], humanoids[index]->nodes[0]);
+        });
     return true;
 }
 

@@ -228,7 +228,8 @@ CUJU_FUNCTION_NO_INLINE inline void RefereeRequestCommand(World &world, int offi
             command.desiredFunctionType = e_FunctionType_Movement;
             command.useDesiredMovement = true;
             command.useDesiredLookAt = true;
-            ForceField forceField;
+            WarpLocal<ForceField> forceFieldLocal;
+            ForceField &forceField = *forceFieldLocal;
             {
                 ForceSpot spot;
                 spot.origin = BallAveragePosition(world, 2000).Get2D() * 0.6f;
@@ -314,7 +315,8 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidBaseProcess(World &world,
         humanoid.interruptAnimation = e_InterruptAnimation_Switch;
 
     if (humanoid.interruptAnimation != e_InterruptAnimation_None) {
-        CommandQueue commandQueue;
+        WarpLocal<CommandQueue> commandQueueLocal;
+        CommandQueue &commandQueue = *commandQueueLocal;
         if (humanoid.interruptAnimation == e_InterruptAnimation_Trip && humanoid.tripType != 0) {
             AddTripCommandToQueue(humanoid, commandQueue, humanoid.tripType);
             humanoid.tripType = 0;

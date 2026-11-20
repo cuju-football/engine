@@ -171,7 +171,8 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidProcess(
     }
 
     if (humanoid.interruptAnimation != e_InterruptAnimation_None) {
-        CommandQueue commandQueue;
+        WarpLocal<CommandQueue> commandQueueLocal;
+        CommandQueue &commandQueue = *commandQueueLocal;
         if (humanoid.interruptAnimation == e_InterruptAnimation_Trip && humanoid.tripType != 0) {
             AddTripCommandToQueue(humanoid, commandQueue, humanoid.tripType);
             humanoid.tripType = 0;
@@ -288,9 +289,8 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidProcess(
                currentAnimation.rotationSmuggle.end.value();
     };
     auto outgoingMovementNow = [&]() {
-        PositionList positions;
-        for (const Vector3 &position : currentAnimation.positions) positions.push_back(position);
-        return Selector::CalculateOutgoingMovement(positions);
+        return Selector::CalculateOutgoingMovement(currentAnimation.positions.elements,
+                                                   currentAnimation.positions.count);
     };
     if (controlledBallCollision && currentAnimation.touchFrame == -1) {
         Vector3 currentBallMomentum = world.serialized.match.ball.momentum;
@@ -557,7 +557,8 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidProcess(
             if (bodyPart < 0) CUJU_FATAL("an animation that retains the ball names no body part");
             const animation::Skeleton &skeleton = context.skeletons[player];
             animation::Derived derivedNodes[state::HUMANOID_NODES];
-            animation::DeriveNodes(skeleton, humanoid.nodes, derivedNodes);
+            DeriveHumanoidNodes(world, player, skeleton, humanoid.nodes, derivedNodes);
+            ReadRootCache(world, player, humanoid.nodes[0]);
             const animation::Derived &node = derivedNodes[skeleton.nodeMap[bodyPart]];
             BallTouch(world, context, Vector3(0));
             BallSetRotation(world, 0, 0, 0, 1.0f);

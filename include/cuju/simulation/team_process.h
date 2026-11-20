@@ -39,6 +39,14 @@ CUJU_FUNCTION inline bool DynamicPlayerSelection(const World &world) {
              (right == scenario.rightAgents || scenario.rightAgents == 0));
 }
 
+// GRF: `Team::Process` reads the cached value of the scenario.
+CUJU_FUNCTION inline bool TeamDynamicPlayerSelection(World &world) {
+    const int cached = world.dynamicPlayerSelection;
+    if (cached < 0) return DynamicPlayerSelection(world);
+    if (cached >= 2) world.dynamicPlayerSelection = (int8_t)(cached - 2);
+    return (cached & 1) != 0;
+}
+
 #if defined(__CUDACC__)
 // nvcc sees a read of `sortedDistances` before a write, but the sort reads only slots it wrote.
 #pragma nv_diag_suppress 549
@@ -273,7 +281,7 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamProcess(World &world, const SimulationCo
             }
         }
     } else if (match.actualTimeMilliseconds >= 2000) {
-        if (DynamicPlayerSelection(world))
+        if (TeamDynamicPlayerSelection(world))
             for (int gamerIndex = 0; gamerIndex < team.humanGamers.count; gamerIndex++)
                 if (team.humanGamers[gamerIndex].selectedPlayer >= 0)
                     HumanGamerSetSelectedPlayer(world, GlobalGamerIndex(world, teamID, gamerIndex),

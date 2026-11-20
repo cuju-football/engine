@@ -14,6 +14,7 @@
 #include "../animation/animation_derived.h"
 #include "../animation/skeleton.h"
 #include "batch_core.h"
+#include "render_states.h"
 #include "state_difference.h"
 #include "tables.h"
 
@@ -203,6 +204,7 @@ public:
             buffers_.finalRaw = Allocate<uint8_t>(buffers_.rawLayout.bytes);
         }
         if (!Backend::HOST_MEMORY) actions_ = Allocate<int32_t>((size_t)count * agents);
+        if (!Backend::HOST_MEMORY) buffers_.workAreas = Allocate<WorkArea>(count);
         outputMask_ = Allocate<uint8_t>(count);
         std::vector<EnvironmentSlot> slots(count);
         std::vector<uint8_t> agentMask((size_t)count * agents);
@@ -214,6 +216,8 @@ public:
             slot.fixedSeed =
                 configuration.fixedSeeds.empty() ? -1 : configuration.fixedSeeds[environment];
             slot.episodeOffset = configuration.episodeNumber;
+            slot.renderMode = configuration.renderMode;
+            slot.refereeAnimations = configuration.refereeAnimations ? 1 : 0;
             slot.bundle = assignment[environment];
             slot.leftAgents = bundles_[slot.bundle].leftAgents;
             slot.rightAgents = bundles_[slot.bundle].rightAgents;
@@ -352,6 +356,21 @@ public:
         if constexpr (Backend::HOST_MEMORY) backend_.Wait();
     }
 
+    // Every later reset of each environment whose `mask` entry is nonzero, or of all for a null
+    // `mask`, a host array `[environmentCount]`, plays with these flags. `renderMode` is stored for
+    // the renderer. GRF: `refereeAnimations` is the `animations` flag of `GameEnv::reset`.
+    void SetRender(const uint8_t *mask, int renderMode, bool refereeAnimations) {
+        const int count = buffers_.environmentCount;
+        std::vector<EnvironmentSlot> slots(count);
+        backend_.ToHost(slots.data(), buffers_.slots, sizeof(EnvironmentSlot) * count);
+        for (int environment = 0; environment < count; environment++) {
+            if (mask && !mask[environment]) continue;
+            slots[environment].renderMode = renderMode;
+            slots[environment].refereeAnimations = refereeAnimations ? 1 : 0;
+        }
+        backend_.ToDevice(buffers_.slots, slots.data(), sizeof(EnvironmentSlot) * count);
+    }
+
     // Every later reset writes `difficulty`, a host array `[environmentCount][2]`, left then right,
     // from 0 to 1, or negative for the scenario's. Above 1 or NaN throws `std::invalid_argument`.
     // GRF: difficulty scales a team's statistics and, as it falls, slows its AI players' reactions.
@@ -380,6 +399,105 @@ public:
         return side == 0 ? scenario.leftTeamDifficulty : scenario.rightTeamDifficulty;
     }
 
+    // Synchronous. Writes the `e_PlayerRole` that each player of `environment` plays, the left
+    // team's then the right team's, each in state order as the observation lists them, and returns
+    // their count. GRF: the formation entry of a goalkeeper sent off passes to a teammate in team
+    // data outside the state, so the role follows that hand-over.
+    int Roles(int environment, int32_t *roles) {
+        CheckEnvironment(environment);
+        const simulation::World &world = buffers_.worlds[environment];
+        int playerCount = 0;
+        int playerTeamID[state::MAXIMUM_PLAYERS];
+        int8_t formationOverride[state::MAXIMUM_PLAYERS];
+        EnvironmentSlot slot;
+        backend_.ToHost(&playerCount, &world.serialized.match.playerCount, sizeof(playerCount));
+        backend_.ToHost(playerTeamID, world.playerTeamID, sizeof(playerTeamID));
+        backend_.ToHost(formationOverride, world.formationOverride, sizeof(formationOverride));
+        backend_.ToHost(&slot, buffers_.slots + environment, sizeof(slot));
+        const simulation::StaticData &staticData = *HostContext(slot.variant).staticData;
+        int count = 0;
+        for (int teamID = 0; teamID < 2; teamID++)
+            for (int player = 0; player < playerCount; player++) {
+                if (playerTeamID[player] != teamID) continue;
+                const int source = simulation::FormationSource(formationOverride[player], player);
+                roles[count++] = staticData.formation[source].role;
+            }
+        return count;
+    }
+
+    // Synchronous. Fills `out`, a host array of `count` RenderStates, with the environments of
+    // `indices`, a host array, as GRF's graphics side reads them at a render, and `processed`,
+    // a host array of `count`, with each one's count of saves and loads, which redraw the nets.
+    // Each environment carries its RenderState from call to call and starts it afresh at each
+    // reset, so a call follows every step that GRF renders.
+    void RenderStates(const int32_t *indices, int count, render::RenderState *out,
+                      uint32_t *processed) {
+        const int environments = buffers_.environmentCount;
+        for (int output = 0; output < count; output++) CheckEnvironment(indices[output]);
+        if (count <= 0) return;
+        if (!renderStates_) {
+            renderStates_ = Allocate<render::RenderState>(environments);
+            renderEpisodes_ = Allocate<int32_t>(environments);
+            backend_.Fill(renderEpisodes_, 0xff, sizeof(int32_t) * environments);
+            const std::vector<uint8_t> mirrored = AnimationMirroredNames(store_->names);
+            uint8_t *table = Allocate<uint8_t>(mirrored.size());
+            backend_.ToDevice(table, mirrored.data(), mirrored.size());
+            animationMirrored_ = table;
+        }
+        if (count > renderCapacity_) {
+            renderIndices_ = Allocate<int32_t>(count);
+            renderOut_ = Allocate<render::RenderState>(count);
+            renderProcessed_ = Allocate<uint32_t>(count);
+            renderCapacity_ = count;
+        }
+        backend_.ToDevice(renderIndices_, indices, sizeof(int32_t) * count);
+        RenderBuffers render{renderStates_, renderEpisodes_, animationMirrored_, renderIndices_,
+                             count,         renderOut_,      renderProcessed_};
+        backend_.RenderStates(buffers_, variants_, render);
+        backend_.ToHost(out, renderOut_, sizeof(render::RenderState) * count);
+        backend_.ToHost(processed, renderProcessed_, sizeof(uint32_t) * count);
+    }
+
+    // From the next reset on, records every environment's renders in render mode, at most
+    // `capacity` events a call, for a renderer that draws them in order after each call.
+    void EnableRenderEvents(int capacity) {
+        if (capacity < 1)
+            throw std::invalid_argument("expected a capacity of at least one render event, found " +
+                                        std::to_string(capacity));
+        if (buffers_.renderEvents.events) return;
+        const int environments = buffers_.environmentCount;
+        RenderEvents events{};
+        events.events = Allocate<RenderEvent>((size_t)environments * capacity);
+        events.counts = Allocate<int32_t>(environments);
+        events.states = Allocate<render::RenderState>(environments);
+        const std::vector<uint8_t> mirrored = AnimationMirroredNames(store_->names);
+        uint8_t *table = Allocate<uint8_t>(mirrored.size());
+        backend_.ToDevice(table, mirrored.data(), mirrored.size());
+        events.animationMirrored = table;
+        events.capacity = capacity;
+        buffers_.renderEvents = events;
+    }
+    // Synchronous. Moves the render events of `environment` since the last move into `out`, room
+    // for `capacity`, and returns their count, or -1 when a call made more than the batch records.
+    int RenderEventsOf(int environment, RenderEvent *out, int capacity) {
+        CheckEnvironment(environment);
+        const RenderEvents &events = buffers_.renderEvents;
+        if (!events.events) throw std::invalid_argument("the batch records no render events");
+        backend_.SynchronizeAll();
+        int32_t count = 0;
+        backend_.ToHost(&count, events.counts + environment, sizeof(count));
+        if (count > capacity)
+            throw std::invalid_argument("expected room for " + std::to_string(count) +
+                                        " render events, found " + std::to_string(capacity));
+        if (count > 0)
+            backend_.ToHost(out, events.events + (size_t)environment * events.capacity,
+                            sizeof(RenderEvent) * count);
+        const int32_t none = 0;
+        backend_.ToDevice(events.counts + environment, &none, sizeof(none));
+        return count;
+    }
+    int RenderEventCapacity() const { return buffers_.renderEvents.capacity; }
+
     // Synchronous. Also copies out `core` and `slot`.
     std::string GetState(int environment, simulation::EnvironmentCore &core,
                          EnvironmentSlot &slot) {
@@ -390,12 +508,21 @@ public:
         backend_.ToHost(&slot, buffers_.slots + environment, sizeof(slot));
         simulation::StateCodec codec;
         codec.freeControllerCount = Variant(slot.variant).freeControllerCount;
-        return codec.SaveFrame(*world, 0, nullptr);
+        std::string bytes = codec.SaveFrame(*world, 0, nullptr);
+        // GRF: a save marks every node of a rendering match to compute afresh.
+        if (world->renderMode) {
+            simulation::ProcessStateMarks(*world);
+            backend_.ToDevice(buffers_.worlds[environment].rootCaches, world->rootCaches,
+                              sizeof(world->rootCaches));
+            backend_.ToDevice(&buffers_.worlds[environment].stateProcessed, &world->stateProcessed,
+                              sizeof(world->stateProcessed));
+        }
+        return bytes;
     }
 
-    // Synchronous. The state's scenario picks the variant to continue from. The reward is 0 and
-    // done clear until the next step. `collected` may be null. Bytes of no state, or of another
-    // scenario or difficulty, throw `std::invalid_argument`.
+    // Synchronous. The state's scenario and the reset's parity pick the variant to continue from.
+    // The reward is 0 and done clear until the next step. `collected` may be null. Bytes of no
+    // state, or of another scenario or difficulty, throw `std::invalid_argument`.
     void SetState(int environment, const std::string &bytes, int previousScoreDifference,
                   int previousGameMode, int previousBallOwnedTeam, const int32_t *collected) {
         CheckEnvironment(environment);
@@ -434,11 +561,22 @@ public:
                 std::to_string(expected[0]) + " and " + std::to_string(expected[1]) + ", found " +
                 std::to_string(loaded.leftTeamDifficulty) + " and " +
                 std::to_string(loaded.rightTeamDifficulty));
-        const int variant = bundle * 4 + parity;
+        // GRF: the state's order of the teams loads into the scenario, while the players keep the
+        // formation entries of the reset in their `TeamData`, so an environment that was reset
+        // plays on with the variant of the state's order and of its reset's parity.
+        EnvironmentSlot current;
+        backend_.ToHost(&current, buffers_.slots + environment, sizeof(current));
+        int index = parity;
+        if (current.episode > 0) index = (parity & 2) | ((current.variant - bundle * 4) & 1);
+        const int variant = bundle * 4 + index;
         simulation::EnvironmentCore core;
         core.previousScoreDifference = previousScoreDifference;
         core.previousGameMode = previousGameMode;
         core.previousBallOwnedTeam = previousBallOwnedTeam;
+        // GRF: a sent-off keeper's hand-over lives in team data outside the state, so it carries
+        // over, and the observation after the load already reads the roles through it.
+        backend_.ToHost(world->formationOverride, buffers_.worlds[environment].formationOverride,
+                        sizeof(world->formationOverride));
         simulation::EnvironmentGetState(*world, HostContext(variant), core.observation);
         EnvironmentSlot slot;
         backend_.ToHost(&slot, buffers_.slots + environment, sizeof(slot));
@@ -452,10 +590,23 @@ public:
                                       leftTeam ? agent : agent - slot.leftAgents,
                                       slot.stickyActions[agent]);
         }
-        // GRF: a sent-off keeper's hand-over lives in team data outside the state, so it carries
-        // over.
-        backend_.ToHost(world->formationOverride, buffers_.worlds[environment].formationOverride,
-                        sizeof(world->formationOverride));
+        // GRF: the referee's flag, fixed at the match's reset, carries over as well.
+        backend_.ToHost(&world->refereeAnimations, &buffers_.worlds[environment].refereeAnimations,
+                        sizeof(world->refereeAnimations));
+        // So do its render mode, its message caption, its scoreboard, the bodies it hid and its
+        // light, and the load marks every root cache to compute afresh.
+        backend_.ToHost(&world->renderMode, &buffers_.worlds[environment].renderMode,
+                        sizeof(world->renderMode));
+        backend_.ToHost(&world->message, &buffers_.worlds[environment].message,
+                        sizeof(world->message));
+        backend_.ToHost(&world->draws, &buffers_.worlds[environment].draws, sizeof(world->draws));
+        backend_.ToHost(world->scoreboardGoals, buffers_.worlds[environment].scoreboardGoals,
+                        sizeof(world->scoreboardGoals));
+        backend_.ToHost(world->humanoidHidden, buffers_.worlds[environment].humanoidHidden,
+                        sizeof(world->humanoidHidden));
+        backend_.ToHost(&world->stateProcessed, &buffers_.worlds[environment].stateProcessed,
+                        sizeof(world->stateProcessed));
+        world->stateProcessed++;
         backend_.ToDevice(buffers_.worlds + environment, world.get(), sizeof(simulation::World));
         backend_.ToDevice(buffers_.cores + environment, &core, sizeof(core));
         backend_.ToDevice(buffers_.slots + environment, &slot, sizeof(slot));
@@ -601,6 +752,12 @@ private:
     std::unique_ptr<animation::AnimationStore> store_;
     std::vector<animation::AnimationDerived> derived_;
     Variants variants_{};
+    // The RenderStates, made at the first call of `RenderStates`.
+    render::RenderState *renderStates_ = nullptr, *renderOut_ = nullptr;
+    int32_t *renderEpisodes_ = nullptr, *renderIndices_ = nullptr;
+    uint32_t *renderProcessed_ = nullptr;
+    const uint8_t *animationMirrored_ = nullptr;
+    int renderCapacity_ = 0;
     int players_ = 0;
     std::vector<bool> started_;
     int unstarted_ = 0;
