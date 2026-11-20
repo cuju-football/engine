@@ -1,0 +1,225 @@
+// Copyright 2026 The cuju Authors
+// SPDX-License-Identifier: Apache-2.0
+//
+// The floating-point environment of llvmpipe's stages. Fragment shading, sampling, the vertex
+// shader, clipping and most of setup run with x86 FTZ and DAZ on, the RGBA16F store and blend
+// window and the setup of clipped chunks run under IEEE 754. Rounding is to nearest even in both.
+//
+// Two implementations give the same bits. On x86-64 with SSE4.1 and FMA the operations of namespace
+// `ftz` are the plain instructions, and `FpScope` sets MXCSR. Elsewhere, or with
+// CUJU_RENDER_SOFT_FTZ defined, they are the software model of namespace `fpmodel`, which equals
+// the hardware of an AMD Zen 3 core on every input: DAZ on every input, and a flush to signed zero
+// of every result that is tiny after rounding.
+//
+// An `FpScope` governs the arithmetic of the functions called inside it. Open it outside the
+// function whose arithmetic it governs, since a compiler may move arithmetic across the scope's
+// own statements in the same function. Each thread needs its own scope.
+
+#ifndef CUJU_RENDER_FPENV_H
+#define CUJU_RENDER_FPENV_H
+
+#include <cmath>
+#include <cstdint>
+
+#include "numerics.h"
+
+#if !defined(CUJU_RENDER_SOFT_FTZ) && (defined(__x86_64__) || defined(_M_X64)) && \
+    (defined(__SSE4_1__) || defined(__AVX__)) &&                                  \
+    (defined(__FMA__) || (defined(_MSC_VER) && defined(__AVX2__)))
+#define CUJU_RENDER_HARDWARE_FTZ 1
+#include <immintrin.h>
+#else
+#define CUJU_RENDER_HARDWARE_FTZ 0
+#endif
+
+namespace cuju::render {
+
+enum class FpMode : std::uint8_t {
+    kFtzDaz,  // llvmpipe's workers and draw_vbo
+    kIeee,    // the RGBA16F store and blend window, the setup of clipped chunks
+};
+
+// Sets the mode for the current thread and restores the previous state on destruction. In the
+// software model it only makes sure that the hardware runs IEEE 754 with rounding to nearest.
+class FpScope {
+public:
+    explicit FpScope(FpMode mode);
+    ~FpScope();
+    FpScope(const FpScope &) = delete;
+    FpScope &operator=(const FpScope &) = delete;
+
+private:
+    std::uint64_t saved_;
+};
+
+// True when the operations of namespace `ftz` are the hardware's.
+constexpr bool kHardwareFtz = CUJU_RENDER_HARDWARE_FTZ != 0;
+
+// The software model. Every function here gives the same bits under any MXCSR or FPCR state that
+// rounds to nearest, except where noted.
+namespace fpmodel {
+
+inline bool IsSubnormal(float x) {
+    const std::uint32_t b = Bits(x);
+    return (b & 0x7F800000u) == 0 && (b & 0x7FFFFFu) != 0;
+}
+
+// DAZ: a subnormal input reads as zero of the same sign.
+inline float Daz(float x) {
+    const std::uint32_t b = Bits(x);
+    return (b & 0x7F800000u) == 0 ? FromBits(b & 0x80000000u) : x;
+}
+
+// FTZ of a result whose exact value is a subnormal, or equal to the rounded result.
+inline float FlushSubnormal(float r) {
+    const std::uint32_t b = Bits(r);
+    return (b & 0x7F800000u) == 0 ? FromBits(b & 0x80000000u) : r;
+}
+
+// x86 creates the negative quiet NaN 0xFFC00000 for an invalid operation. Other hosts may create
+// another one, so a NaN that no operand carried becomes x86's. The NaN passes through a volatile,
+// since a compiler that sees a NaN constant may fold later operations on it into a NaN of its own.
+inline float CreatedNan() {
+    volatile std::uint32_t bits = 0xFFC00000u;
+    return FromBits(bits);
+}
+inline float X86Nan(float r, float a, float b) {
+    return (r != r && a == a && b == b) ? CreatedNan() : r;
+}
+inline float X86Nan(float r, float a, float b, float c) {
+    return (r != r && a == a && b == b && c == c) ? CreatedNan() : r;
+}
+
+// The sum of two floats is exact whenever it is smaller than 2^-126, so a sum is tiny exactly when
+// its rounded value is subnormal.
+inline float Add(float a, float b) {
+    a = Daz(a);
+    b = Daz(b);
+    return X86Nan(FlushSubnormal(a + b), a, b);
+}
+inline float Sub(float a, float b) {
+    a = Daz(a);
+    b = Daz(b);
+    return X86Nan(FlushSubnormal(a - b), a, b);
+}
+
+// A product rounds to 2^-126 from exact values in [2^-126 - 2^-150, 2^-126 + 2^-150]. Tininess
+// after rounding flushes those below 2^-126 - 2^-151, which the exact product in double decides.
+inline float Mul(float a, float b) {
+    a = Daz(a);
+    b = Daz(b);
+    const float r = a * b;
+    const std::uint32_t m = Bits(r) & 0x7FFFFFFFu;
+    if (m == 0x00800000u) {
+        const double p = static_cast<double>(a) * static_cast<double>(b);
+        if (std::fabs(p) < 0x1p-126 - 0x1p-151) {
+            return FromBits(Bits(r) & 0x80000000u);
+        }
+        return r;
+    }
+    return X86Nan(FlushSubnormal(r), a, b);
+}
+
+// A quotient of floats below 2^-126 is below 2^-126 - 2^-150, so it is tiny exactly when its
+// rounded value is subnormal.
+inline float Div(float a, float b) {
+    a = Daz(a);
+    b = Daz(b);
+    return X86Nan(FlushSubnormal(a / b), a, b);
+}
+
+// A square root is never tiny.
+inline float Sqrt(float a) {
+    a = Daz(a);
+    const float r = std::sqrt(a);
+    return (r != r && a == a) ? CreatedNan() : r;
+}
+
+// fl(a * b + c) with one rounding, computed from doubles and integers, so that it holds on any host
+// and under any MXCSR. With `ftz`, inputs are read with DAZ and a result that is tiny after
+// rounding becomes zero of its sign, as vfmadd does under FTZ and DAZ.
+float Fma(float a, float b, float c, bool ftz);
+
+// minps and maxps under DAZ return the operand as DAZ read it.
+inline float MinPs(float a, float b) { return cuju::render::MinPs(Daz(a), Daz(b)); }
+inline float MaxPs(float a, float b) { return cuju::render::MaxPs(Daz(a), Daz(b)); }
+
+// roundps under DAZ, so the floor of a negative subnormal is -0 and the ceiling of a positive one
+// is +0.
+inline float Floor(float a) { return std::floor(Daz(a)); }
+inline float Ceil(float a) { return std::ceil(Daz(a)); }
+
+}  // namespace fpmodel
+
+// The operations of FTZ and DAZ stages. In the hardware build they are correct only inside an
+// FpScope(FpMode::kFtzDaz). Comparisons read their operands with DAZ.
+namespace ftz {
+
+#if CUJU_RENDER_HARDWARE_FTZ
+
+inline float Add(float a, float b) { return a + b; }
+inline float Sub(float a, float b) { return a - b; }
+inline float Mul(float a, float b) { return a * b; }
+inline float Div(float a, float b) { return a / b; }
+inline float Sqrt(float a) { return _mm_cvtss_f32(_mm_sqrt_ss(_mm_set_ss(a))); }
+inline float Fma(float a, float b, float c) {
+    return _mm_cvtss_f32(_mm_fmadd_ss(_mm_set_ss(a), _mm_set_ss(b), _mm_set_ss(c)));
+}
+inline float MinPs(float a, float b) {
+    return _mm_cvtss_f32(_mm_min_ss(_mm_set_ss(a), _mm_set_ss(b)));
+}
+inline float MaxPs(float a, float b) {
+    return _mm_cvtss_f32(_mm_max_ss(_mm_set_ss(a), _mm_set_ss(b)));
+}
+inline float Floor(float a) {
+    const __m128 x = _mm_set_ss(a);
+    return _mm_cvtss_f32(_mm_round_ss(x, x, _MM_FROUND_TO_NEG_INF | _MM_FROUND_NO_EXC));
+}
+inline float Ceil(float a) {
+    const __m128 x = _mm_set_ss(a);
+    return _mm_cvtss_f32(_mm_round_ss(x, x, _MM_FROUND_TO_POS_INF | _MM_FROUND_NO_EXC));
+}
+inline float Daz(float a) { return a; }
+
+#else
+
+inline float Add(float a, float b) { return fpmodel::Add(a, b); }
+inline float Sub(float a, float b) { return fpmodel::Sub(a, b); }
+inline float Mul(float a, float b) { return fpmodel::Mul(a, b); }
+inline float Div(float a, float b) { return fpmodel::Div(a, b); }
+inline float Sqrt(float a) { return fpmodel::Sqrt(a); }
+inline float Fma(float a, float b, float c) { return fpmodel::Fma(a, b, c, true); }
+inline float MinPs(float a, float b) { return fpmodel::MinPs(a, b); }
+inline float MaxPs(float a, float b) { return fpmodel::MaxPs(a, b); }
+inline float Floor(float a) { return fpmodel::Floor(a); }
+inline float Ceil(float a) { return fpmodel::Ceil(a); }
+// Operands of comparisons. The hardware applies DAZ to them itself.
+inline float Daz(float a) { return fpmodel::Daz(a); }
+
+#endif
+
+// Ordered and unordered comparisons as LLVM's fcmp names them.
+inline bool Olt(float a, float b) { return Daz(a) < Daz(b); }
+inline bool Ole(float a, float b) { return Daz(a) <= Daz(b); }
+inline bool Ogt(float a, float b) { return Daz(a) > Daz(b); }
+inline bool Oge(float a, float b) { return Daz(a) >= Daz(b); }
+inline bool Oeq(float a, float b) { return Daz(a) == Daz(b); }
+inline bool Ult(float a, float b) { return !(Daz(a) >= Daz(b)); }
+inline bool Ule(float a, float b) { return !(Daz(a) > Daz(b)); }
+inline bool Ugt(float a, float b) { return !(Daz(a) <= Daz(b)); }
+inline bool Uge(float a, float b) { return !(Daz(a) < Daz(b)); }
+inline bool Ueq(float a, float b) { return !(Daz(a) < Daz(b) || Daz(a) > Daz(b)); }
+
+}  // namespace ftz
+
+// The operations of IEEE stages, correct on every host inside an FpScope(FpMode::kIeee). `Fma` is
+// std::fma, correctly rounded with or without hardware FMA.
+namespace ieee {
+
+inline float Fma(float a, float b, float c) { return std::fma(a, b, c); }
+
+}  // namespace ieee
+
+}  // namespace cuju::render
+
+#endif  // CUJU_RENDER_FPENV_H
