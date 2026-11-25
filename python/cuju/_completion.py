@@ -26,13 +26,27 @@ def _tree(root, packages):
         for name, child in children.items():
             yield from walk((*path, name), child)
 
-    return list(walk((), root))
+    nodes = list(walk((), root))
+    topics = {path[0]: tree for path, tree, _ in nodes if len(path) == 1}
+    return [
+        *(
+            (path, tree, topics if path == ('help',) else children)
+            for path, tree, children in nodes
+        ),
+        *(
+            (('help', *path), None, children)
+            for path, _, children in nodes
+            if path and path[0] != 'help'
+        ),
+    ]
 
 
 def _values(action):
-    if action.choices is not None:
-        return tuple(map(str, action.choices)), ''
-    return (), _FILES.get(action.metavar, '') if isinstance(action.metavar, str) else ''
+    choices = action.choices if action.choices is not None else getattr(action, 'completion', ())
+    if callable(choices):
+        choices = choices()
+    files = _FILES.get(action.metavar, '') if isinstance(action.metavar, str) else ''
+    return tuple(map(str, choices)), files if action.choices is None else ''
 
 
 def _actions(tree):
@@ -117,7 +131,7 @@ def _bourne(nodes, shell):
             '  local files="$1" candidate',
             '  shift',
             '  for candidate in "$@"; do',
-            '    [[ "$candidate" == "$current"* ]] && COMPREPLY+=("$prefix$candidate")',
+            '    [[ "$candidate" == "$current"* ]] && COMPREPLY+=("$prefix${candidate#"$lead"}")',
             '  done',
             '  if [[ -n "$files" ]]; then',
             '    [[ "$files" == directory ]] && files=-d || files=-f',
@@ -128,7 +142,7 @@ def _bourne(nodes, shell):
             '  fi',
             '}',
             '_cuju() {',
-            '  local current="${COMP_WORDS[COMP_CWORD]}" prefix=',
+            '  local current="${COMP_WORDS[COMP_CWORD]}" prefix= lead=',
             '  local previous=("${COMP_WORDS[@]:1:COMP_CWORD-1}")',
             '  COMPREPLY=()',
             '  if [[ "$current" == -*=* ]]; then',
@@ -136,6 +150,11 @@ def _bourne(nodes, shell):
             '    previous+=("${prefix%=}")',
             '    current="${current#*=}"',
             '  fi',
+            '  while [[ ${#previous[@]} -ge 2 && "${previous[${#previous[@]}-1]}" == ":" ]]; do',
+            '    lead="${previous[${#previous[@]}-2]}:$lead"',
+            '    previous=("${previous[@]:0:${#previous[@]}-2}")',
+            '  done',
+            '  current="$lead$current"',
             '  _cuju_context "${previous[@]}"',
             '}',
             'complete -F _cuju cuju',

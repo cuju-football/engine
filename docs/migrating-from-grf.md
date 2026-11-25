@@ -186,6 +186,10 @@ GRF's two-dimensional view of the match, which GRF's Python draws with OpenCV fr
 
 ## GRF's interface for one environment
 
+Install the `spaces` extra with `pip install 'cuju-engine[spaces]'` before using
+`cuju.env` in an environment without Gymnasium or GRF's gym. This also applies
+when you use the single-environment interface to write full episode dumps.
+
 `cuju.env.create_environment` takes GRF's arguments with GRF's defaults and returns one environment
 with GRF's interface, the one of gym 0.21 that GRF 2.10.3 is written for. `reset()` returns the
 observation, and `step(action)` returns `(observation, reward, done, info)`. It plays the same

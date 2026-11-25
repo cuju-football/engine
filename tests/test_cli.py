@@ -46,6 +46,7 @@ def parser():
     team = root.add_subparsers().add_parser('team', help='manage teams')
     add = team.add_subparsers().add_parser('add', help='add a team')
     add.add_argument('--device', choices=['cpu', 'cuda'])
+    add.add_argument('--side').completion = ('builtin', 'builtin:0.3')
     return root
 
 def main(arguments):
@@ -162,6 +163,13 @@ def test_an_invalid_replay_frame_rate_is_a_usage_error(capsys):
     out, err = capsys.readouterr()
     assert json.loads(out)['error'] == "expected an integer for --fps, found 'no'"
     assert err.startswith('usage: cuju replay ')
+
+
+def test_replay_help_explains_when_to_set_the_frame_rate(capsys):
+    assert cli.main(['replay', '--help']) == 0
+    help_text = ' '.join(capsys.readouterr().out.split())
+    assert 'Use --fps 10 only for a dump with 10 physics ticks per step.' in help_text
+    assert 'Omit --fps to use the rate in the dump.' in help_text
 
 
 @pytest.mark.parametrize('flags', [[], ['--verbose'], ['-qv']])
@@ -378,13 +386,18 @@ def test_repair_help_and_usage_errors(capsys):
     ],
 )
 def test_completion_includes_installed_parsers(packages, capsys, shell, registration):
+    from cuju.check import load_cases
+
     assert cli.main(['completion', shell]) == 0
     out, err = capsys.readouterr()
     assert err == ''
     assert '# Cuju completion for cuju-engine 8.0.0, cuju-broken 1.0.0, cuju-look 2.0.0' in out
     assert registration in out
     assert 'look team add' in out
+    assert 'help look team add' in out
+    assert 'builtin:0.3' in out
     assert 'cpu' in out and 'cuda' in out
+    assert all(name in out for name in load_cases(long=True))
 
 
 def _bash_for_completion():
@@ -448,6 +461,14 @@ def test_bash_completes_nested_choices_and_files(packages, capsys):
             COMP_CWORD=5
             _cuju
             printf '<%s>\n' "${COMPREPLY[@]}"
+            COMP_WORDS=(cuju help look te)
+            COMP_CWORD=3
+            _cuju
+            printf '<%s>\n' "${COMPREPLY[@]}"
+            COMP_WORDS=(cuju look team add --side builtin : 0)
+            COMP_CWORD=7
+            _cuju
+            printf '<%s>\n' "${COMPREPLY[@]}"
             COMP_WORDS=(cuju replay --trace_file ga)
             COMP_CWORD=3
             _cuju
@@ -460,6 +481,22 @@ def test_bash_completes_nested_choices_and_files(packages, capsys):
             COMP_CWORD=4
             _cuju
             printf '<%s>\n' "${COMPREPLY[@]}"
+            COMP_WORDS=(cuju check --case 11_vs_11_competition/simple115v)
+            COMP_CWORD=3
+            _cuju
+            printf '<%s>\n' "${COMPREPLY[@]}"
+            for device in au cp cu; do
+                COMP_WORDS=(cuju replay --device "$device")
+                COMP_CWORD=3
+                _cuju
+                printf '<%s>\n' "${COMPREPLY[@]}"
+            done
+            for value in fa tr; do
+                COMP_WORDS=(cuju dump-to-txt --include_debug "$value")
+                COMP_CWORD=3
+                _cuju
+                printf '<%s>\n' "${COMPREPLY[@]}"
+            done
             COMP_WORDS=(cuju dump-to-txt --include_debug --out)
             COMP_CWORD=3
             _cuju
@@ -477,11 +514,19 @@ def test_bash_completes_nested_choices_and_files(packages, capsys):
     assert result.stdout.splitlines() == [
         '<cpu>',
         '<cuda>',
+        '<team>',
+        '<0.3>',
         '<game one.dump>',
         '<--device=cpu>',
         '<--device=cuda>',
         '<cpu>',
         '<cuda>',
+        '<11_vs_11_competition/simple115v2>',
+        '<auto>',
+        '<cpu>',
+        '<cuda>',
+        '<false>',
+        '<true>',
         '<--output>',
     ]
 
@@ -530,7 +575,18 @@ def test_zsh_completes_commands_options_and_choices(packages, capsys, setup, reg
         'cuju check --lo': 'cuju check --long',
         'cuju check --device cu': 'cuju check --device cuda',
         'cuju check --device=cu': 'cuju check --device=cuda',
+        'cuju check --case 11_vs_11_competition/simple115v': (
+            'cuju check --case 11_vs_11_competition/simple115v2'
+        ),
+        'cuju replay --device au': 'cuju replay --device auto',
+        'cuju replay --device cp': 'cuju replay --device cpu',
+        'cuju replay --device cu': 'cuju replay --device cuda',
+        'cuju dump-to-txt --include_debug fa': 'cuju dump-to-txt --include_debug false',
+        'cuju dump-to-txt --include_debug tr': 'cuju dump-to-txt --include_debug true',
         'cuju lo': 'cuju look',
+        'cuju help look te': 'cuju help look team',
+        'cuju help look team ad': 'cuju help look team add',
+        'cuju look team add --side builtin:0': 'cuju look team add --side builtin:0.3',
         'cuju look te': 'cuju look team',
         'cuju look team add --de': 'cuju look team add --device',
         'cuju look team add --device cu': 'cuju look team add --device cuda',
@@ -561,3 +617,27 @@ def test_zsh_completes_commands_options_and_choices(packages, capsys, setup, reg
     assert f'<READY>{registration}</READY>' in result.stdout, result.stdout
     buffers = re.findall(r'<BUFFER>([^\n]*)</BUFFER>', result.stdout)
     assert [buffer.rstrip() for buffer in buffers] == list(completions.values()), result.stdout
+
+
+@pytest.mark.parametrize(
+    'arguments',
+    [
+        ('--help',),
+        ('help', 'check'),
+        ('completion', 'bash'),
+        ('check', '--list'),
+        ('check', '--list', '--long', '--case', '5_vs_5/simple115v2', '--json'),
+    ],
+)
+def test_read_only_cli_does_not_load_the_batch(arguments):
+    probe = """
+import sys
+from cuju.__main__ import main
+assert main(sys.argv[1:]) == 0
+assert 'torch' not in sys.modules
+assert not any(name.startswith('cuju._batch') for name in sys.modules)
+"""
+    result = subprocess.run(
+        [sys.executable, '-c', probe, *arguments], capture_output=True, text=True, check=False
+    )
+    assert result.returncode == 0, result.stderr

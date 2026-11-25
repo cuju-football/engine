@@ -14,7 +14,7 @@ import importlib.util
 import sys
 from typing import ClassVar
 
-from ._batch.assets import bundled_assets, bundled_scenarios
+from ._assets import bundled_assets, bundled_scenarios
 from ._version import __version__
 from .errors import (
     ActionRangeError,

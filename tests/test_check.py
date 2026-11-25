@@ -197,7 +197,7 @@ def test_check_all_requires_at_least_one_backend(capsys, monkeypatch):
     assert 'no backends to check' in err
 
 
-def test_check_case_list_aligns_columns_and_shortens_only_on_a_terminal(capsys, monkeypatch):
+def test_check_case_list_separates_columns_and_shortens_only_on_a_terminal(capsys, monkeypatch):
     cases = {
         'short': {'assets': 'a', 'steps': 4, 'options': {}},
         'longer': {'assets': 'a' * 40, 'steps': 7, 'options': {'stack': 4}},
@@ -207,10 +207,13 @@ def test_check_case_list_aligns_columns_and_shortens_only_on_a_terminal(capsys, 
     out, err = capsys.readouterr()
     assert err == ''
     first, second = out.splitlines()
-    assert first.index('4 steps') == second.index('7 steps')
-    assert 'a' * 40 in second
+    assert first.split('  ') == ['short', 'a', '4 steps']
+    assert second.split('  ') == ['longer', 'a' * 40, '7 steps', "{'stack': 4}"]
     monkeypatch.setattr(check.sys.stdout, 'isatty', lambda: True)
     monkeypatch.setenv('COLUMNS', '42')
     assert check.main(['--list']) == 0
     first, second = capsys.readouterr().out.splitlines()
     assert '…' in second and len(second) <= 42
+    assert first.split('  ') == ['short', 'a', '4 steps']
+    name, assets, steps = second.split('  ')
+    assert name == 'longer' and assets.endswith('…') and steps == '7 steps'

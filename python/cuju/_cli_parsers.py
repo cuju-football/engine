@@ -57,13 +57,20 @@ def check(group: Any = None) -> Parser:
     parser.add_argument(
         '--long', action='store_true', help='also play the long cases, which take several minutes'
     )
-    parser.add_argument(
+    case = parser.add_argument(
         '--case', action='append', metavar='NAME', help='play only the case NAME, may repeat'
     )
+    case.completion = _check_case_names
     parser.add_argument('--list', action='store_true', help='list the cases and play none')
     add_json(parser)
     add_globals(parser)
     return parser
+
+
+def _check_case_names() -> tuple[str, ...]:
+    from .check import load_cases
+
+    return tuple(load_cases(long=True))
 
 
 def _flag(text: str) -> bool:
@@ -82,7 +89,8 @@ def replay(group: Any = None) -> Parser:
         group,
         'replay',
         'Replay a dump and check that it plays the same. The replay compares each step with '
-        'the recorded step, apart from wall-clock time.',
+        'the recorded step, apart from wall-clock time. Use --fps 10 only for a dump with '
+        '10 physics ticks per step. Omit --fps to use the rate in the dump.',
         examples(
             'cuju replay --trace_file /tmp/dumps/episode_done.dump',
             'cuju replay --trace_file /tmp/dumps/episode_done.dump --device cpu --json',
@@ -96,12 +104,13 @@ def replay(group: Any = None) -> Parser:
         metavar='N',
         help='frames per second, the frame rate of the dump by default',
     )
-    parser.add_argument(
+    device = parser.add_argument(
         '--device',
         default='cpu',
         metavar='DEVICE',
         help='cpu, cuda, cuda:N or auto, cpu by default',
     )
+    device.completion = ('auto', 'cpu', 'cuda')
     add_json(parser)
     add_globals(parser)
     return parser
@@ -120,15 +129,16 @@ def dump_to_txt(group: Any = None) -> Parser:
     )
     parser.add_argument('--trace_file', required=True, metavar='FILE', help='the dump to convert')
     parser.add_argument('--output', required=True, metavar='FILE', help='the text file to write')
-    parser.add_argument(
+    debug = parser.add_argument(
         '--include_debug',
         nargs='?',
         const=True,
         default=True,
         type=_flag,
         metavar='NAME',
-        help='write the debug information of each step, true by default',
+        help='write the debug information of each step, accepts true or false, true by default',
     )
+    debug.completion = ('true', 'false')
     parser.add_argument(
         '--noinclude_debug',
         dest='include_debug',

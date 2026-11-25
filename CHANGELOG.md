@@ -11,6 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Complete family help topics and static values such as built-in difficulty examples.
+- Keep batch modules out of family help and completion.
+- Name the spaces prerequisite in the single-environment migration guide.
+- List self-check cases without loading PyTorch or the batch modules.
+- Use two spaces between columns in the self-check case list.
+- Complete shipped self-check case names in static shell scripts.
+- Complete replay device names and text exporter Boolean values in static shell scripts.
+- Explain which dumps accept an explicit frame rate in replay help.
+
 - Windows builds export the C API functions of the CPU and renderer libraries from their headers.
 - CPU CI runs GRF's replay and video export tests with OpenCV. Local test runs without OpenCV
     report those cases as skipped.

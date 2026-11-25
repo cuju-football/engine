@@ -474,6 +474,9 @@ command.
 Use `cuju check` to verify the package data and compare matches with the shipped digests. The
 default checks all available backends. Select a backend with `--device cpu` or `--device cuda`,
 and use `--list` to see the available cases before you select one with `--case NAME`.
+Listing reads the package's case descriptions without loading PyTorch or starting a backend.
+In text, each row starts with the case name and uses two spaces between columns. Long values
+may be shortened on a terminal. Piping the list gives the full values.
 With `--json`, standard output is one object. Its first key is `schema`, with the value
 `engine.check/1` for the check or `engine.check.list/1` for the case list. A usage error or a check
 that cannot run on the requested backend uses `error/1`. Diagnostic and progress lines go to
@@ -483,6 +486,9 @@ width and case progress updates on one line. If no backend can run, the check ex
 3 unless package data already failed the check.
 
 `cuju replay --trace_file FILE` plays a dump again and compares each step with the recorded step.
+Omit `--fps` to use the rate in the dump. The explicit value `--fps 10` is accepted for a
+dump with 10 physics ticks per step. For dumps made with another tick count, leave `--fps`
+out. An explicit rate outside this restriction gives exit status 2.
 `cuju dump-to-txt --trace_file FILE --output FILE` writes a dump as text and prints the output path.
 Both accept their existing GRF flags, which their help pages describe. A missing or unreadable
 dump gives an error and a hint, with exit status 1.
@@ -508,7 +514,11 @@ Use `cuju completion bash`, `cuju completion zsh`, `cuju completion fish` or
 Fish or PowerShell. In Zsh, run `autoload -Uz compinit` and `compinit` before sourcing the
 script. You can also save it as `_cuju` in a directory on `fpath` before running `compinit`.
 Press Tab to complete commands, options and choices from the packages installed when you
-generated the script. Generate it again after installing or removing a package.
+generated the script. Tab after `cuju help` completes help topics through the same command tree.
+After `cuju check --case`, Tab completes the names of the shipped short and long cases.
+After `cuju replay --device`, it offers `auto`, `cpu` and `cuda`. After
+`cuju dump-to-txt --include_debug`, it offers `true` and `false`.
+Generate the script again after installing or removing a package.
 
 A package can add commands by declaring entry points in the group `cuju.commands`, with one
 `main(arguments)` function per command. The module of the entry point may expose a `parser()`

@@ -28,15 +28,16 @@ import struct
 import sys
 import textwrap
 import time
-
-import torch
+from typing import TYPE_CHECKING
 
 import cuju
 
 from . import _checksums, _cli_parsers
 from . import _cli_contract as contract
-from ._batch import library as _libraries
 from .errors import Error
+
+if TYPE_CHECKING:
+    import torch
 
 DIGESTS = os.path.join(_checksums.DATA_DIRECTORY, 'digests.json')
 # The processor features that the packaged CPU library needs.
@@ -66,6 +67,8 @@ def tensor_bytes(tensor: torch.Tensor) -> bytes:
 
 def actions_at(step: int, environments: int, agents: int, action_count: int) -> torch.Tensor:
     """Returns the actions of a step from integer arithmetic alone, the same on every machine."""
+    import torch
+
     values = [
         [(step * 7 + environment * 3 + agent * 5) % action_count for agent in range(agents)]
         for environment in range(environments)
@@ -260,6 +263,8 @@ def _version(module):
 
 def _library(device):
     """Returns the lines that describe the library of `device`, and its GPU code for `cuda`."""
+    from ._batch import library as _libraries
+
     path = cuju.library_path(device)
     variable = _libraries._LIBRARIES[device][1]
     source = f'from {variable}' if os.environ.get(variable) else 'of the package'
@@ -285,6 +290,10 @@ def _library(device):
 
 def diagnostics() -> list[str]:
     """Returns lines on this installation's versions, processor, libraries and GPUs."""
+    import torch
+
+    from ._batch import library as _libraries
+
     version = getattr(cuju, '__version__', None) or _version('cuju-engine') or 'from a source tree'
     lines = [
         f'cuju {version} at {os.path.dirname(os.path.abspath(cuju.__file__))}',
@@ -364,6 +373,8 @@ def check_data() -> list[str]:
 
 def _loads(device):
     """Returns why the library of `device` does not load here, or `None` if it does."""
+    from ._batch import library as _libraries
+
     try:
         _libraries._load_library(None, device)
     except (OSError, RuntimeError) as error:
@@ -373,6 +384,8 @@ def _loads(device):
 
 def _devices(requested):
     """Returns the devices to play as `(label, device, CUDA index)`, and the notes on the absent."""
+    import torch
+
     devices, notes = [], []
     if requested in ('all', 'cpu'):
         problem = _loads('cpu')
@@ -399,6 +412,8 @@ def run_case(entry, device, index):
     options = {'seed': entry['seed'], 'environments': entry['environments'], **entry['options']}
     if index is None:
         return play_digest(*arguments, **options)
+    import torch
+
     with torch.cuda.device(index):
         return play_digest(*arguments, **options)
 
@@ -435,7 +450,7 @@ def _list_cases(cases, arguments):
             for value, width in zip(row, widths, strict=True):
                 if width and len(value) > width:
                     value = value[: width - 1] + '…'
-                cells.append(f'{value:<{width}}' if width else '')
+                cells.append(value if width else '')
             print('  '.join(cells).rstrip())
     if not cases and not getattr(arguments, 'quiet', False):
         print(
