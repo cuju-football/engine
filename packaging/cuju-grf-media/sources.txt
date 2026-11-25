@@ -1,5 +1,5 @@
 # The files of Google Research Football that cuju-grf-media ships, copied unchanged from the commit
-# that ci/make_render_media.py names, with the SHA-256 of each original, its license and its role.
+# that ci/make/make_render_media.py names, with the SHA-256 of each original, its license and its role.
 # A path under data/ is the same path under third_party/gfootball_engine/data/ in that commit, and
 # one under fonts/ the same under third_party/fonts/. The roles are scene for the object files that
 # place models, model for the ase files, texture for the images that the 3D pass samples, adboard

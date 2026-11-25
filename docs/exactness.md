@@ -82,8 +82,8 @@ After a source build, `pytest tests/` runs the same digests and more. A digest i
 The frames have their own tests, which need the extra `pixels`.
 
 ```sh
-pytest tests/test_render_frames.py
-CUJU_LONG=1 pytest tests/test_render_frames.py  # whole episodes, several minutes
+pytest tests/render/test_render_frames.py
+CUJU_LONG=1 pytest tests/render/test_render_frames.py  # whole episodes, several minutes
 ```
 
 ### Comparison with GRF
@@ -181,6 +181,6 @@ A difference usually appears thousands of steps into a run, and its cause is fou
 - The actions from there on, the step where the two first differ, and what differs.
 - The GRF build under comparison, with its version, operating system, glibc and GCC.
 
-A frame report adds the scenario, the seed and the step, the resolution, `render_threads` and `render_workers` of the machine config, the processor, and the frame or the output of `pytest tests/test_render_frames.py`. [API reference](api.md) describes the machine config.
+A frame report adds the scenario, the seed and the step, the resolution, `render_threads` and `render_workers` of the machine config, the processor, and the frame or the output of `pytest tests/render/test_render_frames.py`. [API reference](api.md) describes the machine config.
 
 A difference that reproduces is a bug, and its fix brings cuju to GRF's result. Open an issue in the repository of cuju. See [Getting started](getting-started.md) to install and run the first check, and [Performance](performance.md) for the speed of each backend.

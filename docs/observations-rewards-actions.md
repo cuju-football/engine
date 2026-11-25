@@ -202,7 +202,7 @@ The eight directions and `sprint` and `dribble` stay pressed once taken, as on a
 
 A floating-point action raises `TypeError`. On the CPU, and on a GPU batch with `debug = true` in the `[run]` table of the machine config, an index outside the range raises `cuju.errors.ArgumentError` that names the action, its agent and its environment. The check waits for the device at every step, so keep it for new policies and action pipelines. With `debug` off, a GPU batch plays an out of range index as `idle`. Actions from an `argmax` over `action_count` logits are always in range. [The API reference](api.md) describes the config.
 
-The environments of `cuju.env` and `cuju.kaggle` also take GRF's negative indices, from `-action_count` to -1, and turn them into the same positive actions.
+The environments of `cuju.env` also take GRF's negative indices, from `-action_count` to -1, and turn them into the same positive actions.
 
 ## Frames and videos
 

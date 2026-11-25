@@ -1,17 +1,7 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""The machine config, the file `engine.toml` that holds the settings that change only speed.
-
-    [run]
-    threads = 0
-    debug = false
-
-`CUJU_CONFIG` names the file, else it is `~/.config/cuju/engine.toml` on Linux and macOS, with
-`XDG_CONFIG_HOME` in place of `~/.config` where set, and `%APPDATA%\\cuju\\engine.toml` on Windows.
-A missing file leaves every key at its default. The file may hold the table `[run]` and nothing
-else, and `[run]` may hold only the keys of `DEFAULTS`. This module loads without PyTorch.
-"""
+"""The machine config, the file `engine.toml` that holds the settings that change only speed."""
 
 from __future__ import annotations
 

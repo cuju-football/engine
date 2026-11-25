@@ -1,4 +1,4 @@
-# The data wheel of GRF's media for cuju's renderer. `ci/make_render_media.py` fills
+# The data wheel of GRF's media for cuju's renderer. `ci/make/make_render_media.py` fills
 # `src/cuju_grf_media` and the license files from a GRF tree, and only then does the wheel build.
 [build-system]
 requires = ["hatchling>=1.27"]

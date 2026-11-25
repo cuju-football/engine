@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-# Modified by the cuju Authors in 2026, in the import lines that ci/port_gfootball.py lists.
+# Modified by the cuju Authors in 2026, in the import lines that ci/make/port_gfootball.py lists.
 # SPDX-License-Identifier: Apache-2.0
 
 """Runs football_env on OpenAI's ppo2."""

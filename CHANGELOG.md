@@ -193,7 +193,7 @@ apart from the outputs after `set_state` that two entries under Fixed correct.
     names each file's source, SHA-256 and license, and `SHA256SUMS`. The new extra `pixels` installs
     it, and `gfootball-video` takes it as well. Its license expression is
     `Apache-2.0 AND Unlicense AND OFL-1.1`, and LICENSES holds the Unlicense and the OFL 1.1.
-    `ci/make_render_media.py` builds it from a GRF checkout and refuses one whose files differ from
+    `ci/make/make_render_media.py` builds it from a GRF checkout and refuses one whose files differ from
     their pinned SHA-256, and the release builds, checks and publishes its wheel.
 - The software renderer libcuju_render, which the build makes beside the CPU library and the wheel
     holds. It draws each frame of a rendering GRF engine from a RenderState, what GRF's
@@ -253,8 +253,8 @@ apart from the outputs after `set_state` that two entries under Fixed correct.
     API, now version 2, adds `cuju_render_set_render`, GRF's `game_config.render`, and
     `cuju._pixels.Renderer` its method `set_render`.
 - cuju-grf-media holds the glyph atlas of GRF's caption font, `fonts/caption_glyphs.bin`, which
-    `ci/make_glyph_atlas.py` renders with SDL_ttf 2.22.0, FreeType 2.13.2 and HarfBuzz 8.3.0, and
-    `ci/make_render_media.py` refuses an atlas whose SHA-256 differs from its pin.
+    `ci/make/make_glyph_atlas.py` renders with SDL_ttf 2.22.0, FreeType 2.13.2 and HarfBuzz 8.3.0, and
+    `ci/make/make_render_media.py` refuses an atlas whose SHA-256 differs from its pin.
 - Step observers receive the actions that each step played, under `actions` in their information,
     `[environment_count, agents]` `int32` on the batch's device. The tensor is the caller's own
     when the step read it in place, and a copy taken at `step_async` for a step split in two. A

@@ -121,9 +121,8 @@ Research that uses cuju is asked to cite both cuju and GRF.
 
 ## License
 
-cuju is licensed under Apache-2.0. It reimplements GRF, licensed under Apache-2.0 by Google LLC, and [NOTICE](https://github.com/cuju-football/engine/blob/main/NOTICE) lists every credit. Four math functions in `include/cuju/libm/`, sin, cos, acos and asinf, are ports of the GNU C Library under the LGPL 2.1 or later.
+cuju is licensed under Apache-2.0. It reimplements GRF, licensed under Apache-2.0 by Google LLC, and [NOTICE](https://github.com/cuju-football/engine/blob/main/NOTICE) lists every credit. The math functions in `include/cuju/libm/` are ports of the GNU C Library under the LGPL 2.1 or later.
 
-- Using cuju from open or proprietary code carries no obligation, which starts with distribution.
+- Using cuju in open or proprietary code carries no obligation. Obligations start with distribution.
 - Redistributing cuju's libraries means keeping LICENSE, NOTICE and LICENSES/ with them and offering the matching source, which every PyPI release carries as its sdist.
 - Compiling the C++ headers into another program brings the LGPL into that program.
-- The logo in `docs/assets/` is licensed under CC BY 4.0.

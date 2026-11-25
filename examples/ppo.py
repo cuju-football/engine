@@ -14,7 +14,7 @@ the network as they are.
 
 Every update prints the environment steps per second, the mean return of the episodes that ended
 and their goals per episode. The weights are saved with `torch.save(model.state_dict(), path)`, and
-`examples/evaluate.py` and `examples/self_play.py` load them.
+`examples/evaluate.py` loads them.
 """
 
 import argparse
@@ -146,7 +146,7 @@ def update(model, optimizer, rollout, arguments):
 
 
 def add_arguments(parser):
-    """Adds the hyperparameters of PPO, which `examples/self_play.py` shares."""
+    """Adds the hyperparameters of PPO."""
     parser.add_argument('--device', default='cpu', choices=['cpu', 'cuda'])
     parser.add_argument('--environments', type=int, default=512)
     parser.add_argument('--rollout', type=int, default=128, help='steps per update')

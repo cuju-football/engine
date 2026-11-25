@@ -27,7 +27,7 @@ batch = cuju.BatchEnvironment('academy_corner', environment_count=64, device='cp
 | `academy_run_to_score` | 2 v 6 | up to 401 | 1.0, 0.6 | Run to an empty goal with five defenders chasing |
 | `academy_run_to_score_with_keeper` | 2 v 6 | up to 401 | 1.0, 0.6 | The same, with a goalkeeper |
 | `academy_pass_and_shoot_with_keeper` | 3 v 2 | up to 401 | 1.0, 0.6 | Two attackers at the edge of the box, the one with the ball marked |
-| `academy_run_pass_and_shoot_with_keeper` | 3 v 2 | up to 401 | 1.0, 0.6 | The same, with the one in the centre marked |
+| `academy_run_pass_and_shoot_with_keeper` | 3 v 2 | up to 401 | 1.0, 0.6 | The same, with the one in the center marked |
 | `academy_3_vs_1_with_keeper` | 4 v 2 | up to 401 | 1.0, 0.6 | Three attackers against one defender and a goalkeeper |
 | `academy_corner` | 11 v 11 | up to 401 | 1.0, 0.6 | Score from a corner |
 | `academy_counterattack_easy` | 11 v 11 | up to 401 | 1.0, 0.6 | Four attackers against one defender |
@@ -53,7 +53,7 @@ A single repeated action solves some drills. A policy that always shoots scores 
 | --- | --- | --- |
 | `5_vs_5` | the defaults | one on the left, as GRF's `create_environment` gives |
 | `5_vs_5` | `left_agents=4` | four on the left against the built-in AI |
-| `5_vs_5` | `left_agents=4, right_agents=4` | four on each side, for self-play |
+| `5_vs_5` | `left_agents=4, right_agents=4` | four on each side |
 | `5_vs_5` | `left_agents=0` | none, the built-in AI plays both teams |
 | `11_vs_11_stochastic` | `left_agents=11` | a whole team of agents |
 
@@ -134,9 +134,9 @@ A build takes about a second. A batch keeps the bundle of a scenario file in a c
 ```python
 from cuju import scenarios
 
-scenarios.build_bundle('my_scenario.py', 'my_scenario_l0_r0.cjb')
+scenarios.build_bundle('my_scenario.py', 'my_scenario.cjb')
 batch = cuju.BatchEnvironment(
-    'my_scenario_l0_r0.cjb', environment_count=256, device='cpu', left_agents=1
+    'my_scenario.cjb', environment_count=256, device='cpu', left_agents=1
 )
 ```
 
@@ -161,7 +161,7 @@ The builder raises `cuju.scenarios.ScenarioError` with the reason for a scenario
 
 A file runs only while its bundle is built, so anything it reads besides the episode parity, such as `os.environ` or another file, is read then and stays fixed for the batch. GRF runs the file at every reset, so a file that changes its scenario that way plays on as built. A deterministic scenario, with `builder.config().deterministic = True`, plays the seed it sets, 42 by default, at every episode, as in GRF.
 
-A scenario that sets `control_all_players` plays when each side has either no agent or one per controllable player. GRF plays it through `MultiAgentToSingleAgent`, which `cuju.wrappers.MultiAgentToSingleAgent` ports, as [Migrating from GRF](migrating-from-grf.md) describes.
+A scenario that sets `control_all_players` plays when each side has either no agent or one per controllable player. GRF plays it through `MultiAgentToSingleAgent`, which `cuju.gfootball.env.wrappers.MultiAgentToSingleAgent` provides, as [Migrating from GRF](migrating-from-grf.md) describes.
 
 For variety in positions, write several files and give each its own batch. Each is built once and keeps the seeds of every episode as GRF draws them, which positions drawn from `random` inside one file would shift.
 

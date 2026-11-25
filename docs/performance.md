@@ -6,7 +6,7 @@ cuju steps `5_vs_5` with four agents a side 9.75 times as fast as one Google Res
 
 Throughput is environment steps per second over the whole batch. With four agents a side, one environment step moves four agents and counts once.
 
-Each figure is the median of interleaved runs, so heat and background load affect all configurations alike. The percentage beside a figure is the spread over the rounds, `(max - min) / median`. Each run discards 100 steps and times the next 1,000, episode resets included. Random actions come from a fixed generator. GRF runs on the same machine, unrendered, with the same scenario, agents and representation, one process per environment. The `11_vs_11_stochastic` rows use one agent, on the left. The machine is a cloud instance with an RTX 4090 and an EPYC 7763 whose container quota gives 31 processors. cuju is the 0.1.0 wheel, and GRF is commit 3d9e754 with gym 0.25.2 and numpy 1.26.4. The script `examples/benchmark.py` reproduces every row.
+Each figure is the median of interleaved runs, so heat and background load affect all configurations alike. The percentage beside a figure is the spread over the rounds, `(max - min) / median`. Each run discards 100 steps and times the next 1,000, episode resets included. Random actions come from a fixed generator. GRF runs on the same machine, unrendered, with the same scenario, agents and representation, one process per environment. The `11_vs_11_stochastic` rows use one agent, on the left. The machine is a cloud instance with an RTX 4090 and an EPYC 7763 whose container quota gives 31 processors. cuju is the 0.1.0 wheel, and GRF is commit 3d9e754 with gym 0.25.2 and numpy 1.26.4. The snippet under the CPU table times a cuju row.
 
 ## CPU throughput
 
@@ -24,15 +24,38 @@ All 31 processors, with 31 threads of 16 environments each against 31 GRF proces
 | `5_vs_5`, 4 agents a side | 5,819 (0.2%) | 38,497 (0.7%) | 6.62x |
 | `11_vs_11_stochastic`, 1 agent | 4,391 (0.4%) | 25,088 (0.2%) | 5.71x |
 
-Each GRF process keeps about 91% of its single-core rate when 31 run together, and each cuju thread about 62%. The `5_vs_5` rows come from three commands:
+Each GRF process keeps about 91% of its single-core rate when 31 run together, and each cuju thread about 62%. The `5_vs_5` rows time a batch as follows, with `environment_count` 1 on one core under `taskset -c 0` and 496 on all 31, and one GRF process stepped the same way for the baseline:
 
-```sh
-taskset -c 0 python examples/benchmark.py --grf --scenario 5_vs_5 --left 4 --right 4
-taskset -c 0 python examples/benchmark.py --scenario 5_vs_5 --device cpu --environments 1 --left 4 --right 4
-python examples/benchmark.py --scenario 5_vs_5 --device cpu --environments 496 --left 4 --right 4
+```python
+import time
+
+import torch
+
+import cuju
+
+batch = cuju.BatchEnvironment(
+    '5_vs_5', environment_count=496, device='cpu', left_agents=4, right_agents=4
+)
+batch.reset()
+generator = torch.Generator().manual_seed(0)
+
+
+def step():
+    shape = (batch.environment_count, batch.agents)
+    batch.step(torch.randint(0, batch.action_count, shape, dtype=torch.int32, generator=generator))
+
+
+for _ in range(100):
+    step()
+start = time.perf_counter()
+for _ in range(1000):
+    step()
+print(
+    1000 * batch.environment_count / (time.perf_counter() - start), 'environment steps per second'
+)
 ```
 
-The 11-a-side rows use `--scenario 11_vs_11_stochastic --left 1 --right 0`. On a laptop with a Ryzen 5 7535HS of 12 threads under WSL2, over one round:
+The 11-a-side rows use `'11_vs_11_stochastic'` with `left_agents=1` and `right_agents=0`. On a laptop with a Ryzen 5 7535HS of 12 threads under WSL2, over one round:
 
 | Scenario | cuju, one environment | cuju, 12 threads |
 | --- | --- | --- |
@@ -48,9 +71,7 @@ The RTX 4090 figures use the compute capability 8.9 code of the wheel over two r
 | `5_vs_5`, 4 agents a side | 9,920 (0.6%) | 22,661 (0.2%) | 32,582 (0.0%) |
 | `11_vs_11_stochastic`, 1 agent | 8,679 (0.0%) | 17,885 (0.2%) | 24,221 (0.0%) |
 
-```sh
-python examples/benchmark.py --scenario 5_vs_5 --left 4 --right 4 --device cuda --environments 16384
-```
+The same snippet with `device='cuda'`, `environment_count=16384` and a `torch.cuda.synchronize()` before each reading of the clock gives the 16,384 column. Draw the actions on the device with `device='cuda'` in `torch.randint` and in the generator.
 
 Google Colab GPUs, one round each with no spread, on Xeon hosts of 12 processors, or eight for the T4:
 
@@ -69,9 +90,7 @@ The RTX 3050 Laptop GPU of the laptop above, 4 GB with compute capability 8.6, o
 
 At 1,024 and 4,096 environments it steps `5_vs_5` 3,332 and 3,982 times per second and `11_vs_11_stochastic` 2,384 and 2,718.
 
-The current kernels keep the large lists of the simulation in a work area per environment. Against the kernels before them on this GPU, built with CUDA 12.0 and alternated within each round, they cost between 1.7% and 5.8% of throughput, and the 3050 figures above come from the earlier kernels.
-
-Earlier and current kernels, in steps per second: `5_vs_5` at 1,024 environments 3,116 and 3,022, at 4,096 3,726 and 3,510, and `11_vs_11_stochastic` at 1,024 environments 2,348 and 2,310, at 4,096 2,662 and 2,600. In exchange, local memory falls from 51,312 to 6,768 bytes per thread, and the reservation of a first batch falls from 1.15 GiB to 135 MiB on the 3050, and from 9.2 GiB to 1.05 GiB on a GPU of 128 multiprocessors such as the 4090.
+The 3050 figures come from the kernels of 0.2, which ran 1.7% to 5.8% faster on this GPU and needed 51,312 bytes of local memory per thread against 6,768 today.
 
 ## Choosing a device
 
@@ -149,7 +168,7 @@ On these systems cuju issues a `UserWarning` naming both amounts in MiB, which i
 
 ## torch.compile and CUDA graphs
 
-On the GPU a step is one kernel launch on the current PyTorch stream. When actions are in device memory, a CUDA graph captures it together with the policy, and each replay performs one step and computes the next actions. `examples/cuda_graph_step.py` runs this and reports its speed.
+On the GPU a step is one kernel launch on the current PyTorch stream. When actions are in device memory, a CUDA graph captures it together with the policy, and each replay performs one step and computes the next actions.
 
 ```python
 actions = torch.zeros((4096, 4), dtype=torch.int32, device='cuda')

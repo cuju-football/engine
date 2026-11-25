@@ -3,10 +3,6 @@
 
 name: release
 
-# A tag or a dispatch builds and checks the sdist and every wheel. Only a dispatch with `publish`
-# set, run on a tag `v*` that names `__version__`, publishes them, through PyPI's trusted publishing
-# and the `pypi` environment's approval. The alias cuju-gfootball and the data wheel cuju-grf-media
-# build and publish beside them, through the `pypi-gfootball` and `pypi-grf-media` environments.
 on:
     push:
         tags: ['v*']
@@ -20,9 +16,6 @@ on:
 permissions:
     contents: read
 
-# Every build runs twice and the two must agree byte for byte, so anyone can rebuild a release from
-# its tag and get the published files: each file is dated by the tagged commit (SOURCE_DATE_EPOCH)
-# and the libraries hold no directory, process id or time of the build machine.
 jobs:
     sdist:
         runs-on: ubuntu-24.04
@@ -38,14 +31,12 @@ jobs:
                   pip install build
                   python -m build --sdist --outdir dist
                   python -m build --sdist --outdir "$RUNNER_TEMP/sdist-again"
-                  python ci/compare_builds.py dist "$RUNNER_TEMP/sdist-again"
+                  python ci/checks/compare_builds.py dist "$RUNNER_TEMP/sdist-again"
             - uses: actions/upload-artifact@v7
               with:
                   name: sdist
                   path: dist/*.tar.gz
 
-    # cuju-gfootball, which imports cuju's port under GRF's module names, is pure Python and builds
-    # one sdist and one wheel, each twice and compared like cuju's.
     gfootball:
         runs-on: ubuntu-24.04
         steps:
@@ -60,19 +51,16 @@ jobs:
                   pip install build
                   python -m build packages/cuju-gfootball --outdir dist
                   python -m build packages/cuju-gfootball --outdir "$RUNNER_TEMP/gfootball-again"
-                  python ci/compare_builds.py dist "$RUNNER_TEMP/gfootball-again"
+                  python ci/checks/compare_builds.py dist "$RUNNER_TEMP/gfootball-again"
             - name: Check the contents of the wheel
               run: |
-                  python ci/check_wheel.py --alias dist/*.whl
+                  python ci/checks/check_wheel.py --alias dist/*.whl
                   python -c "import sys, zipfile; [print(n) for n in zipfile.ZipFile(sys.argv[1]).namelist()]" dist/*.whl
             - uses: actions/upload-artifact@v7
               with:
                   name: cuju-gfootball
                   path: dist/*
 
-    # One wheel per platform. Linux builds in the manylinux_2_28 image with cibuildwheel, each build
-    # in a new container; macOS and Windows build on the runner, the second time from an empty
-    # build directory.
     wheel:
         name: wheel ${{ matrix.name }}
         runs-on: ${{ matrix.runner }}
@@ -80,10 +68,7 @@ jobs:
             fail-fast: false
             matrix:
                 include:
-                    # The CPU library from Clang, about 10% faster than GCC and as exact, and the
-                    # CUDA library for the checked GPUs. `-real` keeps the PTX out: a driver would
-                    # compile PTX for a GPU that no check covered, where the library must instead
-                    # refuse to start.
+                    # `-real` keeps PTX out, so no driver compiles it for a GPU no check covered.
                     - name: linux-x86-64
                       runner: ubuntu-24.04
                       cibuildwheel: cp312-manylinux_x86_64
@@ -99,8 +84,7 @@ jobs:
                       before_all: dnf install -y clang
                       environment: CXX=clang++ CMAKE_ARGS=-DCUJU_CUDA=OFF
                       cpu_only: true
-                    # CUDA 12.9 takes the MSVC of Visual Studio 2017 to 2022, which windows-2025
-                    # (Visual Studio 2026) has no longer.
+                    # CUDA 12.9 takes Visual Studio 2017 to 2022, which windows-2025 no longer has.
                     - name: windows-x86-64
                       runner: windows-2022
                       cmake_args: -DCUJU_CUDA=ON
@@ -111,7 +95,7 @@ jobs:
                       cmake_args: -DCUJU_CUDA=OFF
                       deployment_target: '11.0'
                       cpu_only: true
-                    # GitHub retired macos-13; macos-15-intel is the x86-64 image left.
+                    # macos-13 is retired, and macos-15-intel is the x86-64 image left.
                     - name: macos-x86-64
                       runner: macos-15-intel
                       cmake_args: -DCUJU_CUDA=OFF
@@ -136,7 +120,6 @@ jobs:
                   cuda: '12.9.1'
                   method: network
                   sub-packages: '["nvcc", "cudart", "visual_studio_integration"]'
-            # What `vcvars64.bat` sets, for the steps that follow.
             - name: Use MSVC from the command line
               if: runner.os == 'Windows'
               shell: pwsh
@@ -189,7 +172,7 @@ jobs:
                   python -m pip wheel . --no-deps -v -w wheelhouse-again -C build.verbose=true 2>&1 \
                       | tee build-again.log
             - name: Compare the two builds
-              run: python ci/compare_builds.py wheelhouse wheelhouse-again
+              run: python ci/checks/compare_builds.py wheelhouse wheelhouse-again
             - name: Check the compile flags
               run: |
                   grep -ohE "fp:precise|ffp-contract=off" build.log | sort | uniq -c
@@ -198,7 +181,7 @@ jobs:
                   fi
             - name: Check the licenses and the libraries of the wheel
               run: |
-                  python ci/check_wheel.py ${{ matrix.cpu_only && '--cpu-only' || '' }} wheelhouse/*.whl
+                  python ci/checks/check_wheel.py ${{ matrix.cpu_only && '--cpu-only' || '' }} wheelhouse/*.whl
                   ls -l wheelhouse
                   python -c "import sys, zipfile; [print(n) for n in zipfile.ZipFile(sys.argv[1]).namelist() if not n.startswith('cuju/gfootball')]" wheelhouse/*.whl
             - uses: actions/upload-artifact@v7
@@ -211,13 +194,9 @@ jobs:
                   name: build-log-${{ matrix.name }}
                   path: build*.log
 
-    # Each wheel installs with pip into a new environment on a fresh runner of its platform, and the
-    # self-check plays every case on the CPU against the expected digests from outside the source
-    # tree. The runners have no GPU; the CUDA library is checked on a GPU of its own.
     test:
         name: test ${{ matrix.name }}
         needs: wheel
-        # Each platform's test needs only its own wheel, so one failed build stops no other test.
         if: ${{ !cancelled() }}
         runs-on: ${{ matrix.runner }}
         strategy:
@@ -273,7 +252,6 @@ jobs:
             - name: cuju.check on the CPU
               working-directory: ${{ runner.temp }}
               run: '"$VENV_PYTHON" -I -m cuju.check --device cpu 2>&1 | tee check.log'
-            # The tests take the extras.
             - name: The public tests
               working-directory: ${{ runner.temp }}
               run: |
@@ -286,18 +264,13 @@ jobs:
                   path: ${{ runner.temp }}/check.log
                   if-no-files-found: ignore
 
-    # An SPDX document per wheel and per sdist. syft reads the package's metadata; the code that the
-    # libraries compile in or link statically (see NOTICE, and the CUDA runtime) has no metadata it
-    # can read.
+    # syft reads metadata, and the code that the libraries compile in or link statically has none.
     sbom:
         needs: [sdist, wheel, gfootball]
         uses: cuju-football/.github/.github/workflows/sbom.yml@main
         with:
             artifacts: '{sdist,wheel-*,cuju-gfootball}'
 
-    # The data wheel cuju-grf-media, GRF's media at the pinned commit, copied unchanged by
-    # ci/make_render_media.py, which refuses a tree whose files differ from their pins. It builds
-    # twice and the two must agree byte for byte, as the other builds do.
     grf-media:
         runs-on: ubuntu-24.04
         env:
@@ -315,26 +288,24 @@ jobs:
                   python-version: '3.12'
             - name: Date every file of the build by the commit
               run: echo "SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)" >> "$GITHUB_ENV"
-            # The glyph atlas of the caption font comes from the libraries that GRF links, which
-            # Ubuntu 24.04 packages at the same versions; the converter refuses any other atlas.
+            # The converter refuses an atlas from other library versions than Ubuntu 24.04 has.
             - name: Render the glyph atlas with SDL_ttf
               run: |
                   sudo apt-get update
                   sudo apt-get install -y libsdl2-2.0-0 libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b
-                  python ci/make_glyph_atlas.py grf/third_party/fonts/AlegreyaSansSC-ExtraBold.ttf generated
+                  python ci/make/make_glyph_atlas.py grf/third_party/fonts/AlegreyaSansSC-ExtraBold.ttf generated
             - name: Copy GRF's media into the package
-              run: python ci/make_render_media.py grf --generated generated
+              run: python ci/make/make_render_media.py grf --generated generated
             - name: Build the wheel twice and compare the bytes
               run: |
                   pip install build
                   python -m build --wheel --outdir grf-media packaging/cuju-grf-media
                   python -m build --wheel --outdir "$RUNNER_TEMP/grf-media-again" packaging/cuju-grf-media
-                  python ci/compare_builds.py grf-media "$RUNNER_TEMP/grf-media-again"
+                  python ci/checks/compare_builds.py grf-media "$RUNNER_TEMP/grf-media-again"
             - name: Check the files and the licenses of the wheel
               run: |
-                  python ci/check_wheel.py --grf-media grf-media/*.whl
+                  python ci/checks/check_wheel.py --grf-media grf-media/*.whl
                   ls -l grf-media
-            # cuju's locator finds the installed media and checks every file against SHA256SUMS.
             - name: Install the wheel and check the installed media
               run: |
                   python -m venv "$RUNNER_TEMP/venv"
@@ -348,8 +319,6 @@ jobs:
                   name: grf-media
                   path: grf-media/*.whl
 
-    # The sdist and the wheels of `cuju-engine` are published through PyPI's trusted publishing.
-    # The SBOMs stay workflow artifacts.
     publish:
         needs: [sdist, wheel, gfootball, test, sbom]
         if: >-
@@ -377,11 +346,7 @@ jobs:
                   merge-multiple: true
             - uses: pypa/gh-action-pypi-publish@release/v1
 
-    # The sdist and the wheel of `cuju-gfootball` publish after `cuju-engine`, through the
-    # environment `pypi-gfootball` and its approval. Each project has its own environment, so each
-    # has its own trusted publisher, and PyPI creates a new project from one pending publisher per
-    # upload. cuju-gfootball keeps its version across releases of the engine, so its files upload
-    # only when PyPI lacks that version. Any answer of PyPI other than found or missing stops the job.
+    # Uploads only when PyPI lacks the version, and any answer but found or missing stops the job.
     publish-gfootball:
         needs: [gfootball, publish]
         if: >-
@@ -421,10 +386,7 @@ jobs:
             - uses: pypa/gh-action-pypi-publish@release/v1
               if: steps.pypi.outputs.upload == 'true'
 
-    # The wheel of cuju-grf-media publishes on the same dispatch through the environment
-    # `pypi-grf-media` and its approval. Its version follows its own data, so a release of cuju
-    # that leaves the media as they were finds that version on PyPI and uploads nothing. Any answer
-    # of PyPI other than found or missing stops the job.
+    # Uploads only when PyPI lacks the version, and any answer but found or missing stops the job.
     publish-grf-media:
         needs: [grf-media]
         if: >-

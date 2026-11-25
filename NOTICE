@@ -1,8 +1,7 @@
 cuju
 Copyright 2026 The cuju Authors (the contributors in the git history).
-Files without a license header are licensed under the Apache License 2.0, except the logo in
-docs/assets, which is licensed under Creative Commons Attribution 4.0 International (CC BY 4.0).
-That license grants no right to use the name or the logo of cuju to suggest endorsement.
+Files without a license header are licensed under the Apache License 2.0.
+That license grants no right to use the name of cuju to suggest endorsement.
 
 cuju reimplements Google Research Football (https://github.com/google-research/football),
 Copyright 2019 Google LLC, Apache License 2.0. Its engine descends from Gameplay Football by
@@ -20,7 +19,7 @@ functions in, and the complete source of each release is published with it.
 
 python/cuju/gfootball holds the Python package of Google Research Football 2.10.3, commit 3d9e754,
 Copyright 2019 Google LLC, Apache License 2.0, with its import lines changed by the cuju Authors.
-ci/port_gfootball.py lists each change, and every Python file keeps Google's header.
+ci/make/port_gfootball.py lists each change, and every Python file keeps Google's header.
 
 python/cuju/gfootball/_gym/_vendored holds the core of gym 0.21.0, Copyright 2016 OpenAI, MIT
 License, with its import lines and its plugin loader changed by the cuju Authors.
@@ -44,7 +43,7 @@ blit of SDL 2.30.0, Copyright 1997-2024 Sam Lantinga, the smoothed zoom of SDL2_
 Lantinga, all under the zlib License, which LICENSES/Zlib.txt holds. The cuju Authors wrote these
 ports in 2026, and each ported file names its source and is marked as altered.
 
-packaging/cuju-grf-media builds the data package cuju-grf-media, which ci/make_render_media.py
+packaging/cuju-grf-media builds the data package cuju-grf-media, which ci/make/make_render_media.py
 fills with media of Google Research Football copied unchanged, for cuju's software renderer. Its
 models, textures and images descend from Gameplay Football and are dedicated to the public domain
 under the Unlicense, Google's changes are licensed under the Apache License 2.0, and its font,

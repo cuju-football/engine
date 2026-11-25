@@ -50,62 +50,7 @@ def _frame_size(value: Any) -> tuple[int, int]:
 
 
 class BatchEnvironment:
-    """A batch of football environments on the GPU or the CPU, which plays GRF bit for bit.
-
-    Every tensor that a method returns views a buffer of the batch on its device, without a copy,
-    and the next `reset` or `step` overwrites it, so a caller clones what it keeps. The agent slots
-    are the left agents first, then the right agents, and each agent sees the pitch from its own
-    end.
-
-    What changes the results goes in the arguments of the constructor. What changes only the speed
-    goes in the machine config, the file `engine.toml` that `CUJU_CONFIG` names, or that is
-    `~/.config/cuju/engine.toml` on Linux and macOS and `%APPDATA%\\cuju\\engine.toml` on Windows.
-    Its table `[run]` holds `threads`, `debug`, `allocator`, `pin_threads`, `numa`, `pin_memory`,
-    `render_threads`, `render_workers` and `log`, and the argument `config` overrides them for one
-    batch.
-
-    The methods `step` and `reset_done` compile under `torch.compile(fullgraph=True)`, and the
-    steps of a GPU batch can be captured in CUDA graphs. A batch whose memory exceeds the free
-    memory of its GPU warns, which is the sign on Windows and WSL2 that the driver moved it to
-    shared memory.
-
-    Actions are integers from 0 to `action_count - 1`. The CPU and a batch with `debug` on refuse
-    others. With `debug` off, a GPU batch plays an action outside that range on the device as the
-    idle action.
-
-    Attributes:
-        environment_count: The number of environments.
-        agents: The size of the agent axis, `left_agents + right_agents`.
-        left_agents: The agents of the left team.
-        right_agents: The agents of the right team.
-        action_count: The number of actions, 19 for `default`, 20 for `v2` and 33 for `full`.
-        left_players: The players of the left team, as `len(observation['left_team'])` in GRF for
-            a left agent.
-        right_players: The players of the right team.
-        device: The `torch.device` that holds the buffers of the batch, such as `cuda:0`.
-        scenario_name: The name of the scenario, without its folder or suffix.
-        difficulty: `[environment_count, 2]` floats, the difficulty of the left and of the right
-            team of each environment, the one that the batch sets, else the scenario's.
-        stacked: Whether the observation stacks the last 4.
-        memory_bytes: The bytes of memory that the batch has requested so far.
-        single_observation_space, single_action_space, observation_space, action_space: The spaces
-            of one environment and of the batch, as gymnasium describes them. `raw` has no
-            observation space.
-        run_config: The resolved machine settings, a plain dict from each key of `[run]` to its
-            `value` and its `source`, which is `default`, `file` with the path, or `call`.
-
-    Examples:
-        >>> import torch
-        >>> import cuju
-        >>> batch = cuju.BatchEnvironment('5_vs_5', environment_count=1024, device='cpu')
-        >>> observation = batch.reset()
-        >>> tuple(observation.shape)
-        (1024, 1, 115)
-        >>> actions = torch.zeros((1024, 1), dtype=torch.int32)
-        >>> observation, reward, done, information = batch.step(actions)
-        >>> tuple(reward.shape), tuple(done.shape)
-        ((1024, 1), (1024,))
-    """
+    """A batch of football environments on the GPU or the CPU, which plays GRF bit for bit."""
 
     def __init__(
         self,

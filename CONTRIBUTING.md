@@ -38,13 +38,19 @@ In `python/cuju/`, `__init__.py` exports the public names and each public module
 `_batch/` holds the implementation, from loading the library to the pickles of a state, and its
 class `cuju._batch.Batch` is the private class that holds every option. `_environment.py` maps the
 public `BatchEnvironment` onto it, and `_config.py` reads the machine config, which holds the
-speed settings. `gfootball/` is GRF's Python package, which `ci/port_gfootball.py` generates from GRF's
+speed settings. `gfootball/` is GRF's Python package, which `ci/make/port_gfootball.py` generates from GRF's
 sources with a table of import rewrites, and which changes only through that script.
 `gfootball_engine/` is GRF's engine module over the engine of `include/cuju/engine/`, and `data/`
 holds the bundles, the animations and the digests. `state.py` reads single fields of a state, `_plugins.py` suggests the package of a missing
 module `cuju.<name>` and runs the hooks of batches, and `__main__.py` is the command `cuju`, one entry per subcommand.
 `packages/cuju-gfootball/` is a separate package with its own version, which maps GRF's module
 names onto `cuju.gfootball` through a `.pth` file and releases with cuju.
+
+`tests/` holds one folder for each subject, `batch/`, `grf/`, `cli/`, `states/`, `render/`,
+`devices/` and `packaging/`, with `conftest.py` and `data/` at the top. `ci/checks/` holds the
+scripts that check a build or the docs, `ci/make/` the generators of the port, the glyph atlas and
+the GRF media, and `ci/install_cuda.sh` the CUDA setup of the wheel builds. `examples/` holds the
+quickstart notebook and three programs.
 
 ## Changes elsewhere
 
@@ -74,7 +80,7 @@ only a pull request.
     same bits.
 - A changed digest is a changed result, so `python/cuju/data/digests.json` stays as it is. After a
     change to `python/cuju/data/animations.bin` or a shipped bundle, run
-    `python ci/data_checksums.py` to rewrite `SHA256SUMS`.
+    `python ci/checks/data_checksums.py` to rewrite `SHA256SUMS`.
 
 ## Building and testing
 
@@ -83,7 +89,7 @@ pip install .                                  # both libraries where nvcc is fo
 CMAKE_ARGS=-DCUJU_CUDA=OFF pip install .       # the CPU library alone
 pytest tests/                                  # the public suite, a couple of minutes
 cuju check                                     # the shipped self-check
-python ci/check_links.py --offline             # the links of the README and the docs
+python ci/checks/check_links.py --offline             # the links of the README and the docs
 ruff check && ruff format --check              # Python
 clang-format-18 --dry-run -Werror <files>      # C++ and CUDA
 ```
@@ -96,7 +102,7 @@ clang-format-18 --dry-run -Werror <files>      # C++ and CUDA
     exactness notes with `Exact:`, speed notes with `Speed:`.
 - In Python, write Google-style docstrings and raise the classes of `cuju.errors` rather than bare
     built-ins.
-- Leave `python/cuju/gfootball/` out of `ruff`, since `ci/port_gfootball.py` generates it.
+- Leave `python/cuju/gfootball/` out of `ruff`, since `ci/make/port_gfootball.py` generates it.
 
 ## Leave alone unless the pull request states a reason
 

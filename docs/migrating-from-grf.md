@@ -83,7 +83,9 @@ With `extra_players`, such as `['lazy:right_players=11']`, the wrapper covers th
 
 The batch replaces a list of GRF environments, or a pool of GRF processes, with one object.
 
-A GRF loop with four agents on `5_vs_5` becomes one batch of 1,024 environments.```python
+A GRF loop with four agents on `5_vs_5` becomes one batch of 1,024 environments.
+
+```python
 import cuju
 
 batch = cuju.BatchEnvironment(
@@ -99,7 +101,7 @@ for _ in range(1000):
     actions = policy(observation)  # [1024, 4] actions, a tensor
     observation, reward, done, information = batch.step(actions)
     # No reset here, finished environments have already started the next episode.
-    # information['final_observation'][done] holds their last observations.
+    # information['final_observation'] holds their last observations where done is true.
 ```
 
 Three things change in a loop. Outputs are tensors that the next step overwrites. Episodes reset inside `step`. Every output has an environment axis, and the agent axis is always present. Arguments, methods and attributes are in [API reference](api.md).
@@ -188,7 +190,7 @@ A Kaggle football agent receives the raw observation as lists in `obs['players_r
 
 In `11_vs_11_kaggle` the second half starts after step 1,500 with a kick-off by the other team, and the teams keep their ends.
 
-For Gymnasium, use `api='gymnasium'` or the registered ids above. To play against the built-in AI, use a scenario with a side without agents, such as `5_vs_5_l4_r0`. Action 19, `builtin_ai`, of the `v2` and `full` sets hands one agent's player to the built-in AI for a step.
+For Gymnasium, use `api='gymnasium'` or the registered ids above. To play against the built-in AI, use a scenario with a side without agents, such as `'5_vs_5'` with `left_agents=4`. Action 19, `builtin_ai`, of the `v2` and `full` sets hands one agent's player to the built-in AI for a step.
 
 ## Dumps
 

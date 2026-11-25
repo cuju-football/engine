@@ -10,9 +10,8 @@ description = "A bit-exact, batched reimplementation of Google Research Football
 readme = "README.md"
 requires-python = ">=3.10"
 license = "Apache-2.0 AND LGPL-2.1-or-later AND MIT AND SunPro AND BSL-1.0 AND BSD-3-Clause AND Zlib"
-# The licenses of the engine. Of the others in LICENSES/, CC-BY-4.0 covers
-# docs/assets, which no wheel holds, and Unlicense and OFL-1.1 cover GRF's media, which the wheel of
-# cuju-grf-media holds.
+# The licenses of the engine. Of the others in LICENSES/, Unlicense and OFL-1.1 cover GRF's media,
+# which the wheel of cuju-grf-media holds.
 license-files = [
     "LICENSE",
     "NOTICE",
@@ -92,8 +91,6 @@ wheel.packages = ["python/cuju"]
 # Python 3.
 wheel.py-api = "py3"
 build-dir = "build/{wheel_tag}"
-# The logo of the docs is CC BY 4.0 and not source, so the sdist leaves it out.
-sdist.exclude = ["docs/assets"]
 
 [tool.scikit-build.metadata.version]
 provider = "scikit_build_core.metadata.regex"
@@ -108,7 +105,7 @@ line-length = 100
 src = ["python", "tests"]
 indent-width = 4
 target-version = "py310"
-# GRF's Python package and gym's core, which stay as `ci/port_gfootball.py` writes them.
+# GRF's Python package and gym's core, which stay as `ci/make/port_gfootball.py` writes them.
 # `_cv2.py` and `_gym/__init__.py` are cuju's own, so they stay checked.
 extend-exclude = [
     "python/cuju/gfootball/__init__.py",

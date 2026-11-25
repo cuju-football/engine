@@ -40,11 +40,10 @@ jobs:
                   find include src -name '*.h' -o -name '*.cuh' -o -name '*.cpp' -o -name '*.cu' \
                       | xargs clang-format-18 --dry-run -Werror
             - name: Links of the README and the docs
-              run: python ci/check_links.py --offline
+              run: python ci/checks/check_links.py --offline
             - name: Self-check
               run: pytest tests
 
-    # The same expected digests on an aarch64 host, which is what lets aarch64 wheels ship.
     cpu-arm:
         runs-on: ubuntu-24.04-arm
         steps:
@@ -59,7 +58,6 @@ jobs:
             - name: Self-check
               run: pytest tests
 
-    # The same expected digests from MSVC on Windows, which a Windows wheel would need first.
     cpu-windows:
         needs: grf-media
         runs-on: windows-2022
@@ -100,13 +98,13 @@ jobs:
               run: |
                   sudo apt-get update
                   sudo apt-get install -y libsdl2-2.0-0 libsdl2-ttf-2.0-0 libfreetype6 libharfbuzz0b
-                  python ci/make_glyph_atlas.py grf/third_party/fonts/AlegreyaSansSC-ExtraBold.ttf generated
+                  python ci/make/make_glyph_atlas.py grf/third_party/fonts/AlegreyaSansSC-ExtraBold.ttf generated
             - name: Build and check the GRF media wheel
               run: |
-                  python ci/make_render_media.py grf --generated generated
+                  python ci/make/make_render_media.py grf --generated generated
                   pip install build
                   python -m build --wheel --outdir grf-media packaging/cuju-grf-media
-                  python ci/check_wheel.py --grf-media grf-media/*.whl
+                  python ci/checks/check_wheel.py --grf-media grf-media/*.whl
             - uses: actions/upload-artifact@v7
               with:
                   name: grf-media
