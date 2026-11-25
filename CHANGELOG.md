@@ -20,7 +20,7 @@ maps every old name to its replacement.
     `device`, `seed`, `left_agents`, `right_agents`, `difficulty`, `representation`, `rewards`,
     `action_set`, `auto_reset`, `stacked`, `channel_dimensions`, `raw`, `frames`, `frame_size` and
     `config`. It maps onto `cuju._batch.Batch`, the private class that holds every option of
-    0.3.0 and that `cuju check`, `cuju.env`, `cuju.kaggle`, the replays and the other packages of
+    0.3.0 and that `cuju check`, `cuju.env`, `cuju._kaggle`, the replays and the other packages of
     the family use. The scenario is a shipped name without agent counts, such as `5_vs_5`, or the
     path of a scenario file, and the agents come from `left_agents` and `right_agents`. Observations
     always keep the agent axis, `done` is `bool`, and `information` holds `final_observation`,
@@ -42,7 +42,7 @@ maps every old name to its replacement.
 ### Changed
 
 - Actions are integers from 0 to `action_count - 1`. A GPU batch with `debug` off plays an action
-    outside that range as idle, as before, so code that passed `-1` for idle passes 0. `cuju.env` and `cuju.kaggle` still take GRF's negative indices
+    outside that range as idle, as before, so code that passed `-1` for idle passes 0. `cuju.env` and `cuju._kaggle` still take GRF's negative indices
     and turn them into the same positive action before stepping, so their outputs do not change, and
     the C API keeps its range from `-n` to `n - 1`. The CPU and a batch with `debug` on refuse an
     action outside the range with `ArgumentError`.
@@ -54,10 +54,11 @@ maps every old name to its replacement.
     `CUJU_GRF_MEDIA`, `CUJU_CUDA_LIBRARY`, `CUJU_CPU_LIBRARY` and `CUJU_RENDER_LIBRARY` remain.
 - `import cuju` shows `BatchEnvironment`, `scenario_names`, `Error`, `errors`, `engine_status` and
     `__version__`. The public submodules are `cuju.scenarios`, `cuju.dumps`, `cuju.env`,
-    `cuju.gfootball` and `cuju.gfootball_engine`. The observers, `roles`, `observation`, `cuju.kaggle`,
-    `cuju.raw`, `cuju.state`, `cuju.players`, `cuju.wrappers`, the action logs, the digests and the
+    `cuju.gfootball` and `cuju.gfootball_engine`. The observers, `roles`, `observation`, `cuju._kaggle`,
+    `cuju._raw`, `cuju._state`, `cuju._players`, `cuju._wrappers`, the action logs, the digests and the
     replays stay private, for the packages of the family.
-- `ActionLog`, `Digest`, `digest` and `replay` left the top level and live in `cuju.action_log`.
+- `ActionLog`, `Digest`, `digest` and `replay` left the top level and live in `cuju._action_log`.
+- The modules `kaggle`, `raw`, `state`, `players`, `wrappers` and `action_log` of 0.3.0 are `_kaggle`, `_raw`, `_state`, `_players`, `_wrappers` and `_action_log`.
 - `bundled_scenarios` is `scenario_names`, and the arguments `with_raw`, `render_frames` and
     `render_resolution_x` and `_y` are `raw`, `frames` and `frame_size`. `torch_device` is `device`.
     The arguments `assignment`, `first_index`, `episode_number`, `physics_steps_per_frame`,

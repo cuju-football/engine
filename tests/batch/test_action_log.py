@@ -11,7 +11,7 @@ import torch
 
 import cuju
 from conftest import CUDA, actions_at, play_digest, tensor_bytes
-from cuju import action_log
+from cuju import _action_log as action_log
 from cuju._batch import Batch
 
 DIGESTS = os.path.join(os.path.dirname(os.path.abspath(cuju.__file__)), 'data', 'digests.json')

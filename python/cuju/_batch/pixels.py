@@ -59,7 +59,7 @@ class Frames:
         self._buffer = ctypes.create_string_buffer(self.event_size * CAPACITY)
         self.workers, self.threads = split(count, workers=workers, threads=threads)
         self._pool = concurrent.futures.ThreadPoolExecutor(
-            max_workers=self.workers, thread_name_prefix='cuju-render'
+            max_workers=self.workers, thread_name_prefix='cuju-pixels'
         )
         self.renderers = []
         try:

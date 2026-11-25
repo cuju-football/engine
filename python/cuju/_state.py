@@ -105,7 +105,7 @@ def _resolve(fields: Sequence[str | Field]) -> list[Field]:
         elif field in known:
             resolved.append(known[field])
         else:
-            raise ArgumentError(f'expected a path of cuju.state.layout(), found {field!r}')
+            raise ArgumentError(f'expected a path of cuju._state.layout(), found {field!r}')
     return resolved
 
 

@@ -41,10 +41,12 @@ public `BatchEnvironment` onto it, and `_config.py` reads the machine config, wh
 speed settings. `gfootball/` is GRF's Python package, which `ci/make/port_gfootball.py` generates from GRF's
 sources with a table of import rewrites, and which changes only through that script.
 `gfootball_engine/` is GRF's engine module over the engine of `include/cuju/engine/`, and `data/`
-holds the bundles, the animations and the digests. `state.py` reads single fields of a state, `_plugins.py` suggests the package of a missing
+holds the bundles, the animations and the digests. `_state.py` reads single fields of a state, `_plugins.py` suggests the package of a missing
 module `cuju.<name>` and runs the hooks of batches, and `__main__.py` is the command `cuju`, one entry per subcommand.
 `packages/cuju-gfootball/` is a separate package with its own version, which maps GRF's module
 names onto `cuju.gfootball` through a `.pth` file and releases with cuju.
+
+The packages of the family reach the private `Batch` behind a public `BatchEnvironment` through `cuju._batch.unwrap(batch)`, which also takes a `Batch`.
 
 `tests/` holds one folder for each subject, `batch/`, `grf/`, `cli/`, `states/`, `render/`,
 `devices/` and `packaging/`, with `conftest.py` and `data/` at the top. `ci/checks/` holds the

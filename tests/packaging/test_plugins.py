@@ -197,6 +197,24 @@ def test_a_named_hook_receives_each_batch(site, tmp_path):
     assert log.read_text().splitlines() == ['hook 2']
 
 
+def test_a_named_hook_receives_the_batch_of_a_public_environment(site, tmp_path):
+    log = tmp_path / 'log.txt'
+    code = """
+        import cuju
+        from cuju._batch import Batch, unwrap
+
+        batch = cuju.BatchEnvironment('5_vs_5', environment_count=2, device='cpu', left_agents=4)
+        inner = unwrap(batch)
+        assert isinstance(inner, Batch) and unwrap(inner) is inner
+        inner.add_observer(lambda *arguments: None)
+        batch.reset()
+        batch.close()
+    """
+    result = run(code, site, CUJU_BATCH_HOOKS='fake', FAKE_LOG=str(log))
+    assert result.returncode == 0, result.stderr
+    assert log.read_text().splitlines() == ['hook 2']
+
+
 def test_a_missing_or_failing_hook_warns_and_the_batch_runs(site, tmp_path):
     log = tmp_path / 'log.txt'
     plain = run(BATCH, site, FAKE_LOG=str(log))

@@ -9,6 +9,8 @@ from typing import Any
 
 import numpy as np
 
+from ._batch import unwrap
+
 __all__ = ['grf_observation', 'grf_observations', 'team_sizes']
 
 # GRF: these values of a raw observation are Python integers.
@@ -47,6 +49,7 @@ def grf_observation(
 
 def team_sizes(batch: Any, environment: int, agent: int) -> tuple[int, int]:
     """Returns the player counts of an agent's own team and of the other team."""
+    batch = unwrap(batch)
     left = int(batch.left_players[environment])
     right = int(batch.right_players[environment])
     # GRF: a right agent sees its own team as the left team.
@@ -57,6 +60,7 @@ def grf_observations(
     batch: Any, environment: int, agents: list[int] | None = None, final: bool = False
 ) -> list[dict[str, Any]]:
     """Returns GRF's list of raw observations of an environment of a batch."""
+    batch = unwrap(batch)
     raw = batch.final_raw() if final else batch.raw()
     if agents is None:
         agents = range(int(batch.left_agents[environment] + batch.right_agents[environment]))

@@ -218,9 +218,7 @@ import torch
 
 import cuju
 
-batch = cuju.BatchEnvironment(
-    '11_vs_11_stochastic', environment_count=4, device='cpu', frames=True
-)
+batch = cuju.BatchEnvironment('11_vs_11_stochastic', environment_count=4, device='cpu', frames=True)
 batch.reset()
 video = cv2.VideoWriter('match.avi', cv2.VideoWriter_fourcc(*'MJPG'), 10, (1280, 720))
 for _ in range(300):

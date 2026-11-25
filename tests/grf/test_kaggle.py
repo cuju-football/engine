@@ -12,8 +12,8 @@ from conftest import tensor_bytes
 from cuju._batch import Batch
 
 np = pytest.importorskip('numpy')
-kaggle = pytest.importorskip('cuju.kaggle')
-cuju_raw = pytest.importorskip('cuju.raw')
+kaggle = pytest.importorskip('cuju._kaggle')
+cuju_raw = pytest.importorskip('cuju._raw')
 
 # GRF: the 23 values of a raw observation of one agent.
 KEYS = {

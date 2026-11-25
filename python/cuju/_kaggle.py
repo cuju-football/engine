@@ -11,8 +11,8 @@ from typing import Any
 import numpy as np
 import torch
 
-from ._batch import Batch
-from .raw import grf_observation, team_sizes
+from ._batch import Batch, unwrap
+from ._raw import grf_observation, team_sizes
 
 __all__ = [
     'AgentRunner',
@@ -47,6 +47,7 @@ def players_raw(
     batch: Any, environment: int, agent: int, final: bool = False
 ) -> list[dict[str, Any]]:
     """Returns `obs['players_raw']` of a Kaggle agent that plays an agent of a batch."""
+    batch = unwrap(batch)
     raw = batch.final_raw() if final else batch.raw()
     return [
         _lists(grf_observation(raw, environment, agent, *team_sizes(batch, environment, agent)))
@@ -62,6 +63,7 @@ def observation(
     raw: dict[str, Any] | None = None,
 ) -> _Struct:
     """Returns a Kaggle agent's observation, a dictionary whose keys are also attributes."""
+    batch = unwrap(batch)
     several = isinstance(agent, (list, tuple))
     agents = [int(index) for index in agent] if several else [int(agent)]
     if raw is None:
@@ -167,6 +169,7 @@ class KaggleAgent:
         agents: list[int] | None = None,
     ) -> None:
         """Binds a Kaggle agent function to an agent of a batch."""
+        batch = unwrap(batch)
         if getattr(batch, '_raw_fields', None) is None:
             raise ValueError('expected a batch with the raw representation or with_raw=True')
         self.agents = [agent] if agents is None else [int(index) for index in agents]

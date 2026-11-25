@@ -38,10 +38,10 @@ from ._assets import scenario_names
 from ._batch import Batch
 from ._batch import frame_stack as _frame_stack
 from ._batch.state import _pickle_episode, _StateUnpickler
+from ._players import Bot, Lazy
+from ._raw import grf_observation, grf_observations
+from ._wrappers import MultiAgentToSingleAgent
 from .errors import ChoiceError, StateError
-from .players import Bot, Lazy
-from .raw import grf_observation, grf_observations
-from .wrappers import MultiAgentToSingleAgent
 
 __all__ = ['FootballEnvironment', 'create_environment', 'grf_observation', 'register_environments']
 

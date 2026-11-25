@@ -14,7 +14,8 @@ import numpy as np
 import torch
 
 from . import dumps
-from .raw import grf_observations
+from ._batch import unwrap
+from ._raw import grf_observations
 
 _PACKAGE = 'cuju.gfootball.env.players'
 _MODULE_PATH = re.compile(r'\w+(\.\w+)*')
@@ -75,7 +76,7 @@ class PythonPlayer:
         self._batch = None
 
     def bind(self, batch: Any) -> PythonPlayer:
-        self._batch = batch
+        self._batch = unwrap(batch)
         return self
 
     def _index(self, action, turned):

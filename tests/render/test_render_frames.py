@@ -420,11 +420,11 @@ def scripted_actions(kind, observation, rng, agents):
 
 
 def patched_state(state, field, old, new):
-    """`state` with its int32 `field` changed from `old` to `new`, found through `cuju.state`."""
-    import cuju.state
+    """`state` with its int32 `field` changed from `old` to `new`, found through `cuju._state`."""
+    import cuju._state
 
-    assert int(cuju.state.read(state, [field])[0]) == old
-    layout = cuju.state.layout()
+    assert int(cuju._state.read(state, [field])[0]) == old
+    layout = cuju._state.layout()
     end = max(f.offset + f.size for f in layout.values())
     guess = len(state) * layout[field].offset // end
     want = struct.pack('<i', old)
@@ -432,7 +432,7 @@ def patched_state(state, field, old, new):
     for at in sorted(places, key=lambda at: abs(at - guess)):
         candidate = state[:at] + struct.pack('<i', new) + state[at + 4 :]
         try:
-            if int(cuju.state.read(candidate, [field])[0]) == new:
+            if int(cuju._state.read(candidate, [field])[0]) == new:
                 return candidate
         except cuju.errors.Error:
             continue

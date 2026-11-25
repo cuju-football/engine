@@ -11,6 +11,8 @@ from typing import Any
 
 import torch
 
+from ._batch import unwrap
+
 __all__ = ['Bot', 'Lazy']
 
 # GRF: the indices of the bot's actions in the `full` set.
@@ -59,6 +61,7 @@ class Bot:
 
     def __init__(self, batch: Any, agent: int) -> None:
         """Binds a bot to an agent of a batch."""
+        batch = unwrap(batch)
         # GRF: the bot asserts the `full` action set.
         if batch.action_count != _FULL_ACTIONS:
             raise ValueError("expected a batch with action_set='full', which GRF's bot needs")
@@ -178,6 +181,7 @@ class Lazy:
 
     def __init__(self, batch: Any, agents: int | list[int]) -> None:
         """Binds a lazy player to agents of a batch."""
+        batch = unwrap(batch)
         self.batch = batch
         self.agents = [agents] if isinstance(agents, int) else list(agents)
 

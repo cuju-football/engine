@@ -5,7 +5,13 @@ from __future__ import annotations
 
 from typing import Any
 
-__all__ = ['Batch']
+__all__ = ['Batch', 'unwrap']
+
+
+def unwrap(batch: Any) -> Any:
+    """Returns the private `Batch` of a `BatchEnvironment`, and a `Batch` itself."""
+    inner = getattr(batch, '_batch', None)
+    return batch if inner is None else inner
 
 
 def __getattr__(name: str) -> Any:

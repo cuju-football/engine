@@ -135,9 +135,7 @@ A build takes about a second. A batch keeps the bundle of a scenario file in a c
 from cuju import scenarios
 
 scenarios.build_bundle('my_scenario.py', 'my_scenario.cjb')
-batch = cuju.BatchEnvironment(
-    'my_scenario.cjb', environment_count=256, device='cpu', left_agents=1
-)
+batch = cuju.BatchEnvironment('my_scenario.cjb', environment_count=256, device='cpu', left_agents=1)
 ```
 
 The bundle holds the scenario without agents, and the batch sets up the agents that `left_agents` and `right_agents` ask for, whatever the file is called. A build is deterministic and both backends write the same bytes, so a bundle can be cited by its SHA-256. `name=` sets the name stored in it. `build_bundle` warns when a form lasts longer than a batch plays at GRF's default of 10 ticks a step, 5,119 steps.

@@ -13,6 +13,7 @@ from cuju import _replay_command as replay
 from cuju import _replays
 from cuju import _script_helpers as script_helpers
 from cuju._batch import Batch
+from cuju._batch import unwrap as _unwrap
 
 
 def episode_dump(directory, scenario='academy_3_vs_1_with_keeper_l1_r1', **options):
@@ -102,3 +103,18 @@ def test_other_ticks_and_devices(tmp_path):
     assert replay.main([path]) == 0
     if CUDA:
         assert replay.check(path, device='cuda') == (len(rows), True, None)
+
+
+def test_a_dump_writer_follows_a_public_batch(tmp_path):
+    with cuju.BatchEnvironment(
+        'academy_empty_goal_close', environment_count=1, device='cpu', left_agents=1, raw=True
+    ) as batch:
+        writer = cuju.dumps.DumpWriter(batch, tmp_path)
+        assert writer.batch is _unwrap(batch)
+        batch.reset()
+        for step in range(5):
+            actions = actions_at(step, 1, batch.agents, batch.action_count)
+            batch.step(actions)
+            writer.record(actions)
+        writer.close()
+    assert len(cuju.dumps.read_dump(writer.paths[0])) == 5

@@ -29,7 +29,7 @@ def test_import_leaves_gym_and_gymnasium_out():
 
 def test_import_leaves_torch_out_until_a_batch_is_used():
     found = run(
-        "import sys, cuju, cuju.state; print('torch' in sys.modules); "
+        "import sys, cuju, cuju._state; print('torch' in sys.modules); "
         "print('BatchEnvironment' in dir(cuju), sorted(cuju.__all__) == sorted(set(cuju.__all__)))"
         '; from cuju import BatchEnvironment; '
         "print('torch' in sys.modules, BatchEnvironment.__module__, "
@@ -49,14 +49,14 @@ def test_scenarios_and_the_library_path_leave_torch_out():
 def test_every_public_name_of_cuju_resolves():
     found = run(
         'import cuju; missing = [name for name in cuju.__all__ if not hasattr(cuju, name)]; '
-        "print(missing or 'none'); from cuju.action_log import ActionLog, Digest, digest, replay; "
+        "print(missing or 'none'); from cuju._action_log import ActionLog, Digest, digest, replay; "
         "print(ActionLog.__name__, 'ActionLog' in dir(cuju))"
     )
     assert found == ['none', 'ActionLog', 'False']
 
 
 def test_action_log_imports_first():
-    found = run("import cuju.action_log; print('ok')")
+    found = run("import cuju._action_log; print('ok')")
     assert found == ['ok']
 
 

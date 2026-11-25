@@ -209,9 +209,7 @@ import cuju
 import cuju.dumps
 import torch
 
-batch = cuju.BatchEnvironment(
-    '5_vs_5', environment_count=64, left_agents=4, device='cpu', raw=True
-)
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=64, left_agents=4, device='cpu', raw=True)
 writer = cuju.dumps.DumpWriter(batch, 'dumps', environments=[0, 1], write_goal_dumps=True)
 batch.reset()
 for _ in range(3001):

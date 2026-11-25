@@ -73,7 +73,10 @@ def train(batch, model, optimizer, updates, horizon=16, gamma=0.99):
             target = reward + gamma * (1 - done) * target  # an end of episode is terminal
             returns.append(target)
         advantage = torch.stack(returns[::-1]) - torch.stack(values)
-        loss = -(torch.stack(log_probabilities) * advantage.detach()).mean() + 0.5 * advantage.pow(2).mean()
+        loss = (
+            -(torch.stack(log_probabilities) * advantage.detach()).mean()
+            + 0.5 * advantage.pow(2).mean()
+        )
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -95,6 +98,7 @@ Wrapping `step` gives the return and length of finished episodes. The accumulato
 returns = torch.zeros(batch.environment_count, device=batch.device)
 lengths = torch.zeros_like(returns)
 totals = torch.zeros(3, device=batch.device)  # return, length and count of finished episodes
+
 
 def step(actions):
     observation, reward, done, information = batch.step(actions)
@@ -128,6 +132,7 @@ Start one process per GPU with one batch each and a seed of its own, created ins
 ```python
 # train.py, started with `torchrun --nproc-per-node=4 train.py`, model as above
 import os, torch.distributed as distributed
+
 rank = int(os.environ['LOCAL_RANK'])
 torch.cuda.set_device(rank)
 distributed.init_process_group('nccl')

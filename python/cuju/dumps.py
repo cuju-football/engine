@@ -17,6 +17,7 @@ from typing import Any
 
 import torch
 
+from ._batch import unwrap
 from .errors import ArgumentError, LibraryError
 
 __all__ = ['DumpWriter', 'read_dump']
@@ -294,7 +295,7 @@ class DumpWriter:
         dump_frequency: int = 1,
     ) -> None:
         """Follows `environments` of `batch` from the episodes that its next steps start."""
-        batch = getattr(batch, '_batch', batch)
+        batch = unwrap(batch)
         batch._handle()
         library = batch._library
         try:

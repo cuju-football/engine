@@ -37,7 +37,7 @@ def test_a_state_of_the_other_parity_plays_as_in_grf(device):
     import numpy as np
     import torch
 
-    import cuju.state
+    import cuju._state
 
     def batch(episode_number):
         made = Batch(
@@ -63,10 +63,10 @@ def test_a_state_of_the_other_parity_plays_as_in_grf(device):
         second.step(actions)
     loaded = second.get_state(0)
     second.close()
-    layout = cuju.state.layout()
+    layout = cuju._state.layout()
     names = list(layout)
     digest = hashlib.sha256()
-    for name, value in zip(names, cuju.state.read(loaded, names), strict=True):
+    for name, value in zip(names, cuju._state.read(loaded, names), strict=True):
         data = np.ascontiguousarray(value).tobytes()
         digest.update(data[:5] if layout[name].type == 'N7blunted6radianE' else data)
     assert digest.hexdigest() == '61019403dfa67543dcad95dc61e2ebd7f6cdcc18c50183a4e0cf96e27c2dd15a'

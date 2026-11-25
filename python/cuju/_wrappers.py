@@ -10,6 +10,7 @@ from typing import Any
 
 import torch
 
+from ._batch import unwrap
 from .dumps import _CORE_ACTIONS
 
 __all__ = ['MultiAgentToSingleAgent']
@@ -44,6 +45,7 @@ class MultiAgentToSingleAgent:
         _slots: list[int] | None = None,
     ) -> None:
         """Wraps a batch."""
+        batch = unwrap(batch)
         if left_players not in (0, 1) or right_players not in (0, 1):
             raise ValueError(
                 f'expected 0 or 1 left and right players, found {left_players} and {right_players}'

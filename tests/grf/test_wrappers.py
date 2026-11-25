@@ -14,7 +14,7 @@ from cuju.errors import ConfigurationError
 
 np = pytest.importorskip('numpy')
 cuju_env = pytest.importorskip('cuju.env')
-cuju_wrappers = pytest.importorskip('cuju.wrappers')
+cuju_wrappers = pytest.importorskip('cuju._wrappers')
 
 # GRF's `scenarios/tests/multiagent_wrapper.py`.
 SCENARIO = """

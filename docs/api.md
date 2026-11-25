@@ -6,10 +6,23 @@ The package `cuju` has one public class, `cuju.BatchEnvironment`, a machine conf
 
 ```python
 batch = cuju.BatchEnvironment(
-    scenario, environment_count=1024, device='auto', seed=0, left_agents=1, right_agents=0,
-    difficulty=None, representation='simple115v2', rewards='scoring', action_set='default',
-    auto_reset=True, stacked=False, channel_dimensions=(96, 72), raw=False, frames=False,
-    frame_size=(1280, 720), config=None,
+    scenario,
+    environment_count=1024,
+    device='auto',
+    seed=0,
+    left_agents=1,
+    right_agents=0,
+    difficulty=None,
+    representation='simple115v2',
+    rewards='scoring',
+    action_set='default',
+    auto_reset=True,
+    stacked=False,
+    channel_dimensions=(96, 72),
+    raw=False,
+    frames=False,
+    frame_size=(1280, 720),
+    config=None,
 )
 ```
 
@@ -218,7 +231,8 @@ Both libraries export the same C functions, declared in `src/environment_api.h` 
 | `MultiDeviceBatch` | One process per GPU with `seed=base + rank`. |
 | `ActionRangeError`, `EnvironmentIndexError` | `ArgumentError` |
 | `cuju.SignatureError`, `cuju.TrackerError` | `cuju.gfootball_engine` |
-| `cuju.kaggle`, `raw`, `state`, `players`, `wrappers`, `ActionLog`, `Digest`, `replay` | Private. `cuju replay FILE` replays a dump. |
+| `cuju.kaggle`, `cuju.raw`, `cuju.state`, `cuju.players`, `cuju.wrappers`, `cuju.action_log` | Renamed `_kaggle`, `_raw`, `_state`, `_players`, `_wrappers` and `_action_log`, which are private to the family of packages. |
+| `ActionLog`, `Digest`, `replay` | Private. `cuju replay FILE` replays a dump. |
 | `CUJU_NUMA_NODES`, `CUJU_RENDER_THREADS`, `CUJU_RENDER_WORKERS`, `CUJU_LOG` | The keys `numa`, `render_threads`, `render_workers` and `log`. |
 | `CUJU_BUNDLE_CACHE` | Removed. The bundle cache is always on. |
 | `cuju replay --trace_file FILE`, `cuju dump-to-txt --trace_file FILE --output OUT` | `cuju replay FILE`, `cuju dump FILE -o OUT` |
