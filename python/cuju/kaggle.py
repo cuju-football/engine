@@ -18,7 +18,7 @@ from typing import Any
 import numpy as np
 import torch
 
-from . import BatchEnvironment
+from ._batch import Batch
 from .raw import grf_observation, team_sizes
 
 __all__ = [
@@ -366,7 +366,9 @@ class KaggleAgent:
             else:
                 actions.append(action_index(answer, self.batch.action_count))
             self._steps[environment] += 1
-        return torch.tensor(actions, dtype=torch.int32, device=self.batch._torch_device)
+        actions = torch.tensor(actions, dtype=torch.int32, device=self.batch._torch_device)
+        # GRF: a negative index counts from the end, which the batch plays as the same action.
+        return torch.where(actions < 0, actions + self.batch.action_count, actions)
 
 
 def evaluate(
@@ -398,7 +400,7 @@ def evaluate(
     Returns:
         The goals of the left and of the right team in each match.
     """
-    batch = BatchEnvironment(
+    batch = Batch(
         scenario,
         environment_count=episodes,
         representation='raw',

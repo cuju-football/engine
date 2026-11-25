@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import os
 
-from .._assets import _DATA_DIRECTORY, _split_name, bundled_assets, bundled_scenarios
+from .._assets import _DATA_DIRECTORY, _split_name, bundled_assets, scenario_names
 from ..errors import MissingFileError
 
 
@@ -28,7 +28,7 @@ def _resolve_asset(asset: str) -> tuple[str, tuple[int, int]]:
     if os.path.isfile(shipped):
         return shipped, (-1, -1)
     split = _split_name(asset)
-    if split is None and asset in bundled_scenarios():
+    if split is None and asset in scenario_names():
         split = (asset, 1, 0)
     if split:
         scenario, left, right = split
@@ -39,5 +39,5 @@ def _resolve_asset(asset: str) -> tuple[str, tuple[int, int]]:
             return os.path.join(directory, base + '.cjb'), (left, right)
     raise MissingFileError(
         f'expected the path of an asset bundle or `<scenario>_l<left>_r<right>` of one of '
-        f'{bundled_scenarios()}, found {asset!r}'
+        f'{scenario_names()}, found {asset!r}'
     )

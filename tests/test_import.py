@@ -32,11 +32,11 @@ def test_import_leaves_torch_out_until_a_batch_is_used():
     found = run(
         "import sys, cuju, cuju.state; print('torch' in sys.modules); "
         "print('BatchEnvironment' in dir(cuju), sorted(cuju.__all__) == sorted(set(cuju.__all__)))"
-        "; cuju.BatchEnvironment; print('torch' in sys.modules, cuju.BatchEnvironment.__module__, "
-        'cuju.memory_estimate.__module__, cuju.library_path.__module__, '
-        'cuju._MemoryEstimate.__module__)'
+        '; from cuju import BatchEnvironment; '
+        "print('torch' in sys.modules, BatchEnvironment.__module__, "
+        'cuju.scenario_names.__module__)'
     )
-    assert found == ['False', 'True', 'True', 'True', 'cuju', 'cuju', 'cuju', 'cuju']
+    assert found == ['False', 'True', 'True', 'True', 'cuju', 'cuju']
 
 
 def test_scenarios_and_the_library_path_leave_torch_out():
@@ -51,15 +51,15 @@ def test_scenarios_and_the_library_path_leave_torch_out():
 def test_every_public_name_of_cuju_resolves():
     found = run(
         'import cuju; missing = [name for name in cuju.__all__ if not hasattr(cuju, name)]; '
-        "print(missing or 'none'); from cuju import ActionLog, MultiDeviceBatch, digest, replay; "
-        'import cuju.action_log; print(cuju.ActionLog is cuju.action_log.ActionLog)'
+        "print(missing or 'none'); from cuju.action_log import ActionLog, Digest, digest, replay; "
+        "print(ActionLog.__name__, 'ActionLog' in dir(cuju))"
     )
-    assert found == ['none', 'True']
+    assert found == ['none', 'ActionLog', 'False']
 
 
 def test_action_log_imports_first():
     # A submodule that builds on `BatchEnvironment` imports on its own, before any name of `cuju`.
-    found = run("import cuju.multi_device, cuju.action_log; print('ok')")
+    found = run("import cuju.action_log; print('ok')")
     assert found == ['ok']
 
 

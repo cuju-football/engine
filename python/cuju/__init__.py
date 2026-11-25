@@ -10,110 +10,49 @@ its buffers. The guide and the reference are in the repository's `docs/` (`index
 
 from __future__ import annotations
 
+import importlib
 import importlib.util
 import sys
 from typing import ClassVar
 
-from ._assets import bundled_assets, bundled_scenarios
+from . import errors
+from ._assets import scenario_names
 from ._version import __version__
-from .errors import (
-    ActionRangeError,
-    ArgumentError,
-    ChoiceError,
-    ClosedError,
-    ConfigurationError,
-    DeviceError,
-    EnvironmentIndexError,
-    Error,
-    LibraryError,
-    MissingFileError,
-    SignatureError,
-    StateError,
-    TrackerError,
-    UndefinedPathError,
-)
+from .errors import Error
 
 __all__ = [
-    'ActionLog',
-    'ActionRangeError',
-    'ArgumentError',
     'BatchEnvironment',
-    'ChoiceError',
-    'ClosedError',
-    'ConfigurationError',
-    'DeviceError',
-    'Digest',
-    'EnvironmentIndexError',
     'Error',
-    'LibraryError',
-    'MissingFileError',
-    'MultiDeviceBatch',
-    'SignatureError',
-    'StateError',
-    'TrackerError',
-    'UndefinedPathError',
     '__version__',
-    'bundled_assets',
-    'bundled_scenarios',
-    'digest',
-    'library_path',
-    'memory_estimate',
-    'replay',
+    'engine_status',
+    'errors',
+    'scenario_names',
 ]
 
 # The names keep `cuju` as their module, so that their reprs and pickles name the public path.
-for _name in (bundled_assets, bundled_scenarios):
-    _name.__module__ = __name__
-del _name
+scenario_names.__module__ = __name__
 
-# The names that build on PyTorch load on first use, so that `import cuju` and the commands of the
-# commands that step no batch start without importing PyTorch. Each maps to its module.
+# The names that build on PyTorch load on first use, so that `import cuju` and the commands that
+# step no batch start without importing PyTorch. Each maps to its module.
 _LAZY = {
-    'BatchEnvironment': '_batch.environment',
-    'memory_estimate': '_batch.environment',
-    'library_path': '_batch.library',
-    '_MemoryEstimate': '_batch.memory',
-    'ActionLog': 'action_log',
-    'Digest': 'action_log',
-    'digest': 'action_log',
-    'replay': 'action_log',
-    'MultiDeviceBatch': 'multi_device',
+    'BatchEnvironment': '_environment',
+    'engine_status': 'engine_status',
 }
-
-
-def _load_batch() -> None:
-    """Imports the names of `BatchEnvironment` and its helpers, which then name `cuju` their module.
-
-    The names keep `cuju` as their module, so that their reprs and pickles name the public path.
-    """
-    from ._batch.environment import BatchEnvironment, memory_estimate
-    from ._batch.library import library_path
-    from ._batch.memory import _MemoryEstimate
-
-    loaded = {
-        'BatchEnvironment': BatchEnvironment,
-        'memory_estimate': memory_estimate,
-        'library_path': library_path,
-        '_MemoryEstimate': _MemoryEstimate,
-    }
-    for value in loaded.values():
-        value.__module__ = __name__
-    globals().update(loaded)
 
 
 def __getattr__(name: str):
     module = _LAZY.get(name)
     if module is None:
         raise AttributeError(f'module {__name__!r} has no attribute {name!r}')
-    if module.startswith('_batch'):
-        _load_batch()
-    else:
-        globals()[name] = getattr(importlib.import_module(f'.{module}', __name__), name)
-    return globals()[name]
+    value = importlib.import_module(f'.{module}', __name__)
+    if name != module:
+        value = getattr(value, name)
+    globals()[name] = value
+    return value
 
 
 def __dir__() -> list[str]:
-    return sorted(set(globals()) | set(_LAZY))
+    return sorted(__all__)
 
 
 class _RegisteringLoader:

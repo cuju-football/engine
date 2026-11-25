@@ -2,12 +2,12 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""`cuju dump-to-txt`, GRF's script `dump_to_txt` with GRF's flags, which writes a dump as text.
+"""`cuju dump`, which writes a dump as text, as GRF's script `dump_to_txt` does.
 
 It reads the dump with `cuju.dumps`, so dumps of GRF, of `cuju.env`, of a batch and of
 `cuju.gfootball` print alike, and runs no code from them.
 
-    cuju dump-to-txt --trace_file=/tmp/input.dump --output=/tmp/output.txt
+    cuju dump /tmp/input.dump -o /tmp/output.txt
 """
 
 from __future__ import annotations
@@ -23,35 +23,41 @@ __all__ = ['main']
 
 
 def _run(arguments: argparse.Namespace) -> int:
-    path = arguments.trace_file
+    path = arguments.file
     try:
-        text = _dump_text(_grf_steps(dumps._read_cli_dump(path)), arguments.include_debug)
+        text = _dump_text(_grf_steps(dumps._read_cli_dump(path)), True)
     except (OSError, ValueError, KeyError, TypeError) as error:
         detail = (error.strerror or str(error)).lower() if isinstance(error, OSError) else error
         return contract.fail(
-            'cuju dump-to-txt',
+            'cuju dump',
             f'expected a readable dump at {contract.quote_path(path)}, found {detail}',
-            hint='run cuju dump-to-txt --trace_file FILE --output PATH with a GRF or Cuju dump.',
+            hint='run cuju dump FILE with a GRF or cuju dump.',
             as_json=arguments.json,
-            error_id='dump_to_txt.dump',
+            error_id='dump.dump',
             values={'file': path},
         )
+    if arguments.output is None:
+        if arguments.json:
+            contract.emit('engine.dump/1', {'text': text})
+        else:
+            sys.stdout.write(text)
+        return 0
     try:
         with open(arguments.output, 'w') as handle:
             handle.write(text)
     except OSError as error:
         return contract.fail(
-            'cuju dump-to-txt',
+            'cuju dump',
             f'expected a writable output file at {contract.quote_path(arguments.output)}, '
             f'found {error.strerror}',
-            hint='run cuju dump-to-txt --trace_file FILE --output PATH with a writable path.',
+            hint='run cuju dump FILE -o OUT with a writable path.',
             as_json=arguments.json,
             status=contract.EXIT_ENVIRONMENT,
-            error_id='dump_to_txt.output',
+            error_id='dump.output',
             values={'output': arguments.output},
         )
     if arguments.json:
-        contract.emit('engine.dump_to_txt/1', {'files': [arguments.output]})
+        contract.emit('engine.dump/1', {'files': [arguments.output]})
     else:
         print(arguments.output)
     return 0
@@ -59,7 +65,7 @@ def _run(arguments: argparse.Namespace) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Runs the converter on the command line."""
-    return contract.run_command(_cli_parsers.dump_to_txt(), _run, argv)
+    return contract.run_command(_cli_parsers.dump(), _run, argv)
 
 
 if __name__ == '__main__':

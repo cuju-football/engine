@@ -9,7 +9,7 @@ import weakref
 import pytest
 import torch
 
-import cuju
+from cuju._batch import Batch
 
 
 def resident_megabytes():
@@ -42,7 +42,7 @@ def without_collection():
 
 def play_and_drop(device):
     """Creates and steps a batch, drops it without `close`, and returns weak references."""
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=2, device=device)
+    batch = Batch('5_vs_5_l1_r0', environment_count=2, device=device)
     batch.reset()
     for _ in range(3):
         batch.step(torch.zeros((2, 1), dtype=torch.int32, device=device))
@@ -65,7 +65,7 @@ def test_dropped_batches_are_freed(device, without_collection):
 
 
 def test_a_kept_tensor_outlives_its_batch(device, without_collection):
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=2, device=device)
+    batch = Batch('5_vs_5_l4_r0', environment_count=2, device=device)
     batch.reset()
     observation, reward, done, information = batch.step(
         torch.zeros((2, 4), dtype=torch.int32, device=device)
@@ -91,13 +91,20 @@ def build_scenario(builder):
 """
 
 
-def test_close_frees_at_once_and_a_dropped_batch_removes_its_bundles(tmp_path, without_collection):
+def test_close_frees_at_once_and_a_dropped_batch_removes_its_bundles(
+    tmp_path, monkeypatch, without_collection
+):
     drill = tmp_path / 'drill.py'
     drill.write_text(DRILL, encoding='utf-8')
-    batch = cuju.BatchEnvironment(str(drill), environment_count=1, device='cpu')
+    # A cache that cannot be used makes each batch build its bundle in a folder of its own.
+    (tmp_path / 'file').write_text('', encoding='utf-8')
+    monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path / 'file'))
+    monkeypatch.setenv('LOCALAPPDATA', str(tmp_path / 'file'))
+    with pytest.warns(UserWarning, match='bundle cache'):
+        batch = Batch(str(drill), environment_count=1, device='cpu')
+        closed = Batch(str(drill), environment_count=1, device='cpu')
     directory = batch._native.scenario_directory.name
     assert os.path.isdir(directory)
-    closed = cuju.BatchEnvironment(str(drill), environment_count=1, device='cpu')
     closed_directory = closed._native.scenario_directory.name
     closed.close()
     # `close` frees at once.

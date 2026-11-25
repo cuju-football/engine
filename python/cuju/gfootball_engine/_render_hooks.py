@@ -8,8 +8,9 @@ renderer of `cuju._pixels` and calls it where GRF's `GameEnv` touches its graphi
 each reset and the start of its match, every render of the match's RenderState, and every save
 or load of a state. `frame()` returns GRF's screen bytes, `render_resolution_x *
 render_resolution_y * 3` bytes, rows from the bottom. The renderer needs libcuju_render and GRF's
-media, from cuju-grf-media or from the folder that `CUJU_GRF_MEDIA` names. `CUJU_RENDER_THREADS`
-sets the threads that draw each frame, which leave every frame as it is.
+media, from cuju-grf-media or from the folder that `CUJU_GRF_MEDIA` names. The key
+`render_threads` of the machine config sets the threads that draw each frame, which leave every
+frame as it is.
 """
 
 from __future__ import annotations
@@ -17,7 +18,7 @@ from __future__ import annotations
 import ctypes
 import os
 
-from .. import _media, _pixels
+from .. import _config, _media, _pixels
 from ..errors import Error, LibraryError, MissingFileError
 from . import _native
 
@@ -36,9 +37,9 @@ class RendererMissingError(Error, ModuleNotFoundError):
 
 
 def _threads():
-    value = os.environ.get('CUJU_RENDER_THREADS', '')
+    value = _config.values()['render_threads']
     if value:
-        return max(1, int(value))
+        return value
     try:
         available = len(os.sched_getaffinity(0))
     except (AttributeError, OSError):

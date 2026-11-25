@@ -54,7 +54,15 @@ REMOVED = {
     r'montage': 'the montage of the renderer left docs/assets',
     r'cuju-teaser': 'the teaser of the montage left docs/assets',
     r'mistermender|freesound\.org/s/512340': 'the music of the montage left with it',
+    r'memory_estimate|MultiDeviceBatch|bundled_assets|bundled_scenarios|ActionRangeError|'
+    r'EnvironmentIndexError': 'these names left the API in 0.4.0',
+    r'dump-to-txt': 'cuju dump replaced the command in 0.4.0',
+    r'CUJU_(?:BUNDLE_CACHE|LOG|NUMA_NODES|RENDER_THREADS|RENDER_WORKERS)': (
+        'the variable became a key of the machine config or went away in 0.4.0'
+    ),
 }
+# The files that may name removed things, because they map them to their successors.
+REMOVED_EXEMPT = {'docs/api.md'}
 
 # A generic client name, which names no person.
 USER_AGENT = 'link-check/1.0 (Python urllib)'
@@ -255,6 +263,8 @@ def offline_problems(root=ROOT):
                 )
     patterns = [(re.compile(pattern, re.IGNORECASE), pattern) for pattern in REMOVED]
     for path in markdown_files(root):
+        if path.relative_to(root).as_posix() in REMOVED_EXEMPT:
+            continue
         for number, line in enumerate(path.read_text(encoding='utf-8').splitlines(), 1):
             for pattern, text in patterns:
                 if pattern.search(line):

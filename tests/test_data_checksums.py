@@ -7,13 +7,12 @@ import os
 
 import pytest
 
-import cuju
-from cuju import _checksums
+from cuju import _assets, _checksums
 
 
 def test_the_list_covers_the_animations_and_every_bundle():
     listed = _checksums.read_checksums()
-    expected = ['animations.bin'] + [f'assets/{name}.cjb' for name in cuju.bundled_assets()]
+    expected = ['animations.bin'] + [f'assets/{name}.cjb' for name in _assets.bundled_assets()]
     assert sorted(listed) == sorted(expected)
 
 

@@ -18,13 +18,14 @@ import torch
 
 import cuju
 from conftest import actions_at, tensor_bytes
+from cuju._batch import Batch
 
 ASSETS = '5_vs_5_l4_r0'
 
 
 def observed_digest(device, observers, steps=60, environments=4):
     """`play_digest` with `observers` added, and a masked reset and a split step on the way."""
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=environments, device=device, seed=7)
+    batch = Batch(ASSETS, environment_count=environments, device=device, seed=7)
     for observer in observers:
         batch.add_observer(observer)
     digest = hashlib.sha256()
@@ -65,7 +66,7 @@ def test_observers_leave_every_output_as_it_is(device):
 
 
 def test_observers_run_in_order_with_what_each_call_returns():
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=3, device='cpu', seed=1)
+    batch = Batch(ASSETS, environment_count=3, device='cpu', seed=1)
     calls = []
 
     def first(batch, done, information):
@@ -121,7 +122,7 @@ def actions_of(observed):
 
 
 def test_observers_receive_the_actions_of_every_step(device):
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=3, device=device, seed=3)
+    batch = Batch(ASSETS, environment_count=3, device=device, seed=3)
     observed = []
     batch.add_observer(actions_of(observed))
     batch.reset()
@@ -165,9 +166,7 @@ def test_observers_receive_the_actions_of_every_step(device):
 
 
 def test_observers_receive_the_actions_of_a_step_that_resets(device):
-    batch = cuju.BatchEnvironment(
-        'academy_empty_goal_close_l1_r0', environment_count=2, device=device, seed=5
-    )
+    batch = Batch('academy_empty_goal_close_l1_r0', environment_count=2, device=device, seed=5)
     observed = []
     batch.add_observer(actions_of(observed))
     batch.reset()
@@ -187,7 +186,7 @@ def test_observers_receive_the_actions_of_a_step_that_resets(device):
 
 
 def test_reset_done_hands_the_ended_environments():
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_empty_goal_close_l1_r0', environment_count=2, device='cpu', auto_reset=False
     )
     resets = []
@@ -207,7 +206,7 @@ def test_reset_done_hands_the_ended_environments():
 
 
 def test_a_raising_observer_is_removed_with_one_warning(caplog):
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=2, device='cpu')
+    batch = Batch(ASSETS, environment_count=2, device='cpu')
     later = []
 
     def failing(batch, done, information):
@@ -227,7 +226,7 @@ def test_a_raising_observer_is_removed_with_one_warning(caplog):
 
 
 def test_an_observer_may_remove_itself_and_others():
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=1, device='cpu')
+    batch = Batch(ASSETS, environment_count=1, device='cpu')
     calls = []
 
     def once(batch, done, information):
@@ -247,7 +246,7 @@ def test_an_observer_may_remove_itself_and_others():
 
 
 def test_an_observer_may_remove_itself_and_close_again_during_the_close_call(caplog):
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=1, device='cpu')
+    batch = Batch(ASSETS, environment_count=1, device='cpu')
     calls = []
 
     def leaving(batch, done, information):
@@ -276,13 +275,13 @@ def test_an_observer_may_remove_itself_and_close_again_during_the_close_call(cap
     # Removing an observer of a closed batch does nothing, and so does a second close.
     batch.remove_observer(last)
     batch.close()
-    with pytest.raises(cuju.ClosedError):
+    with pytest.raises(cuju.errors.ClosedError):
         batch.reset()
 
 
 @pytest.mark.parametrize('call', ['step', 'step_wait', 'reset', 'reset_done'])
 def test_an_observer_that_closes_the_batch_makes_its_call_raise(call):
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=2, device='cpu')
+    batch = Batch(ASSETS, environment_count=2, device='cpu')
     batch.reset()
     actions = torch.zeros((2, 4), dtype=torch.int32)
     calls = []
@@ -297,7 +296,7 @@ def test_an_observer_that_closes_the_batch_makes_its_call_raise(call):
 
     batch.add_observer(closing)
     batch.add_observer(later)
-    with pytest.raises(cuju.ClosedError, match='an observer closed the batch'):
+    with pytest.raises(cuju.errors.ClosedError, match='an observer closed the batch'):
         if call == 'step':
             batch.step(actions)
         elif call == 'step_wait':
@@ -309,7 +308,7 @@ def test_an_observer_that_closes_the_batch_makes_its_call_raise(call):
             batch.reset_done()
     # Every observer has its close call, and the one after the closing observer misses the step.
     assert calls == [('closing', False), ('closing', True), ('later', True)]
-    with pytest.raises(cuju.ClosedError):
+    with pytest.raises(cuju.errors.ClosedError):
         batch.step(actions)
 
 
@@ -325,7 +324,7 @@ def test_a_dropped_batch_makes_no_close_call_and_a_weak_observer_lets_it_go():
             calls.append(information.get('close', False))
 
     for weak in (True, False):
-        batch = cuju.BatchEnvironment(ASSETS, environment_count=1, device='cpu')
+        batch = Batch(ASSETS, environment_count=1, device='cpu')
         Watcher(batch, weak)
         batch.reset()
         gone = weakref.ref(batch)
@@ -339,40 +338,26 @@ def test_a_dropped_batch_makes_no_close_call_and_a_weak_observer_lets_it_go():
 
 
 def test_observer_refusals():
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=1, device='cpu')
+    batch = Batch(ASSETS, environment_count=1, device='cpu')
 
     def observer(batch, done, information):
         pass
 
-    with pytest.raises(cuju.ArgumentError, match='callable'):
+    with pytest.raises(cuju.errors.ArgumentError, match='callable'):
         batch.add_observer('not callable')
     batch.add_observer(observer)
-    with pytest.raises(cuju.ArgumentError, match='not added yet'):
+    with pytest.raises(cuju.errors.ArgumentError, match='not added yet'):
         batch.add_observer(observer)
     batch.remove_observer(observer)
-    with pytest.raises(cuju.ArgumentError, match='observer of the batch'):
+    with pytest.raises(cuju.errors.ArgumentError, match='observer of the batch'):
         batch.remove_observer(observer)
     batch.close()
-    with pytest.raises(cuju.ClosedError):
+    with pytest.raises(cuju.errors.ClosedError):
         batch.add_observer(observer)
-
-
-def test_parts_of_a_multi_device_batch_take_their_own_observers():
-    batch = cuju.MultiDeviceBatch(ASSETS, ['cpu', 'cpu'], environment_count=3, seed=7)
-    counts = []
-    for part in batch.parts:
-        part.add_observer(
-            lambda part, done, information: counts.append((part.environment_count, done is None))
-        )
-    batch.reset()
-    batch.step(torch.zeros((3, 4), dtype=torch.int32))
-    assert counts == [(2, True), (1, True), (2, False), (1, False)]
-    assert batch.scenario_name == ASSETS
-    batch.close()
 
 
 def test_scenario_name(tmp_path):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         [ASSETS, '5_vs_5_l1_r0', ASSETS], environment_count=1, device='cpu', assignment=[0]
     )
     assert batch.scenario_name == '5_vs_5_l4_r0, 5_vs_5_l1_r0'
@@ -395,7 +380,7 @@ def test_scenario_name(tmp_path):
             """
         )
     )
-    batch = cuju.BatchEnvironment(str(scenario), environment_count=1, device='cpu')
+    batch = Batch(str(scenario), environment_count=1, device='cpu')
     assert batch.scenario_name == 'my_scenario'
     batch.close()
 
@@ -422,7 +407,7 @@ def test_a_step_without_observers_costs_no_more_than_one_with_a_no_op_observer()
     The steps of one small environment on the CPU leave Python its largest share. Rounds of steps
     without observers and with an observer that does nothing alternate, so drift touches both.
     """
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu', threads=1)
+    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', threads=1)
     actions = torch.zeros((1, 1), dtype=torch.int32)
     batch.reset()
     for _ in range(100):

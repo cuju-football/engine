@@ -3,9 +3,9 @@
 **Migration from GRF** moves code written for Google Research Football, or GRF, onto cuju's engine
 through one of three entry points, GRF's own Python package in `cuju.gfootball`, GRF's
 `create_environment` in `cuju.env`, and the batch, `cuju.BatchEnvironment`. The matches are the
-same in all three, and every option keeps GRF's name. The first two entry points play one
-environment per call with GRF's interface, and the batch plays thousands of environments per call
-and takes a rewrite of the training loop.
+same in all three. The first two entry points are GRF's API, play one environment per call with
+GRF's interface and keep GRF's option names. The batch plays thousands of environments per call,
+takes a rewrite of the training loop and has arguments of its own, which the tables below map.
 
 The batch changes three properties of a loop. Its outputs are shared tensors that the next step
 overwrites, its episodes reset inside `step` with the last observation in `final_observation`, and
@@ -24,7 +24,7 @@ its use of GRF's internals included.
 
 **GRF's `create_environment`, in `cuju.env`.** cuju's own implementation of GRF's function, over a
 batch of one environment, takes three keyword-only arguments beyond GRF's, `device`, `threads` and
-`api`, the last of which chooses Gymnasium's interface.
+`api`, the last of which chooses Gymnasium's interface. It keeps GRF's negative action indices.
 
 **The batch, `cuju.BatchEnvironment`.** Thousands of environments advance per call, and their
 outputs arrive as PyTorch tensors. The throughput of cuju lies here, and the loop is written for a
@@ -134,7 +134,7 @@ the port, so dumps move freely between machines that run GRF and machines that r
 convenience for a project that keeps an old evaluation pipeline on GRF while it trains on cuju.
 Without the alias each side writes names that the other cannot import, as
 [Differences from GRF](differences-from-grf.md#grfs-python-package) describes, while cuju's own
-readers, `cuju.dumps.read_dump`, `cuju replay` and `cuju dump-to-txt`, read every dump with or
+readers, `cuju.dumps.read_dump`, `cuju replay` and `cuju dump`, read every dump with or
 without it.
 
 GRF's own tests run through the alias exactly as GRF ships them, every file byte for byte, and
@@ -186,9 +186,9 @@ GRF's two-dimensional view of the match, which GRF's Python draws with OpenCV fr
 
 ## GRF's interface for one environment
 
-Install the `spaces` extra with `pip install 'cuju-engine[spaces]'` before using
-`cuju.env` in an environment without Gymnasium or GRF's gym. This also applies
-when you use the single-environment interface to write full episode dumps.
+The extra `spaces`, installed with `pip install 'cuju-engine[spaces]'`, serves `cuju.env` in an
+environment without Gymnasium or GRF's gym, and the single-environment interface that writes full
+episode dumps as well.
 
 `cuju.env.create_environment` takes GRF's arguments with GRF's defaults and returns one environment
 with GRF's interface, the one of gym 0.21 that GRF 2.10.3 is written for. `reset()` returns the
@@ -235,7 +235,7 @@ is `None`, as GRF's raw observation has no space. `seed` returns `None` and `rew
 unbounded, as gym's `Env` gives them to GRF's environment, and `disable_render` does nothing.
 `render=True`, `write_video=True` and the `Pixels` ids raise `ValueError`, since GRF's rendering
 takes place in `cuju.gfootball`, as [Frames and videos](rendering.md#grfs-rendering-in-cujugfootball)
-describes, and in a `BatchEnvironment` with `representation='pixels'` or `render_frames=True`, as
+describes, and in a `BatchEnvironment` with `representation='pixels'` or `frames=True`, as
 [Rendering batches](rendering.md#rendering-batches) describes.
 
 The environment is a Gymnasium `Env` whose `reset` and `step` return gym's values. Where a gym
@@ -270,11 +270,13 @@ actions of each step alone, and plays them again in a batch of one environment t
 request. The replay of a long episode takes a moment on the CPU, and the `time` of each step in the
 dump is the time of that replay rather than of the original step. The match itself is the same, bit for bit.
 
-A dump can also be checked without rendering. `cuju replay --trace_file=<dump>`
-plays a dump's actions again from its configuration and compares every step with the dump, bit for
-bit. It prints the first difference and exits 1, or the steps found equal and exits 0. It takes
-dumps of cuju and of GRF that start at the start of an episode, and confirms that a dump written by
-GRF on a given machine plays the same match in cuju. GRF's own `replay` and `ScriptHelpers().replay`
+A dump can also be checked without rendering. The command `cuju replay FILE` plays a dump's
+actions again from its configuration and compares every step with the dump, bit for bit. It prints
+the first difference and exits 1, or the steps found equal and exits 0. It takes dumps of cuju and
+of GRF that start at the start of an episode, and confirms that a dump written by GRF on a given
+machine plays the same match in cuju. The command `cuju dump FILE -o OUT` writes a dump as text
+without running any code from it. GRF's own scripts `replay` and `dump_to_txt` in `cuju.gfootball`
+keep GRF's flags, `--trace_file` included. GRF's own `replay` and `ScriptHelpers().replay`
 in `cuju.gfootball` render with cuju's renderer, as GRF's do with its own, and its `dump_to_video`
 turns a dump into a rendered video.
 
@@ -357,8 +359,9 @@ import cuju
 import torch
 
 batch = cuju.BatchEnvironment(
-    '5_vs_5_l4_r0',
+    '5_vs_5',
     environment_count=1024,
+    left_agents=4,
     device='cpu',
     representation='simple115v2',
     rewards='scoring,checkpoints',
@@ -368,32 +371,32 @@ for _ in range(1000):
     actions = policy(observation)  # [1024, 4] actions, a tensor
     observation, reward, done, information = batch.step(actions)
     # No reset: environments whose episode ended have already started the next one.
-    # information['final_observation'][done.bool()] holds their last observations.
+    # information['final_observation'][done] holds their last observations.
 ```
 
 The policy receives 1,024 observations at once, the batched input that a neural network processes
 in one pass, and the `if done` branch disappears, since the batch resets its own environments. The
-number of agents moves into the name, `_l4_r0`, the way a batch names its agents, as described in
-[Scenarios](scenarios.md).
+number of agents moves into the argument `left_agents`, and `right_agents` counts the agents of the
+other side, as described in [Scenarios](scenarios.md).
 
 ### Arguments of `create_environment`
 
 Every argument of GRF's `create_environment` has a place in the batch. Most keep their names, and
-the agent counts move into the scenario's name or `agent_counts`.
+the agent counts become the arguments `left_agents` and `right_agents`.
 
 | GRF argument | `BatchEnvironment` | Notes |
 | --- | --- | --- |
-| `env_name` | the first argument | a shipped scenario by name, a bundle by path, or a scenario file |
+| `env_name` | `scenario`, the first argument | a shipped scenario by name, as `scenario_names()` lists them, or the path of a scenario file |
 | `stacked` | `stacked` | same |
 | `representation` | `representation` | same names, the default is `simple115v2` where GRF's is `extracted`, and `pixels` and `pixels_gray` render, as in [Pixel observations and frames](#pixel-observations-and-frames) |
 | `rewards` | `rewards` | same, `scoring` or `scoring,checkpoints` |
 | `write_goal_dumps`, `write_full_episode_dumps`, `dump_frequency`, `logdir` | `cuju.dumps.DumpWriter` | written on request, outside the step, as in [Dumps from a batch](#dumps-from-a-batch) |
-| `render`, `write_video` | `render_frames=True` for the frames, and `write_video` in `cuju.gfootball` | a batch returns frames, and GRF's videos come from GRF's Python |
-| `extra_players` | `cuju.players.Bot`, `cuju.players.Lazy` | GRF's `bot` and `lazy` players, ported, as in [Scripted players](#scripted-players-and-control_all_players) |
-| `number_of_left_players_agent_controls` | the `_l<left>` of the name, or `agent_counts` | same meaning, any count from 0 to the team size |
-| `number_of_right_players_agent_controls` | the `_r<right>` of the name, or `agent_counts` | same meaning |
+| `render`, `write_video` | `frames=True` for the frames, and `write_video` in `cuju.gfootball` | a batch returns frames, and GRF's videos come from GRF's Python |
+| `extra_players` | `cuju.env` and `cuju.gfootball`, and for a batch the agents of `right_agents` | GRF's `bot` and `lazy` players run in GRF's interface, as in [Scripted players](#scripted-players-and-control_all_players) |
+| `number_of_left_players_agent_controls` | `left_agents` | same meaning, any count from 0 to the team size |
+| `number_of_right_players_agent_controls` | `right_agents` | same meaning |
 | `channel_dimensions` | `channel_dimensions` | same |
-| `other_config_options` | the keyword arguments of the constructor | flattened into the constructor |
+| `other_config_options` | the arguments of the constructor, and `config` for the machine's settings | split by what a key changes, as below |
 
 The one default that changes is the representation. The batch defaults to `simple115v2` because
 most training on GRF reads a vector, and an SMM of thousands of environments takes gigabytes, as
@@ -402,21 +405,22 @@ the default.
 
 ### `other_config_options`
 
-GRF passes its lower-level options in a dictionary. The batch takes them as keyword arguments, with
-the same names where they mean the same thing.
+GRF passes its lower-level options in a dictionary. The batch takes the ones that change results as
+arguments, with the same names where they mean the same thing, and `cuju.env.create_environment`
+and `cuju.gfootball` keep the whole dictionary.
 
 | GRF key | cuju | Notes |
 | --- | --- | --- |
 | `action_set` | `action_set` | same, `default`, `v2`, `full` |
-| `physics_steps_per_frame` | `physics_steps_per_frame` | same |
-| `game_engine_random_seed` | `game_engine_random_seed` | same, and a sequence sets one per environment |
-| `episode_number` | `episode_number` | same |
+| `physics_steps_per_frame` | GRF's option of `cuju.env` and `cuju.gfootball` | a batch plays GRF's default of 10 |
+| `game_engine_random_seed` | `reset(seeds=...)` | one seed for every environment or one per environment |
+| `episode_number` | GRF's option of `cuju.env` and `cuju.gfootball` | a batch counts the episodes of each environment itself |
 | `reverse_team_processing` | `reset(reverse=...)` | the team-order flag, read at an environment's first reset |
 | `level` | the first argument | the scenario |
-| `players` | the agent counts, `cuju.players.Bot`, `cuju.players.Lazy`, and custom players through `create_environment` | the `keyboard` player plays in a GRF that renders |
+| `players` | `left_agents` and `right_agents`, and `extra_players` and custom players through `cuju.env` and `cuju.gfootball` | the `keyboard` player plays in a GRF that renders |
 | `real_time` | the speed of the hardware | a batch runs as fast as the hardware allows |
 | `display_game_stats`, `custom_display_stats` | GRF's options in `cuju.gfootball` | GRF's Python draws them over its videos |
-| `render_resolution_x`, `render_resolution_y` | `render_resolution_x`, `render_resolution_y` | same, the size of a rendering batch's frames, with a width that is a multiple of 4 |
+| `render_resolution_x`, `render_resolution_y` | `frame_size=(width, height)` | the size of a rendering batch's frames, with a width that is a multiple of 4, and a width alone leaves the height at 720 |
 | `video_format`, `video_quality_level`, `write_video` | GRF's options in `cuju.gfootball` | GRF's Python writes its videos |
 | `dump_full_episodes`, `dump_scores`, `tracesdir` | `cuju.dumps.DumpWriter` | as in [Dumps from a batch](#dumps-from-a-batch) |
 
@@ -432,16 +436,17 @@ The methods map one to one, with an environment axis added to everything they ta
 | --- | --- | --- |
 | `env.reset()` | `batch.reset()` | resets every environment, `reset(mask=...)` some, and `reset(seeds=..., reverse=...)` replays chosen seeds |
 | `env.step(action)` | `batch.step(actions)` | `actions` is `[environment_count, agents]`, and it returns `(observation, reward, done, information)` for the whole batch |
-| `env.observation()` | `batch.observation()` | the current observation |
+| `env.observation()` | `batch.raw()` | GRF's raw observation, from a batch with `raw=True` |
 | `env.get_state(to_pickle)` | `batch.get_state(index)` | GRF's format, as in [States](states.md) |
 | `env.set_state(state)` | `batch.set_state(index, state)` | GRF's format, in both directions |
 | `env.close()` | `batch.close()` | frees the buffers |
 | `env.observation_space` | `batch.single_observation_space` | `batch.observation_space` for the batch |
 | `env.action_space` | `batch.single_action_space` | `batch.action_space` for the batch |
-| `env.render()`, `env.disable_render()` | `render_frames=True` and `batch.frame()` | a batch renders from its creation, every environment alike |
+| `env.render()`, `env.disable_render()` | `frames=True` and `batch.frame()` | a batch renders from its creation, every environment alike |
 | `env.write_dump(name)` | `env.write_dump(name)` in `cuju.env`, `cuju.dumps.DumpWriter` for a batch | the last steps of an episode, or whole episodes and goals |
 | `env.tracker_setup(start, end)` | `get_state` at the chosen steps, or GRF's tracker in `cuju.gfootball` | GRF's tracker compares two engines of one process in lockstep |
 | `info['score_reward']` | `information['score_reward']` | same, `[environment_count]` |
+| the difficulty of a scenario | `difficulty=(left, right)` and `batch.set_difficulty(values, mask)` | the first sets it for every environment, and the second changes chosen environments from their next reset |
 | `len(obs['left_team'])`, `len(obs['right_team'])` | `batch.left_players`, `batch.right_players` | per environment, from a left agent's view |
 
 States are per environment, so `get_state` and `set_state` take an index. They copy between the
@@ -460,10 +465,10 @@ in Python disappears.
 | `PixelsStateWrapper` | `representation='pixels'` or `'pixels_gray'` | drawn by cuju's renderer, the same frame for every agent |
 | `FrameStack` | `stacked=True` | four observations, the oldest first |
 | `CheckpointRewardWrapper` | `rewards='scoring,checkpoints'` | same reward, same state key |
-| `SingleAgentObservationWrapper`, `SingleAgentRewardWrapper` | `squeeze=True` | drops the agent axis for one agent, which GRF does by itself when one agent plays and cuju only when asked |
+| `SingleAgentObservationWrapper`, `SingleAgentRewardWrapper` | `observation[:, 0]` and `reward[:, 0]` | drops the agent axis for one agent, which GRF does by itself when one agent plays and a batch leaves to the caller |
 | `GetStateWrapper` | built in | `get_state` and `set_state` are methods of the batch |
 | `PeriodicDumpWriter` | `cuju.dumps.DumpWriter` | as in [Dumps from a batch](#dumps-from-a-batch) |
-| `MultiAgentToSingleAgent` | `cuju.wrappers.MultiAgentToSingleAgent` | for scenarios that set `control_all_players`, as in [Scripted players](#scripted-players-and-control_all_players) |
+| `MultiAgentToSingleAgent` | GRF's class in `cuju.gfootball.env.wrappers`, and `cuju.env` | for scenarios that set `control_all_players`, as in [Scripted players](#scripted-players-and-control_all_players) |
 
 GRF's classes themselves are in `cuju.gfootball.env.wrappers` for code on GRF's interface, where
 they wrap one environment at a time, as GRF's do. Over one environment `MultiAgentToSingleAgent`
@@ -480,7 +485,7 @@ The batch spells out a few names that Gym abbreviates. The objects are the same.
 
 | Gym and GRF | cuju |
 | --- | --- |
-| `env` | `batch`, a `BatchEnvironment` |
+| `env` | `batch`, a `cuju.BatchEnvironment` |
 | `num_envs` | `environment_count` |
 | `obs` | `observation` |
 | `info` | `information` |
@@ -494,15 +499,16 @@ The outputs of a batch carry an environment axis in front of GRF's shapes.
 | --- | --- | --- | --- |
 | observation (`simple115v2`) | `[115]` | `[agents, 115]` | `[environment_count, agents, 115]` |
 | reward | scalar | `[agents]` | `[environment_count, agents]` |
-| done | bool | bool | `[environment_count]` of `uint8` |
+| done | bool | bool | `[environment_count]` of `bool` |
 | action | int | `[agents]` | `[environment_count, agents]` |
 
-GRF drops the agent axis by itself when one agent plays, and cuju keeps it unless `squeeze=True` is
-passed. cuju keeps it by default because a batch can mix scenarios with different numbers of
-agents, and code whose agent axis comes and goes is a common source of silent broadcasting bugs.
-With `squeeze=True` and one agent per environment, cuju's shapes become `[environment_count, 115]`,
-`[environment_count]` and `[environment_count]`, GRF's single-agent shapes with an environment axis,
-and the spaces become GRF's for one agent, such as `Discrete(19)` in place of `MultiDiscrete([19])`.
+GRF drops the agent axis by itself when one agent plays, and the batch always keeps it, since code
+whose agent axis comes and goes is a common source of silent broadcasting bugs. With one agent per
+environment, `observation[:, 0]` and `reward[:, 0]` give `[environment_count, 115]` and
+`[environment_count]`, GRF's single-agent shapes with an environment axis, and `step` takes
+`[environment_count]` actions for one agent. The action space of each environment stays
+`MultiDiscrete([19])` where GRF's is `Discrete(19)`. `cuju.env.create_environment` drops the axis as
+GRF does.
 
 ## Dumps from a batch
 
@@ -517,7 +523,9 @@ import cuju
 import cuju.dumps
 import torch
 
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=64, device='cpu', with_raw=True)
+batch = cuju.BatchEnvironment(
+    '5_vs_5', environment_count=64, left_agents=4, device='cpu', raw=True
+)
 writer = cuju.dumps.DumpWriter(batch, 'dumps', environments=[0, 1], write_goal_dumps=True)
 batch.reset()
 for _ in range(3001):
@@ -543,9 +551,9 @@ one full episode every 10 seconds, a limit sized for GRF's speed. A batch plays 
 second, so the writer writes every selected episode, and `dump_frequency` is the setting that bounds
 the space taken on disk.
 
-The steps hold GRF's observation only if the batch writes `raw`, through `with_raw=True` or
-`representation='raw'`. GRF's `replay` needs none, and `dump_to_video` does. `with_raw=True`
-therefore serves dumps meant for video, and a dump meant for replay needs no raw observation.
+The steps hold GRF's observation only if the batch writes `raw`, through `raw=True` or
+`representation='raw'`. GRF's `replay` needs none, and `dump_to_video` does. `raw=True` therefore
+serves dumps meant for video, and a dump meant for replay needs no raw observation.
 
 An episode whose difficulty differs from its scenario's names its level
 `<scenario>_difficulty_<left>_<right>` and writes that GRF scenario file next to the dumps. GRF's
@@ -554,10 +562,10 @@ name. `cuju.dumps.read_dump(path)` reads a dump, cuju's, GRF's or one of `cuju.g
 GRF or numpy, and runs no code from it, which makes it safe for dumps from other sources.
 
 In GRF and in `cuju.gfootball`, `ScriptHelpers().replay(path, render=False)` replays a dump of
-cuju bit for bit, with GRF's default `physics_steps_per_frame=10`, and `cuju replay` checks one
-without GRF. A rendering replay plays the matches of render mode, so its video can part from an
+cuju bit for bit, with GRF's default `physics_steps_per_frame=10`, and `cuju replay FILE` checks
+one without GRF. A rendering replay plays the matches of render mode, so its video can part from an
 unrendered match that the dump was written from, in GRF and in `cuju.gfootball` alike. A batch with
-`render_frames=True` gives the frames of the match that it plays itself.
+`frames=True` gives the frames of the match that it plays itself.
 
 ## Pixel observations and frames
 
@@ -597,9 +605,8 @@ batch = cuju.BatchEnvironment(
     environment_count=8,
     device='cpu',
     representation='pixels',
-    squeeze=True,
 )
-observation = batch.reset()  # [8, 72, 96, 3]
+observation = batch.reset()  # [8, 1, 72, 96, 3], and observation[:, 0] is GRF's shape
 ```
 
 The options and outputs of GRF's pixel code map as the table shows.
@@ -610,10 +617,10 @@ The options and outputs of GRF's pixel code map as the table shows.
 | `representation='pixels_gray'` | `representation='pixels_gray'` | `[..., 72, 96, 1]`, as in GRF |
 | `channel_dimensions` | `channel_dimensions` | same, the size of the shrunk frame |
 | `stacked=True` with pixels | a stack kept by the training code | the batch raises `ConfigurationError` for `stacked=True` with pixels, and [Training on pixels](rendering.md#training-on-pixels) shows a stack of four |
-| `observation['frame']` of `raw` | `information['frame']` with `render_frames=True`, or `batch.frame()` | `[environment_count, render_resolution_y, render_resolution_x, 3]`, rows from the top, red, green, blue |
-| `env.render(mode='rgb_array')` | `information['frame']` with its channels reversed | GRF's `render` reverses the channels of the observation's frame, and the batch returns the observation's order |
-| `render_resolution_x`, `render_resolution_y` | `render_resolution_x`, `render_resolution_y` | same, and `pixels` and `pixels_gray` shrink the whole frame, as GRF's wrapper does |
-| `write_video=True`, `dump_to_video` | GRF's, in `cuju.gfootball`, or a video written from `information['frame']` | GRF's video also holds the frames of the internal steps, which a batch does not draw |
+| `observation['frame']` of `raw` | `batch.frame()` with `frames=True` or a pixels representation | `[environment_count, height, width, 3]`, rows from the top, red, green, blue |
+| `env.render(mode='rgb_array')` | `batch.frame()` with its channels reversed | GRF's `render` reverses the channels of the observation's frame, and the batch returns the observation's order |
+| `render_resolution_x`, `render_resolution_y` | `frame_size=(width, height)` | `pixels` and `pixels_gray` shrink the whole frame, as GRF's wrapper does |
+| `write_video=True`, `dump_to_video` | GRF's, in `cuju.gfootball`, or a video written from `batch.frame()` | GRF's video also holds the frames of the internal steps, which a batch does not draw |
 
 ### Points to check in a pixel port
 
@@ -638,29 +645,27 @@ copied to the device after each step, so a batch with pixels refuses `step_async
 ## Scripted players and `control_all_players`
 
 GRF ships two scripted players and a wrapper for scenarios in which one policy controls a whole
-team. cuju ports all three to act on every environment of a batch at once.
+team. `cuju.env.create_environment` and `cuju.gfootball` run all three as GRF does.
 
-**`cuju.players.Bot(batch, agent)`** is GRF's `bot` player, ported exactly in float64. `act()`
-returns its actions, an index of the `full` set, for every environment at once. It needs
-`action_set='full'`, as GRF's bot asserts, and raw arrays. Like GRF's, it keeps its memory across
+**The `bot` player** is GRF's scripted player, which `extra_players=['bot:right_players=1']` adds.
+It needs the `full` action set, as GRF's bot asserts. Like GRF's, it keeps its memory across
 episodes. It provides a scripted opponent besides the built-in AI, for variety in training and
 evaluation.
 
-**`cuju.players.Lazy(batch, agents)`** is GRF's `lazy`, which plays `idle`. A policy that has
-learned to score beats a team that stands still, which makes `Lazy` a baseline opponent for any
-policy.
+**The `lazy` player** plays `idle`. A policy that has learned to score beats a team that stands
+still, which makes it a baseline opponent for any policy.
 
-**`cuju.wrappers.MultiAgentToSingleAgent(batch, left_players, right_players)`** is GRF's wrapper for
-scenarios that set `control_all_players`. A policy plays the designated player of each side, and the
-built-in AI plays every other agent. The batch needs every controllable player of the played sides
-as agents, raw arrays and the `v2` or `full` set, for `builtin_ai`. A batch accepts such a scenario
-when each side has either no agent or one per controllable player, as GRF's engine asserts.
+**`MultiAgentToSingleAgent`** is GRF's wrapper for scenarios that set `control_all_players`. A
+policy plays the designated player of each side, and the built-in AI plays every other agent. The
+scenario needs every controllable player of the played sides as agents and the `v2` or `full` set,
+for `builtin_ai`. An environment accepts such a scenario when each side has either no agent or one
+per controllable player, as GRF's engine asserts.
 
-`create_environment` uses all of them as GRF does, from `extra_players` such as
-`['bot:right_players=1']` and from a scenario file's `control_all_players`, so code that names them
-there runs unchanged. The two combine as in GRF. With `control_all_players`, the wrapper covers the
-players of the agent, and the players of `extra_players`, such as `['lazy:right_players=11']`, play
-the other slots with their own actions.
+The two combine as in GRF. With `control_all_players`, the wrapper covers the players of the agent,
+and the players of `extra_players`, such as `['lazy:right_players=11']`, play the other slots with
+their own actions. A batch plays the players that no agent controls with the built-in AI, and
+`right_agents` gives the right team agents of a policy, which makes a trained policy the opponent
+of the left agents.
 
 ## Pitfalls of a port
 
@@ -681,20 +686,21 @@ the done flag alone.
 **The default representation.** Code that relied on GRF's default `extracted` gets `simple115v2`
 until it names the representation.
 
-**Padded agents.** In a mixed batch, rewards and losses averaged over agents are first masked with
-`batch.agent_mask`, so that the zeros of padded slots stay out of the average.
-
 **Controllable players of `5_vs_5`.** Four players per team are controllable in `5_vs_5`, since the
 scenario marks its goalkeepers as fixed to the built-in AI, as in GRF.
 
 **One agent.** GRF drops the agent axis by itself when one agent plays, and cuju keeps it.
 `BatchEnvironment('academy_empty_goal_close')` gives `[environment_count, 1, 115]` and
-`MultiDiscrete([19])`, and `squeeze=True` gives GRF's shapes and spaces.
+`MultiDiscrete([19])`, and `observation[:, 0]` gives GRF's shape.
 
-**`done` as `uint8`.** PyTorch deprecates indexing with a `uint8` mask, so the index is written
-`final_observation[done.bool()]` in place of `final_observation[done]`. With
-`representation='raw'`, `final_observation` is a dictionary of tensors, each indexed in turn, as
-`{key: value[done.bool()] for key, value in final_observation.items()}`.
+**The done flag as a mask.** `done` is a `bool` tensor, so `final_observation[done]` selects the
+environments that ended. With `representation='raw'`, `final_observation` is a dictionary of
+tensors, each indexed in turn, as `{key: value[done] for key, value in final_observation.items()}`.
+
+**Actions out of range.** Actions are integers from 0 to `action_count - 1`, and idle is 0. The CPU
+and a batch with `debug` on in the machine config refuse others with `ArgumentError`, and a GPU
+batch with `debug` off plays them as idle, so code that passed `-1` for idle passes 0.
+`cuju.env.create_environment` keeps GRF's negative indices.
 
 **The number of environments.** `environment_count` defaults to 1,024, so a ported call without it
 creates 1,024 environments.
@@ -730,7 +736,6 @@ batch = cuju.BatchEnvironment(
     representation='extracted',
     stacked=True,
     rewards='scoring,checkpoints',
-    squeeze=True,
 )
 ```
 

@@ -7,7 +7,8 @@ import os
 
 import pytest
 
-import cuju
+from cuju._batch import Batch
+from cuju._library_path import library_path
 
 V2_MOUNT = (
     '30 23 0:26 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:4 - cgroup2 cgroup2 rw'
@@ -21,7 +22,7 @@ V1_MOUNT = (
 @pytest.fixture(scope='module')
 def quota():
     """Returns the library's reader of the quota, which reads a copy of `/proc` and `/sys`."""
-    library = ctypes.CDLL(cuju.library_path('cpu'))
+    library = ctypes.CDLL(library_path('cpu'))
     library.cuju_cpu_quota.argtypes = [ctypes.c_char_p]
     return lambda root=None: library.cuju_cpu_quota(None if root is None else str(root).encode())
 
@@ -70,6 +71,6 @@ def test_no_quota(tmp_path, quota):
 def test_threads_zero_honours_the_quota(quota):
     processors = len(os.sched_getaffinity(0))
     limit = quota()
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu', threads=0)
+    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', threads=0)
     assert batch.threads == (min(processors, limit) if limit else processors)
     batch.close()

@@ -60,15 +60,17 @@ Run `cuju` or `cuju help` to see the engine commands and the commands of install
 packages. Run `cuju --version` to list their installed versions. For the self-check in a script,
 use `cuju check --json`, or add `--list` to get the cases without playing them. See the
 [command line guide](https://github.com/cuju-football/engine/blob/main/docs/api.md#command-line) for shell completion and exit statuses. To replay
-a recorded episode, pass its dump file to `cuju replay --trace_file episode_done.dump`.
+a recorded episode, pass its dump file to `cuju replay episode_done.dump`.
 The [dump guide](https://github.com/cuju-football/engine/blob/main/docs/migrating-from-grf.md#dumps-from-a-batch) explains how to write one.
+Settings that change only speed, such as the thread count, live in a machine config file that the
+[API reference](https://github.com/cuju-football/engine/blob/main/docs/api.md#machine-config) describes.
 
 ```python
 import cuju
 import torch
 
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=64, device='auto')
-device, count = batch.torch_device, batch.environment_count
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=64, left_agents=4, device='auto')
+device, count = batch.device, batch.environment_count
 observation = batch.reset()  # [count, 4, 115]
 goals = torch.zeros((), dtype=torch.int64, device=device)
 
@@ -93,7 +95,7 @@ must be cloned. The [documentation](https://github.com/cuju-football/engine/blob
 - **The whole game inside the batch.** The built-in AI, the referee, the animations and the
     observations all run on the device, and nothing crosses back to Python during a step.
 - **All 19 GRF scenarios**, 11-a-side and the academies included, with any number of agents on
-    either side, mixed in one batch, and GRF's own scenario files without GRF.
+    either side, and GRF's own scenario files without GRF.
 - **PyTorch tensors without copies.** Outputs share the batch's buffers, and a CUDA graph or
     `torch.compile` can capture a step together with the policy that drives it.
 - **Resets under the caller's control.** A mask resets some environments, and each can take the
@@ -143,17 +145,16 @@ knows, and then moves only the training loop to a batch. The table maps the batc
 
 | GRF                                                                                   | cuju                                                                       |
 | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| `gfootball.env.create_environment('5_vs_5', number_of_left_players_agent_controls=4)` | `cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=...)`             |
+| `gfootball.env.create_environment('5_vs_5', number_of_left_players_agent_controls=4)` | `cuju.BatchEnvironment('5_vs_5', left_agents=4, environment_count=...)`    |
 | `env.step(action)` with `[4]` actions                                                 | `batch.step(actions)` with `[environment_count, 4]` actions                |
 | `if done: env.reset()`                                                                | the step that ends an episode starts the next by itself                    |
-| the last observation of an episode                                                    | `information['final_observation'][done.bool()]`, per array for `raw`       |
+| the last observation of an episode                                                    | `information['final_observation'][done]`, per array for `raw`              |
 | `env.get_state()`, `env.set_state(state)`                                             | `batch.get_state(index)`, `batch.set_state(index, state)`, in GRF's format |
 | `representation`, `rewards`, `stacked`, `channel_dimensions`, `action_set`            | the same names                                                             |
 | code written for GRF                                                                  | the same code with `gfootball` replaced by `cuju.gfootball`                |
 
-`done` is `uint8`, and PyTorch deprecates indexing with a `uint8` mask, so indexing goes through
-`done.bool()`. With `representation='raw'` the observations are dictionaries of tensors, each
-indexed on its own. [Migrating from GRF](https://github.com/cuju-football/engine/blob/main/docs/migrating-from-grf.md) discusses the three ways in and
+`done` is a `bool` tensor, which indexes the outputs directly. With `representation='raw'` the
+observations are dictionaries of tensors, each indexed on its own. [Migrating from GRF](https://github.com/cuju-football/engine/blob/main/docs/migrating-from-grf.md) discusses the three ways in and
 maps every option, method and wrapper.
 
 ## Platforms
@@ -227,7 +228,7 @@ Research that uses cuju is asked to cite both cuju and GRF.
     title   = {cuju: a bit-exact, batched reimplementation of {Google Research Football}, for {CUDA}
              and {CPU}},
     year    = {2026},
-    version = {0.3.0},
+    version = {0.4.0},
     url     = {https://github.com/cuju-football/engine}
 }
 

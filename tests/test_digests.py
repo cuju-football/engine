@@ -36,9 +36,7 @@ def test_every_shipped_scenario_has_a_case():
     cased = {
         entry['assets'] for entry in EXPECTED['cases'].values() if isinstance(entry['assets'], str)
     }
-    missing = [
-        scenario for scenario in cuju.bundled_scenarios() if f'{scenario}_l1_r0' not in cased
-    ]
+    missing = [scenario for scenario in cuju.scenario_names() if f'{scenario}_l1_r0' not in cased]
     assert not missing
 
 

@@ -11,8 +11,7 @@ each player. The super mini map, `extracted`, encodes the pitch as image planes 
 networks and occupies 60 times the memory of a vector, and `raw` holds every value of GRF's
 observation by name. Every agent observes its own team as the left team, so the observation of an
 agent on the right team is turned by 180 degrees, as in GRF. Coordinates are scaled from metres to
-raw units that extend slightly beyond ±1 at the goal lines. In a batch that mixes scenario bundles,
-every output is padded to the largest bundle.
+raw units that extend slightly beyond ±1 at the goal lines.
 
 ## Representations
 
@@ -43,7 +42,7 @@ environments of four agents with the SMM returns observations of 72 by 96 cells.
 import cuju
 
 batch = cuju.BatchEnvironment(
-    '5_vs_5_l4_r0', environment_count=16, device='cpu', representation='extracted'
+    '5_vs_5', environment_count=16, device='cpu', left_agents=4, representation='extracted'
 )
 observation = batch.reset()
 print(observation.shape, observation.dtype)  # torch.Size([16, 4, 72, 96, 4]) torch.uint8
@@ -70,7 +69,7 @@ environments on a GPU that factor determines whether a batch fits in memory.
 `raw` contains every value of GRF's observation by name. It serves feature engineering, reward
 shaping, logging and Kaggle submissions, which receive the same dictionary. Networks rarely read it
 directly. A common arrangement trains on a vector or the SMM and reads raw values alongside it with
-`with_raw=True`, which adds the writing of every raw array to each step.
+`raw=True`, which adds the writing of every raw array to each step.
 
 `simple115` serves the reproduction of work that used it. Its layout depends on the number of
 players in a team.
@@ -157,15 +156,15 @@ that GRF defines for them, which the second table describes.
 
 The roles are 0 goalkeeper, 1 centre back, 2 left back, 3 right back, 4 defensive midfielder,
 5 central midfielder, 6 left midfielder, 7 right midfielder, 8 attacking midfielder and 9 centre
-forward. In a batch of `5_vs_5_l1_r1`, each team array holds five players for each of the two
-agents. A role is the one that the player plays at that step. When a goalkeeper is sent off, the
-first active player of the team takes over the keeper's formation entry and reads 0 from then on,
-as in GRF. The method `roles(index)` of a batch reports the same roles for one environment in any
-representation, as described in the [API reference](api.md#roles).
+forward. In a batch of `5_vs_5` with `left_agents=1` and `right_agents=1`, each team array holds five
+players for each of the two agents. A role is the one that the player plays at that step. When a
+goalkeeper is sent off, the first active player of the team takes over the keeper's formation entry
+and reads 0 from then on, as in GRF.
 
 ```python
 batch = cuju.BatchEnvironment(
-    '5_vs_5_l1_r1', environment_count=4, device='cpu', representation='raw'
+    '5_vs_5', environment_count=4, device='cpu', left_agents=1, right_agents=1,
+    representation='raw',
 )
 raw = batch.reset()
 print(raw['left_team'].shape)  # torch.Size([4, 2, 5, 2]), 4 environments, 2 agents, 5 players
@@ -263,54 +262,35 @@ one nearest the ball, and `raw['active']` changes during the episode. In the 11-
 every player is controllable, the goalkeeper included, so a single agent can end up in goal. With
 one agent, `designated` equals `active`.
 
-An agent can have no player, and `agent_mask` still counts it. This occurs in two cases. With more
-agents than controllable players, the last agents of the team have none, so in `5_vs_5_l5_r0`
-agent 4 has `active == -1` and an all-zero active one-hot in `simple115v2`. When a team keeps one
+An agent can have no player, and the agent axis still holds its slot. This occurs in two cases. With
+more agents than controllable players, the last agents of the team have none, so in `5_vs_5` with
+`left_agents=5` agent 4 has `active == -1` and an all-zero active one-hot in `simple115v2`. When a team keeps one
 player per agent and a player is sent off, the agent of that player has `active == -1` for the rest
 of the episode.
 
 `raw['active'] != -1` marks the agents that control a player after the last step, as in GRF, and a
 loss multiplied by it counts only those agents.
 
-### Padded slots in a mixed batch
+### Players of a team
 
-A batch that mixes bundles pads every output to the largest bundle, with `batch.agents` agent slots
-per environment and `batch.players` player slots per team array. Each kind of padded slot holds
-fixed values, which the table lists.
-
-| Slot | Holds |
-| --- | --- |
-| an agent slot beyond the environment's agents | zeros in every observation and a reward of 0, and the batch ignores its actions |
-| its `raw` | zeros, so `active` reads 0 rather than -1 and its roles read 0, the goalkeeper's role, so its mask is `agent_mask` rather than `active` |
-| a player slot beyond its team's players | zeros, so position and direction 0, `*_active` false and role 0 |
-| the same slot in `simple115v2` | -1, as GRF fills a team of fewer than 11 |
-
-The real sizes of each environment are the attributes `left_players`, `right_players`,
-`left_agents` and `right_agents`, CPU tensors of `[environment_count]`. The mask of the left team's
-real players follows from them in one line.
-
-```python
-import torch
-
-left_players = torch.arange(batch.players) < batch.left_players[:, None]
-```
-
-The mask has the shape `[environment_count, players]`, and the right team's mask is formed in the
-same way from `right_players`. It is moved to the observation's device once, with
-`.to(observation.device)`. A right agent observes the teams swapped, so its own `left_team` takes
-the right team's mask. A padded player and a player sent off both have `*_active` false, and the
-mask tells them apart.
+The attributes `left_players` and `right_players` of a batch are the integer numbers of players of
+each team, such as 5 and 5 for `5_vs_5`, which is the length of the player axis of the team arrays
+of `raw` and the number of occupied slots in `simple115v2`. A right agent observes the teams
+swapped, so its own `left_team` holds the right team's players.
 
 ### Raw values alongside another representation
 
 Most training reads a vector observation, while reward shaping, logging and evaluation often use a
-raw value as well, such as the score or the owner of the ball. With `with_raw=True`, the batch also
-writes the raw arrays. `batch.raw()` returns them for the last step, and `batch.final_raw()` for the
-step that ended each episode. Writing every raw array adds to the cost of each step, which a short
-timing of the batch at its intended size measures.
+raw value as well, such as the score or the owner of the ball. With `raw=True`, the batch also
+writes the raw arrays. `batch.raw()` returns them for the last step, and
+`information['final_raw']` holds them for the step that ended each episode. Writing every raw
+array adds to the cost of each step, which a short timing of the batch at its intended size
+measures.
 
 ```python
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4, device='cpu', with_raw=True)
+batch = cuju.BatchEnvironment(
+    '5_vs_5', environment_count=4, device='cpu', left_agents=4, raw=True
+)
 observation = batch.reset()
 print(observation.shape, batch.raw()['ball_owned_team'].shape)
 # torch.Size([4, 4, 115]) torch.Size([4, 4])
@@ -324,24 +304,23 @@ the oldest first, as GRF's `stacked` option does. The last axis then holds 460 n
 first observation, and the stack of the step that ended an episode goes to `final_observation`.
 
 GRF stacks the encoded representations, and cuju follows it, so `stacked=True` takes `simple115`,
-`simple115v2` or `extracted` and raises `cuju.ConfigurationError` with `representation='raw'`.
+`simple115v2` or `extracted` and raises `cuju.errors.ConfigurationError` with `representation='raw'`.
 
 A stacked batch saves and loads states with `stacked=True`, in GRF's format, which pickles the stack
 inside the state.
 
-## Single-agent batches
+## Agent axis
 
-GRF drops the agent axis when an environment has one agent. `squeeze=True` does the same for a batch
-whose environments all have exactly one agent. The observation and the reward lose their agent axis,
-and `step` takes actions of shape `[environment_count]`. The raw observation keeps its agent axis,
-as in GRF. A squeezed batch of eight environments of `academy_empty_goal_close` returns
-observations of shape `[8, 115]`.
+Every observation, reward and action keeps its agent axis, whatever the number of agents. A batch of
+eight environments of `academy_empty_goal_close`, which has one agent, returns observations of shape
+`[8, 1, 115]` and rewards of shape `[8, 1]`, and `step` takes actions of shape `[8, 1]` or `[8]` for
+one agent. The slice `observation[:, 0]` gives the shape `[8, 115]` that GRF returns for one agent.
+The environments of `cuju.env` drop the axis for one agent as GRF's do, and
+[Migrating from GRF](migrating-from-grf.md) describes that interface.
 
 ```python
-batch = cuju.BatchEnvironment(
-    'academy_empty_goal_close', environment_count=8, device='cpu', squeeze=True
-)
-print(batch.reset().shape)  # torch.Size([8, 115])
+batch = cuju.BatchEnvironment('academy_empty_goal_close', environment_count=8, device='cpu')
+print(batch.reset().shape)  # torch.Size([8, 1, 115])
 ```
 
 ## Gymnasium spaces
@@ -362,15 +341,11 @@ and four times that with `stacked=True`. A smaller `environment_count` or `chann
 the SMM on a GPU with little memory.
 
 Every output of a batch is a view of its buffers. Each call overwrites the tensors it returned
-before, `raw()` and `final_raw()` included, and so does `set_state`, so a tensor kept across calls
+before, `raw()` and `frame()` included, and so does `set_state`, so a tensor kept across calls
 is cloned first. The views cost no copy, which matters most on the GPU, where a copy of every
 output at every step would take longer than the simulation.
 
-Padded agents are masked with `agent_mask` and padded players with the mask of real players, since
-their zeros otherwise read as players at the origin or as goalkeepers.
-
-As in GRF, the directions in the observation are divided by `physics_steps_per_frame`, so a change
-of that option changes their scale.
+An agent without a player, which `raw['active'] == -1` marks, is masked in a loss.
 
 ## See also
 

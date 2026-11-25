@@ -20,7 +20,8 @@ from typing import Any, NamedTuple
 
 import torch
 
-from . import BatchEnvironment, dumps
+from . import dumps
+from ._batch import Batch
 
 # GRF: `observation_processor.PAST_STEPS_TRACE_SIZE`, the steps that a dump on demand holds.
 _TRACE_SIZE = 100
@@ -52,7 +53,7 @@ def agent_counts(players: list[str]) -> tuple[int, int]:
 
 def batch_for(
     config: dict[str, Any], level: str | None = None, device: Any = 'cpu', threads: int = 1
-) -> BatchEnvironment:
+) -> Batch:
     """Returns a batch of one environment that plays the episode of a GRF configuration.
 
     Args:
@@ -71,7 +72,7 @@ def batch_for(
         except ValueError:
             difficulty = None
     left, right = agent_counts(config['players'])
-    return BatchEnvironment(
+    return Batch(
         level,
         environment_count=1,
         representation='raw',
@@ -89,7 +90,7 @@ def batch_for(
     )
 
 
-def start(batch: BatchEnvironment, config: dict[str, Any]) -> None:
+def start(batch: Batch, config: dict[str, Any]) -> None:
     """Resets a batch from `batch_for` to the start of the configuration's episode."""
     reverse = config.get('reverse_team_processing')
     batch.reset(reverse=None if reverse is None else int(bool(reverse)))
@@ -98,7 +99,7 @@ def start(batch: BatchEnvironment, config: dict[str, Any]) -> None:
 class Player:
     """Steps a batch of one environment and reads each step as a dump step."""
 
-    def __init__(self, batch: BatchEnvironment) -> None:
+    def __init__(self, batch: Batch) -> None:
         self.batch = batch
         # Created before the batch's reset, the writer follows no episode and writes nothing.
         self.writer = dumps.DumpWriter(

@@ -4,8 +4,8 @@
 """GRF's frames for a batch in render mode: one renderer per environment, which draws the renders
 that each reset and step recorded, in GRF's order, and the `pixels` observations of the frames.
 
-The environments draw side by side on `CUJU_RENDER_WORKERS` threads, each renderer with
-`CUJU_RENDER_THREADS` threads of its own, and every frame is the same for every split."""
+The environments draw side by side on `render_workers` threads, each renderer with
+`render_threads` threads of its own, and every frame is the same for every split."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ import numpy as np
 import torch
 
 from .. import _media, _pixels
-from ..errors import ConfigurationError, LibraryError, MissingFileError
+from ..errors import LibraryError, MissingFileError
 
 # The render events one call records per environment at most. A stoppage with a card renders
 # about 150 times before play restarts.
@@ -39,26 +39,15 @@ def _cpus():
         return os.cpu_count() or 1
 
 
-def _count(name):
-    """The positive count that the environment variable `name` sets, or None."""
-    value = os.environ.get(name, '')
-    if not value:
-        return None
-    try:
-        count = int(value)
-    except ValueError:
-        raise ConfigurationError(f'expected {name} to be a whole number, got {value!r}') from None
-    return max(1, count)
-
-
-def split(environments, cpus=None):
+def split(environments, cpus=None, workers=0, threads=0):
     """Returns the renderers drawn at once and the threads of each for a batch of `environments`.
 
-    `CUJU_RENDER_WORKERS` and `CUJU_RENDER_THREADS` set either; by default the workers take one
-    environment each up to the processors there are, and share the processors out.
+    `workers` and `threads`, the `render_workers` and `render_threads` of the machine config, set
+    either; by default the workers take one environment each up to the processors there are, and
+    share the processors out.
     """
     cpus = cpus or _cpus()
-    workers, threads = _count('CUJU_RENDER_WORKERS'), _count('CUJU_RENDER_THREADS')
+    workers, threads = workers or None, threads or None
     if workers is None:
         workers = cpus // threads if threads else cpus
     workers = max(1, min(workers, environments))
@@ -70,7 +59,7 @@ def split(environments, cpus=None):
 class Frames:
     """The renderers of a batch and their last frames."""
 
-    def __init__(self, batch, kind, width, height, frame_size=(1280, 720)):
+    def __init__(self, batch, kind, width, height, frame_size=(1280, 720), workers=0, threads=0):
         library = batch._library
         self._batch = batch
         self._library = library
@@ -82,7 +71,7 @@ class Frames:
         count = batch.environment_count
         batch._check(library.cuju_environment_enable_render_events(batch._handle(), CAPACITY))
         self._buffer = ctypes.create_string_buffer(self.event_size * CAPACITY)
-        self.workers, self.threads = split(count)
+        self.workers, self.threads = split(count, workers=workers, threads=threads)
         self._pool = concurrent.futures.ThreadPoolExecutor(
             max_workers=self.workers, thread_name_prefix='cuju-render'
         )

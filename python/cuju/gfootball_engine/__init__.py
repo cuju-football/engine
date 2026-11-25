@@ -28,4 +28,5 @@ data_dir = os.path.join(gfootball_dir, 'data')
 if 'GFOOTBALL_DATA_DIR' not in os.environ:
     os.environ['GFOOTBALL_DATA_DIR'] = data_dir
 
+from ._errors import SignatureError, TrackerError  # noqa: E402, F401
 from ._gameplayfootball import *  # noqa: E402, F403

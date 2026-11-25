@@ -3,7 +3,7 @@
 The engine's software renderer draws the frames of Google Research Football, or GRF, byte for byte
 as GRF 3d9e754 draws them on Mesa 25.2.8's llvmpipe. These frames supply `env.render()`, rendered
 videos and the representations `pixels` and `pixels_gray` in `cuju.gfootball`. A `BatchEnvironment` draws
-the same frames with `pixels`, `pixels_gray` or `render_frames=True`. Models that learn from pixels
+the same frames with `pixels`, `pixels_gray` or `frames=True`. Models that learn from pixels
 receive the same inputs as in GRF. Rendering also activates GRF's
 [render mode](#render-mode-and-the-match), which changes how the match plays.
 
@@ -203,14 +203,15 @@ its videos with OpenCV, so a project that renders videos in `cuju.gfootball` tak
 alone. `CUJU_GRF_MEDIA` names a folder of GRF's media in place of the installed package, such as the
 output of `ci/make_render_media.py`, as [GRF's media from a clone](installation.md#grfs-media-from-a-clone)
 shows, and `CUJU_RENDER_LIBRARY` names another build of the library. Neither changes a frame of the
-same media.
+same media. The settings of speed, `render_threads` and `render_workers`, are keys of the
+[machine config](installation.md#machine-config).
 
 On Windows, the renderer opens media from folders with Unicode names, including names with
 characters outside the system ANSI code page. Set `CUJU_GRF_MEDIA` to the folder that holds the
 media, including its caption fonts, when using a copy outside the installed package.
 
 Where the library or the media are missing, a rendering engine of `cuju.gfootball` raises
-`RendererMissingError` at `start_game`, and a rendering batch raises `cuju.MissingFileError` at
+`RendererMissingError` at `start_game`, and a rendering batch raises `cuju.errors.MissingFileError` at
 creation, each with a message that names `pip install 'cuju-engine[pixels]'`. `RendererMissingError` is a
 `cuju.Error` and a `ModuleNotFoundError`. Every part of cuju that trains without rendering runs as
 it stands without either.
@@ -269,7 +270,7 @@ the match waits for a restart.
 The frames take the size of GRF's options `render_resolution_x` and `render_resolution_y`, 1280 by
 720 by default, which GRF's `create_environment` passes through `other_config_options`. The renderer
 draws at any width that is a multiple of 4 and at any height, up to 16,384 each, and `start_game`
-raises `cuju.ArgumentError` for another width. The rule for the width is GRF's own. GRF reads each
+raises `cuju.errors.ArgumentError` for another width. The rule for the width is GRF's own. GRF reads each
 frame back with three bytes per pixel in rows that OpenGL pads to whole words of four bytes, while
 its Python takes the bytes as unpadded rows, so a width that leaves a row short of a whole word
 gives GRF a picture whose rows slide into each other. GRF's configuration sets the height to
@@ -279,8 +280,8 @@ a frame of 800 by 450 takes both options. Internal tests compare whole episodes 
 [What testing covers](#what-testing-covers) lists, from 1920 by 1080 down to 96 by 54, a frame no
 larger than a `pixels` observation, at which GRF's menus shrink to a few pixels.
 
-`CUJU_RENDER_THREADS` sets the threads that draw each frame, by default one per processor that the
-process may run on, four at most. No number of threads changes a frame, since the renderer splits
+The key `render_threads` of the [machine config](installation.md#machine-config) sets the threads
+that draw each frame, by default one per processor that the process may run on, four at most. No number of threads changes a frame, since the renderer splits
 each pass into fixed tiles of 64 by 64 pixels and each tile draws its triangles in their order. A
 rendering engine draws 1280 by 720 frames at about six a second with four threads, and the
 section on [speed](#speed) gives the measured figures.
@@ -334,47 +335,45 @@ as long as wanted.
 
 A `BatchEnvironment` renders as well, which suits evaluation and recording at scale and training on
 pixels. `representation='pixels'` and `representation='pixels_gray'` return GRF's frames shrunk to
-`channel_dimensions`, 96 by 72 by default, and `render_frames=True` adds the full frames to the
-information of a step, with any representation.
+`channel_dimensions`, 96 by 72 by default, and `frames=True` adds the full frames, which the method
+`frame()` returns, with any representation.
 
 ```python
 import cuju
 import torch
 
 batch = cuju.BatchEnvironment(
-    '11_vs_11_stochastic_l1_r0',
+    '11_vs_11_stochastic',
     environment_count=8,
     device='cpu',
     representation='pixels',
-    render_frames=True,
+    frames=True,
 )
 observation = batch.reset()  # [8, 1, 72, 96, 3] uint8
 actions = torch.zeros((8, 1), dtype=torch.int32)
 observation, reward, done, information = batch.step(actions)
-frames = information['frame']  # [8, 720, 1280, 3] uint8, rows from the top
+frames = batch.frame()  # [8, 720, 1280, 3] uint8, rows from the top
 ```
 
 The outputs have these shapes, all `uint8`, on the device of the batch.
 
-| Output | Option | Shape | Content |
+| Output | Argument | Shape | Content |
 | --- | --- | --- | --- |
 | observation | `representation='pixels'` | `[environment_count, agents, height, width, 3]` | GRF's `pixels`, the same frame for every agent of an environment, as GRF's `PixelsStateWrapper` gives it |
 | observation | `representation='pixels_gray'` | `[environment_count, agents, height, width, 1]` | GRF's `pixels_gray` |
-| `information['frame']` | `render_frames=True` | `[environment_count, render_resolution_y, render_resolution_x, 3]` | the frame of the last render before each observation, as GRF's observation `frame` holds it |
-| `information['final_frame']` | `render_frames=True` | the same | the last frame of each episode that ended in the step |
-| `frame()` | either | the same | the frames of the last reset or step |
+| `frame()` | `frames=True` or a pixel representation | `[environment_count, frame height, frame width, 3]` | the frame of the last render before each observation, as GRF's observation `frame` holds it, after the last reset or step |
 
-`squeeze=True` drops the agent axis of the observation for one agent, as for any representation, and
-`final_observation` holds the last pixels of each ended episode. The batch draws its frames at the
-size of its options `render_resolution_x` and `render_resolution_y`, GRF's options of the same
-names, 1280 by 720 by default, whatever its `channel_dimensions`, and `pixels` and `pixels_gray`
+The observation keeps its agent axis, and `final_observation` holds the last pixels of each ended
+episode. The batch draws its frames at the size of its argument `frame_size`, `(width, height)` with
+1280 by 720 as the default, whatever its `channel_dimensions`, and `pixels` and `pixels_gray`
 shrink the whole frame to `channel_dimensions`, as GRF's wrapper does. The width is a multiple of 4,
 and each side is at most 16,384, as in `cuju.gfootball`. As in GRF, the height stays 720 when only
-the width changes, so a frame of 800 by 450 takes `render_resolution_x=800` and
-`render_resolution_y=450`. Internal tests compare a batch's frames, pixels and pixels_gray at six
+the width is given, so `frame_size=800` gives frames of 800 by 720 and a frame of 800 by 450 takes
+`frame_size=(800, 450)`. Internal tests compare a batch's frames, pixels and pixels_gray at six
 sizes from 1920 by 1080 down to 96 by 72 with GRF's, on the CPU and on CUDA. `stacked=True` raises
 `ConfigurationError` with the pixel representations, so a stack of frames is kept by the training
-code, from copies of the observations, since each step overwrites them.
+code, from copies of the observations, since each step overwrites them. A call of `frame()` on a
+batch without `frames=True` and without a pixel representation raises `cuju.errors.LibraryError`.
 
 `get_state` and `set_state` work on a rendering batch as on GRF's rendering engine. Each marks the
 goal nets for drawing afresh at the next render, as GRF's do, the frame stays the last one drawn
@@ -382,7 +381,7 @@ until the next step, and the scoreboard keeps what it showed, since GRF's change
 Internal tests compare the frames of steps after loads of earlier states with GRF's frames after
 the same loads, on both backends.
 
-Either option plays every environment in render mode with the referee's animations, as a rendering
+Either argument plays every environment in render mode with the referee's animations, as a rendering
 GRF plays it, and gives each environment a renderer of its own, which draws every render of the
 environment in GRF's order after each call, the internal steps of a stoppage and of a reset
 included, so that each frame follows the same history of renders as GRF's. Internal tests find each
@@ -401,23 +400,31 @@ the internal steps, and a video with every frame comes from `write_video` in `cu
 ### Workers and threads
 
 The environments of a batch draw side by side, each renderer on a worker thread of its own.
-`CUJU_RENDER_WORKERS` sets how many environments draw at once, and `CUJU_RENDER_THREADS` the threads
-of each renderer. By default every environment gets a worker, up to one worker per processor that the
+The key `render_workers` of the [machine config](installation.md#machine-config) sets how many
+environments draw at once, and `render_threads` the threads of each renderer. By default every environment gets a worker, up to one worker per processor that the
 process may run on, and the processors left over go to the threads of each renderer, so a batch of
 four environments on twelve processors draws four frames at once with three threads each. Several
 frames drawn at once keep the processors busier than one frame split into tiles, since each pass of
 a frame ends on the slowest of its tiles. No split changes a frame, which internal tests check for
 several of them.
 
-| Variable | Default | Meaning |
+| Setting | Default | Meaning |
 | --- | --- | --- |
-| `CUJU_RENDER_WORKERS` | one per environment, up to the processors, or the processors divided by `CUJU_RENDER_THREADS` | the renderers of a batch that draw at once |
-| `CUJU_RENDER_THREADS` | the processors left to each worker, or for `cuju.gfootball` the processors up to four | the threads that draw each frame |
-| `CUJU_GRF_MEDIA` | the installed cuju-grf-media | a folder of GRF's media |
-| `CUJU_RENDER_LIBRARY` | the library in cuju's folder | another build of libcuju_render |
+| key `render_workers` | 0, which gives one per environment, up to the processors, or the processors divided by `render_threads` | the renderers of a batch that draw at once |
+| key `render_threads` | 0, which gives the processors left to each worker, or for `cuju.gfootball` the processors up to four | the threads that draw each frame |
+| variable `CUJU_GRF_MEDIA` | the installed cuju-grf-media | a folder of GRF's media |
+| variable `CUJU_RENDER_LIBRARY` | the library in cuju's folder | another build of libcuju_render |
 
-The first three take effect when a batch or a rendering engine creates its renderers, and
-`CUJU_RENDER_LIBRARY` when the process first loads the library.
+The two keys take effect when a batch or a rendering engine creates its renderers, and
+`CUJU_RENDER_LIBRARY` when the process first loads the library. A TOML snippet in the file that
+`CUJU_CONFIG` names, or in the default path that [Installation](installation.md#machine-config)
+gives, sets the keys.
+
+```toml
+[run]
+render_workers = 4
+render_threads = 3
+```
 
 ### Memory
 
@@ -559,7 +566,7 @@ Several choices keep the cost down.
 - **One mode throughout.** Training, evaluation and comparison run in the same mode, all rendering
     or all unrendered, since the two play different matches, as the
     [section above](#render-mode-and-the-match) explains.
-- **Frames for recording.** `render_frames=True` with a vector representation records evaluation
+- **Frames for recording.** `frames=True` with a vector representation records evaluation
     episodes for viewing while the policy reads vectors, and the matches are then those of a
     rendering GRF.
 
@@ -574,23 +581,21 @@ import torch
 import cuju
 
 batch = cuju.BatchEnvironment(
-    '11_vs_11_stochastic_l1_r0',
+    '11_vs_11_stochastic',
     environment_count=12,
     device='cpu',
     representation='pixels_gray',
-    render_frames=True,
-    squeeze=True,
+    frames=True,
 )
-observation = batch.reset()  # [12, 72, 96, 1]
-stack = observation.repeat(1, 1, 1, 4)  # [12, 72, 96, 4], the oldest first
+observation = batch.reset()  # [12, 1, 72, 96, 1]
+stack = observation.repeat(1, 1, 1, 1, 4)  # [12, 1, 72, 96, 4], the oldest first
 video = cv2.VideoWriter('match.avi', cv2.VideoWriter_fourcc(*'MJPG'), 10, (1280, 720))
 for _ in range(300):
-    actions = policy(stack)  # [12] actions
+    actions = policy(stack)  # [12, 1] actions
     observation, reward, done, information = batch.step(actions)
     stack = torch.cat([stack[..., 1:], observation], dim=-1)
-    ended = done.bool()
-    stack[ended] = observation[ended].repeat(1, 1, 1, 4)
-    video.write(cv2.cvtColor(information['frame'][0].cpu().numpy(), cv2.COLOR_RGB2BGR))
+    stack[done] = observation[done].repeat(1, 1, 1, 1, 4)
+    video.write(cv2.cvtColor(batch.frame()[0].cpu().numpy(), cv2.COLOR_RGB2BGR))
 video.release()
 ```
 
@@ -699,7 +704,7 @@ from the tagged commit and a checkout of GRF, as [GRF's media from a clone](inst
 shows.
 
 Where the package is missing, every part of cuju that reads the media raises
-`cuju.MissingFileError`, which is also a `FileNotFoundError`, with one message that names
+`cuju.errors.MissingFileError`, which is also a `FileNotFoundError`, with one message that names
 `pip install 'cuju-engine[pixels]'`. An installed package whose manifest is of another format than the
 one that the installed cuju reads raises the same error, and the same command then installs the
 version that fits.

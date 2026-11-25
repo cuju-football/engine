@@ -8,11 +8,10 @@ in `information['final_observation']`. With `auto_reset=False`, an environment i
 end until it is reset, as in GRF.
 
 Environment `index` of a batch created with `seed` plays the matches that GRF plays after
-`random.seed(seed * 2**32 + first_index + index)`, independently of the size of the batch, the
-backend and the number of threads. A batch reproduces GRF's draws from Python's `random` module,
-including the team order of each run and the alternation of the two forms of a scenario between
-even and odd episodes. Seeds can also be set per environment at a reset, which replays any earlier
-episode bit for bit.
+`random.seed(seed * 2**32 + index)`, independently of the size of the batch, the backend and the
+number of threads. A batch reproduces GRF's draws from Python's `random` module, including the team
+order of each run and the alternation of the two forms of a scenario between even and odd episodes.
+Seeds can also be set per environment at a reset, which replays any earlier episode bit for bit.
 
 ## Life of an episode
 
@@ -26,10 +25,10 @@ holds a few that end at almost every step, and a separate `reset` would stop all
 them.
 
 The step that ends an episode reports that end in four places. Its done flag for that environment
-is 1, and its observation is already the first of the next episode. `information['final_observation']`
-holds the last observation of the episode that ended, and the reward is that of the step that ended
-it, a goal included. In the example, `last` holds the observation that ended each episode where one
-ended, and the current observation elsewhere.
+is true, and its observation is already the first of the next episode.
+`information['final_observation']` holds the last observation of the episode that ended, and the
+reward is that of the step that ended it, a goal included. In the example, `last` holds the
+observation that ended each episode where one ended, and the current observation elsewhere.
 
 ```python
 import cuju
@@ -40,20 +39,19 @@ observation = batch.reset()
 actions = torch.full((256, 1), 12, dtype=torch.int32)  # `shot`
 for _ in range(50):
     observation, reward, done, information = batch.step(actions)
-    ended = done.bool()[:, None, None]  # broadcasts over the agents and the 115 numbers
+    ended = done[:, None, None]  # broadcasts over the agents and the 115 numbers
     last = torch.where(ended, information['final_observation'], observation)
 ```
 
 `torch.where` runs without waiting for the device, whereas a boolean index such as
-`information['final_observation'][done.bool()]` makes the host wait on the GPU, since it has to
-count its elements first.
+`information['final_observation'][done]` makes the host wait on the GPU, since it has to count its
+elements first.
 
-`final_observation` is meaningful where `done == 1`. Elsewhere it holds whatever the last end of
-that environment left there, so it is selected with the done flags. `done` is `uint8`, and
-`done.bool()` turns it into a mask, since PyTorch deprecates indexing with `uint8`. With
-`representation='raw'`, `final_observation` is a dictionary, and the selection applies to each of
-its arrays, as in
-`{key: value[done.bool()] for key, value in information['final_observation'].items()}`.
+`final_observation` is meaningful where `done` is true. Elsewhere it holds whatever the last end of
+that environment left there, so it is selected with the done flags. `done` is a `bool` tensor of
+shape `[environment_count]`, so it serves directly as a mask. With `representation='raw'`,
+`final_observation` is a dictionary, and the selection applies to each of its arrays, as in
+`{key: value[done] for key, value in information['final_observation'].items()}`.
 
 The automatic reset follows the convention of Gymnasium's vector environments before version 1.0.
 GRF resets only on a call to `reset`, and its environment raises at a step after the end of an
@@ -62,22 +60,24 @@ episode.
 ### Manual resets
 
 `auto_reset=False` gives GRF's behaviour. An environment whose episode ended stays at its end. Every
-later step returns its last observation, its done flag of 1 and a reward of 0, until a call to
+later step returns its last observation, a true done flag and a reward of 0, until a call to
 `reset_done`, which resets every environment that ended, or to `reset`, which resets them all. The
 mode suits evaluation, which requires exactly one episode per environment.
 
 ```python
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=64, device='cpu', auto_reset=False)
+batch = cuju.BatchEnvironment(
+    '5_vs_5', environment_count=64, device='cpu', left_agents=4, auto_reset=False
+)
 batch.reset()
 finished = torch.zeros(64, dtype=torch.bool)
 while not finished.all():
     observation, reward, done, information = batch.step(torch.zeros((64, 4), dtype=torch.int32))
-    finished |= done.bool()
+    finished |= done
 ```
 
 `reset_done` reads the done flags where the batch keeps them, so on the GPU it also runs without
-waiting for the device. With `auto_reset=False`, environments that ended keep returning
-`done == 1` until a reset, so an accumulated mask such as `finished` counts each end once.
+waiting for the device. With `auto_reset=False`, environments that ended keep returning a true
+`done` until a reset, so an accumulated mask such as `finished` counts each end once.
 
 ### Partial resets
 
@@ -89,12 +89,12 @@ capture it once every environment has started. In the example, each environment 
 steps, and the mask cuts every episode that has run for more than 500 steps.
 
 ```python
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=64, device='cpu')
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=64, device='cpu', left_agents=4)
 batch.reset()
 steps_in_episode = torch.zeros(64, dtype=torch.int64)
 for _ in range(600):
     observation, reward, done, information = batch.step(torch.zeros((64, 4), dtype=torch.int32))
-    steps_in_episode = torch.where(done.bool(), 0, steps_in_episode + 1)
+    steps_in_episode = torch.where(done, 0, steps_in_episode + 1)
     long = steps_in_episode > 500
     batch.reset(mask=long)
     steps_in_episode[long] = 0
@@ -111,21 +111,22 @@ out. The time remaining is part of the state, `steps_left` in `raw`, while `simp
 coming limit. A learner that treats the time limit as a truncation rather than a terminal state
 reads the reason for each end from the raw values.
 
-The value `steps_left == 0` of the step that ended the episode, read from `final_raw()`,
-distinguishes the time limit from other ends. As in GRF, a match of `game_duration` 3,000 ends at
+The value `steps_left == 0` of the step that ended the episode, read from
+`information['final_raw']` of a batch with `raw=True`, distinguishes the time limit from other
+ends. As in GRF, a match of `game_duration` 3,000 ends at
 its 3,001st step.
 
 ### First reset
 
 A batch steps after `reset`, or after `set_state` of every environment, which starts the episode of
-each from the state it loads. A step before either raises `cuju.LibraryError`, a `RuntimeError`,
+each from the state it loads. A step before either raises `cuju.errors.LibraryError`, a `RuntimeError`,
 since the batch allocates its worlds without playing.
 
 ### Undefined paths
 
 GRF leaves a few paths of its engine undefined, such as a set piece without a taker, and at such a
 path GRF has no result for cuju to equal. Every shipped scenario avoids them, as far as is known.
-When an environment reaches one, the batch stops with `cuju.UndefinedPathError`, a `RuntimeError`.
+When an environment reaches one, the batch stops with `cuju.errors.UndefinedPathError`, a `RuntimeError`.
 
 On the CPU, the step raises the error in the same call and names the environment and GRF's reason.
 On the GPU, the device traps, which ends the CUDA context of the process, so the next CUDA call
@@ -139,11 +140,11 @@ Every environment plays GRF's matches, and the seed selects them by one rule.
 
 > Environment `index` of a batch created with `seed` plays the episodes of the environment that
 > `gfootball.env.create_environment` creates after Python's
-> `random.seed(seed * 2**32 + first_index + index)`.
+> `random.seed(seed * 2**32 + index)`.
 
-`first_index` is 0 by default. A batch with `first_index=k` plays environments `k` to
-`k + environment_count - 1` of the rule, exactly as a larger batch plays them, which splits one run
-over machines, as described in [Backends](backends.md#several-gpus). Every index stays below 2**32.
+Every index stays below 2**32. A run over several GPUs starts one process per GPU, each with its own
+`seed`, such as `seed=base + rank`, so that the ranks play different matches, as [Backends](backends.md)
+and [Recipes](recipes.md) show.
 
 The rule holds because GRF draws every random number of a match from one seed per episode, and
 draws that seed from Python's `random` module, which a batch reproduces exactly, with the same
@@ -172,7 +173,7 @@ changes the outcome of simultaneous events. In an environment, the flag stays fi
 run, taken from the parity of the second seed that GRF draws, as in GRF. The seed reproduces it
 with everything else, so it requires no separate handling. Some scenarios also swap the kick-off
 from one episode to the next, according to the [episode
-number](#episode-number-and-the-two-forms).
+parity](#episode-parity-and-the-two-forms).
 
 ### Setting the seeds
 
@@ -181,7 +182,7 @@ Three settings choose the matches, from coarse to fine, as the table lists.
 | Setting | Effect |
 | --- | --- |
 | `seed=` at creation | the seeding rule, for every environment |
-| `game_engine_random_seed=` at creation | GRF's option. Every episode of an environment plays that one seed, and nothing is drawn. An integer serves every environment, and a sequence gives one per environment, -1 where it draws as usual |
+| `reset(seeds=...)` | the seed of the next episode of each environment, so that an evaluation set plays the same matches at every call |
 | `reset(seeds=..., reverse=...)` | the seed of the next episode of each environment, and the team-order flag of its run, to replay an earlier run |
 
 `reset(seeds=...)` takes one seed per environment as a list, a tuple, a numpy array or an integer
@@ -189,7 +190,7 @@ tensor, or a single integer for every environment. Each is from 0 to 4,294,967,2
 draws that environment's seed as `seeds=None` would. `reverse` takes one flag per environment in the
 same forms, 0 or 1, `False` or `True`, or one for all. When `reverse` is left out, the flag follows
 the parity of the seed, as in GRF. The flag takes effect at the first reset of an environment, since
-it holds for the whole run. A value of the wrong length or range raises `cuju.ArgumentError`, a
+it holds for the whole run. A value of the wrong length or range raises `cuju.errors.ArgumentError`, a
 `ValueError`. A floating-point seed or flag raises `TypeError`, even an integral one such as 5.0, as
 GRF refuses a float for its seed.
 
@@ -199,36 +200,36 @@ so the next reset without seeds plays the first draw of the generator rather tha
 
 The default `seed=0` plays the same matches in every run, whereas an unseeded GRF process seeds
 `random` from the operating system and plays other matches each time. The runs of a sweep therefore
-take distinct values of `seed`. `game_engine_random_seed` makes every episode of an environment the
-same match, which suits debugging and fixed evaluation sets, while training draws a fresh seed for
-every episode. The value of `environment_count` leaves what environment `index` plays unchanged,
-while the bundle, the options, `seed` and `first_index` each change it.
+take distinct values of `seed`. A reset with the same `seeds` at every call makes the episodes of
+an environment the same match, which suits debugging and fixed evaluation sets, while training draws
+a fresh seed for every episode. The value of `environment_count` leaves what environment `index`
+plays unchanged, while the scenario, the options and `seed` each change it.
 
 ### Replay of one episode
 
 Episode `k` of environment `index`, counting from 1, plays draw `2 + k` of the generator that
-`random.seed(seed * 2**32 + first_index + index)` starts, counting the draws from 0, and the
+`random.seed(seed * 2**32 + index)` starts, counting the draws from 0, and the
 team-order flag of the run is the parity of draw 1. A separate batch of one environment replays the
 episode from them, with `reset(seeds=..., reverse=...)` at its first reset.
 
-That batch takes the options of the batch that played the episode, with `episode_number` set to the
-original's plus `k - 1`, which puts its first episode at the parity of episode `k`. The parity
-matters for the scenarios with two forms. With the same actions, the replay plays the episode bit
-for bit. In the example, the second episode of environment 3 of a batch with `seed=5` starts again
-in a batch of its own.
+That batch takes the options of the batch that played the episode. The parity of the episode
+matters for the scenarios with two forms, which [the next section](#episode-parity-and-the-two-forms)
+describes. A batch plays its first episode in the even form, so an odd `k` starts at the first reset
+of the replay batch, and an even `k` starts at its second reset, after a first reset that carries
+`reverse` and any seed. With the same actions, the replay plays the episode bit for bit. In the example, the second
+episode of environment 3 of a batch with `seed=5` starts again in a batch of its own.
 
 ```python
 import random
 
 generator = random.Random(5 * 2**32 + 3)
 draws = [generator.randint(0, 2000000000) for _ in range(5)]
-replay = cuju.BatchEnvironment(
-    'academy_3_vs_1_with_keeper', environment_count=1, device='cpu', episode_number=1
-)
-observation = replay.reset(seeds=[draws[4]], reverse=[draws[1] % 2])
+replay = cuju.BatchEnvironment('5_vs_5', environment_count=1, device='cpu')
+replay.reset(seeds=[draws[3]], reverse=[draws[1] % 2])  # the first episode, in the even form
+observation = replay.reset(seeds=[draws[4]])  # the second episode, in the odd form
 ```
 
-### Episode number and the two forms
+### Episode parity and the two forms
 
 Some scenarios read the parity of the episode through `builder.EpisodeNumber()`, and a bundle holds
 one form of the scenario for the even and one for the odd episodes. `5_vs_5` and the `11_vs_11_*`
@@ -237,9 +238,9 @@ scenarios give the kick-off to the left team in the even form and to the right t
 `test_example_multiagent` have one form for both parities.
 
 An environment alternates the two forms from one episode to the next, as a GRF environment does
-over its resets. `episode_number`, as GRF's option of that name, sets the parity. With the default
-0, the first episode plays the even form, as a fresh GRF environment does after its first
-`reset()`, and with 1 it plays the odd form. A scenario that changes with the episode number beyond
+over its resets. The first episode plays the even form, as a fresh GRF environment does after its
+first `reset()`, the second the odd form, and every later `reset` or automatic reset advances the
+parity by one. A scenario that changes with the episode number beyond
 its parity, such as a ladder of levels, needs more than the two forms of a bundle, and the builder
 raises `ScenarioError` for it, as described in [Custom scenarios](custom-scenarios.md). Such a
 ladder plays as one scenario file per level, each built into its own bundle.

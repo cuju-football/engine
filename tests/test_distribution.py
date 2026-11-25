@@ -17,6 +17,7 @@ import torch
 import cuju
 from conftest import play_digest
 from cuju._batch import library
+from cuju._library_path import library_path
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -229,8 +230,8 @@ def test_library_names_follow_the_system(monkeypatch):
         pattern = 'lib{}.dylib'
     else:
         pattern = 'lib{}.so'
-    assert os.path.basename(cuju.library_path('cpu')) == pattern.format('cuju_cpu')
-    assert os.path.basename(cuju.library_path('cuda')) == pattern.format('cuju_cuda')
+    assert os.path.basename(library_path('cpu')) == pattern.format('cuju_cpu')
+    assert os.path.basename(library_path('cuda')) == pattern.format('cuju_cuda')
 
 
 def test_windows_exports_every_function_that_the_package_calls():

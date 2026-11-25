@@ -11,7 +11,7 @@ import pytest
 np = pytest.importorskip('numpy')
 pytest.importorskip('absl')
 
-from cuju import _dump_to_txt as dump_to_txt  # noqa: E402
+from cuju import _dump_command as dump_command  # noqa: E402
 from cuju import dumps, gfootball_engine  # noqa: E402
 from cuju.gfootball import _gym  # noqa: E402
 from cuju.gfootball import env as football_env  # noqa: E402
@@ -137,6 +137,6 @@ def test_dump_reads_and_prints_as_grf(tmp_path):
     # cuju's reader takes the dump that GRF's Python wrote, and runs no code from it.
     assert len(dumps.read_dump(paths[0])) == len(steps)
     output = tmp_path / 'dump.txt'
-    dump_to_txt.main(['--trace_file', paths[0], '--output', str(output)])
+    dump_command.main([paths[0], '-o', str(output)])
     text = output.read_text()
     assert "'action': [right]" in text and 'array([' in text

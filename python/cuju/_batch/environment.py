@@ -2,7 +2,7 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""`BatchEnvironment`, the batch of environments on the GPU or the CPU, and `memory_estimate`."""
+"""`Batch`, the batch of environments that the public `BatchEnvironment` wraps."""
 
 from __future__ import annotations
 
@@ -24,13 +24,11 @@ from typing import Any
 import torch
 
 from ..errors import (
-    ActionRangeError,
     ArgumentError,
     ChoiceError,
     ClosedError,
     ConfigurationError,
     DeviceError,
-    EnvironmentIndexError,
     LibraryError,
     StateError,
     _from_library,
@@ -51,7 +49,6 @@ from .memory import (
     _LOCAL_MEMORY_HELD,
     _free_device_memory,
     _local_memory_bytes,
-    _MemoryEstimate,
     _warn_memory,
 )
 from .state import _pickle_episode, _StateUnpickler
@@ -209,6 +206,23 @@ def _is_pair(value):
     return isinstance(value, (tuple, list)) and len(value) == 2
 
 
+@contextlib.contextmanager
+def _node_map(nodes):
+    """Sets `CUJU_NUMA_NODES` for the library's creation call, which reads it, and restores it."""
+    if nodes is None:
+        yield
+        return
+    previous = os.environ.get('CUJU_NUMA_NODES')
+    os.environ['CUJU_NUMA_NODES'] = nodes
+    try:
+        yield
+    finally:
+        if previous is None:
+            del os.environ['CUJU_NUMA_NODES']
+        else:
+            os.environ['CUJU_NUMA_NODES'] = previous
+
+
 def _choice(kind, value, choices, hints=None):
     """Returns `choices[value]`, or raises `ChoiceError` naming the valid values and any hint."""
     if value in choices:
@@ -220,8 +234,11 @@ def _choice(kind, value, choices, hints=None):
     )
 
 
-class BatchEnvironment:
-    """A batch of football environments on the GPU or the CPU.
+class Batch:
+    """A batch of football environments on the GPU or the CPU, with every option of the library.
+
+    `cuju.BatchEnvironment` is the public class, which maps onto this one. The engine's own
+    commands and the family's packages create batches through this class directly.
 
     Every tensor that a method returns views a buffer of the batch on its device, without a copy,
     and the next `reset` or `step` overwrites it, so a caller clones what it keeps. The tensor
@@ -256,7 +273,8 @@ class BatchEnvironment:
     Examples:
         >>> import torch
         >>> import cuju
-        >>> batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=1024, device='cpu')
+        >>> from cuju._batch import Batch
+        >>> batch = Batch('5_vs_5_l4_r0', environment_count=1024, device='cpu')
         >>> observation = batch.reset()
         >>> tuple(observation.shape)
         (1024, 4, 115)
@@ -307,6 +325,10 @@ class BatchEnvironment:
         render_frames: bool = False,
         render_resolution_x: int = 1280,
         render_resolution_y: int = 720,
+        signed_actions: bool = True,
+        render_threads: int = 0,
+        render_workers: int = 0,
+        log: bool | None = None,
     ) -> None:
         """Creates the batch and allocates its buffers.
 
@@ -370,13 +392,15 @@ class BatchEnvironment:
                 thread stays where it is. The GPU ignores it.
             numa: Whether the CPU threads form a group per NUMA node, on that node's processors,
                 each stepping a fixed range of environments whose memory its threads touch first.
-                With one node it changes nothing. The GPU ignores it.
+                With one node it changes nothing. A string of the node of each processor, such as
+                `0,0,1,1`, turns it on with those nodes in place of what the system reports. The
+                GPU ignores it.
             pin_memory: Whether the output buffers of a CPU batch are page-locked, so that
                 `tensor.to('cuda', non_blocking=True)` copies them without waiting. Needs CUDA. The
                 GPU ignores it.
             check_actions: Whether a GPU batch also checks actions in GPU memory against
                 `[-action_count, action_count)`, as it checks actions in host memory, so that `step`
-                raises `ActionRangeError` before any environment steps. The check waits for the
+                raises `ArgumentError` before any environment steps. The check waits for the
                 device at every step. Without it, such an action steps as the idle action. The CPU
                 checks every action anyway.
             debug: Whether every `step`, `step_async`, `reset_done` and masked `reset` of a GPU
@@ -394,6 +418,14 @@ class BatchEnvironment:
             render_resolution_y: The height of GRF's frames in pixels, as GRF's option, up to
                 16384. GRF's `Config` sets it to 720 before it reads the caller's options, so it
                 stays 720 when only the width changes, here as there.
+            signed_actions: Whether an action from `-action_count` to `-1` counts from the end, as
+                in GRF. `False` takes only the actions from 0 to `action_count - 1`, and refuses
+                the others in host memory and, with `check_actions` or `debug`, in GPU memory.
+            render_threads: The threads of each renderer, or 0 to share the processors out.
+            render_workers: The renderers that draw at once, or 0 for one per environment up to
+                the processors there are.
+            log: Whether to log a line for this batch, or `None` for the `log` key of the machine
+                config.
 
         Raises:
             TypeError: If `game_engine_random_seed` holds floating-point values, which GRF refuses.
@@ -409,9 +441,10 @@ class BatchEnvironment:
             DeviceError: If `device` names a CUDA GPU and PyTorch sees none or fewer, or the CPU
                 lacks AVX2, BMI2 or FMA. It is a `RuntimeError`.
             LibraryError: If the library fails to create the batch, for example on an `assignment`
-                outside `assets`, a team with fewer players than agents, a scenario with
-                `control_all_players` and agents that switch players, which GRF asserts against, or
-                if the library runs another backend. It is a `RuntimeError`.
+                outside `assets`, or if the library runs another backend. It is a `RuntimeError`.
+                A team with fewer players than agents, and a scenario with `control_all_players`
+                and agents that switch players, which GRF asserts against, raise
+                `ConfigurationError`.
         """
         device = _automatic(device)
         backend = _backend(device)
@@ -480,10 +513,13 @@ class BatchEnvironment:
             raise DeviceError(
                 'expected a CUDA GPU for pin_memory=True, found none that PyTorch can use'
             )
+        # A string of nodes stands in for what the system reports, and turns `numa` on.
+        numa_nodes = numa if isinstance(numa, str) else None
+        numa = bool(numa)
         self.device = backend
         # A GPU batch stays on its CUDA device, and every call runs there.
         self._torch_device = _placement(device)
-        logged = _log.start(backend, self._torch_device)
+        logged = _log.start(backend, self._torch_device, log)
         self._library = _load_library(library, backend)
         # What the views of the buffers keep alive, without the batch.
         self._native = _Native(self._library, self._torch_device)
@@ -499,7 +535,7 @@ class BatchEnvironment:
             if path.endswith('.py'):
                 from .. import scenarios
 
-                # With `CUJU_BUNDLE_CACHE` set, a file builds once and later batches load it.
+                # A file builds once and later batches load its bundle from the cache.
                 cached = scenarios._batch_bundle(path, backend, library, animations)
                 if cached is not None:
                     paths[index] = cached
@@ -600,9 +636,8 @@ class BatchEnvironment:
             numa=int(numa),
             page_aligned=int(pin_memory and backend == 'cpu'),
         )
-        estimate_only = getattr(self, '_estimate_only', False)
         # The functions must outlive the batch, which calls them until it is freed.
-        if allocator == 'torch' and backend == 'cuda' and not estimate_only:
+        if allocator == 'torch' and backend == 'cuda':
             from .allocator import TorchAllocator
 
             self._native.allocator = TorchAllocator(self._torch_device)
@@ -610,17 +645,10 @@ class BatchEnvironment:
         # The query loads the kernels, so the free memory that follows leaves their code out.
         local_memory = _local_memory_bytes(self._library, self._torch_device)
         free_memory = None
-        if backend == 'cuda' and not estimate_only:
+        if backend == 'cuda':
             free_memory = _free_device_memory(self._torch_device, allocator)
-        with self._on_device():
-            if estimate_only:
-                estimate = ctypes.c_ulonglong()
-                status = self._library.cuju_memory_estimate(
-                    ctypes.byref(configuration), ctypes.byref(estimate)
-                )
-                environment = None if status != 0 else 1
-            else:
-                environment = self._library.cuju_environment_create(ctypes.byref(configuration))
+        with self._on_device(), _node_map(numa_nodes):
+            environment = self._library.cuju_environment_create(ctypes.byref(configuration))
         if not environment:
             message = self._library.cuju_last_error().decode()
             # The library names the bundle it read; name what the caller passed instead.
@@ -628,23 +656,12 @@ class BatchEnvironment:
                 message = message.replace(path, repr(asset))
             if self._native.allocator is not None and self._native.allocator.errors:
                 raise self._native.allocator.errors[0]
-            raise _from_library(message)
-        if estimate_only:
-            bundles = (
-                torch.zeros(environment_count, dtype=torch.int64)
-                if assignment_array is None
-                else assignment_array.long()
-            )
-            # The difficulty set below takes `[environment_count, 2]` floats of the library.
-            sets_difficulty = any(
-                value is not None and bool((bundles == bundle).any())
-                for bundle, pair in enumerate(difficulty or [])
-                for value in pair
-            )
-            self._estimated_bytes = _MemoryEstimate(
-                estimate.value + 8 * environment_count * sets_difficulty, local_memory
-            )
-            return
+            error = _from_library(message)
+            if isinstance(error, DeviceError) and 'out of memory' in message:
+                error = DeviceError(
+                    self._out_of_memory(message, configuration, free_memory, local_memory)
+                )
+            raise error
         self._native.environment = environment
         # The creation launched the kernels, and the driver holds their local memory from then on.
         if backend == 'cuda':
@@ -686,17 +703,15 @@ class BatchEnvironment:
             for side, value in enumerate(pair):
                 if value is not None:
                     chosen[bundles == bundle, side] = value
+        # The difficulty that each environment is set to, NaN for the scenario's.
+        self._chosen_difficulty = chosen
         if not torch.isnan(chosen).all():
-            # The library takes a negative difficulty for that of the scenario.
-            values = torch.nan_to_num(chosen, nan=-1.0).contiguous()
-            with self._on_device():
-                self._check(
-                    self._library.cuju_environment_set_difficulty(self._handle(), values.data_ptr())
-                )
+            self._apply_difficulty(chosen)
         self.difficulty = torch.empty((environment_count, 2), dtype=torch.float32)
         self._library.cuju_environment_difficulty(self._handle(), self.difficulty.data_ptr())
         self.auto_reset = auto_reset
         self.check_actions, self.debug = check_actions, debug
+        self.signed_actions = signed_actions
         self._checks_device_actions = backend == 'cuda' and (check_actions or debug)
         self._agent_mask_on_device = None
         self._checkpoints = 'checkpoints' in rewards.split(',')
@@ -754,6 +769,8 @@ class BatchEnvironment:
                     width,
                     height,
                     (int(render_resolution_x), int(render_resolution_y)),
+                    render_workers,
+                    render_threads,
                 )
             except BaseException:
                 self.close()
@@ -898,6 +915,7 @@ class BatchEnvironment:
         return [
             (self._library.cuju_environment_buffer(self._handle(), name.encode()), size)
             for name, size in sizes.items()
+            if size > 0
         ]
 
     def close(self) -> None:
@@ -933,7 +951,7 @@ class BatchEnvironment:
             if native is not None:
                 native.free()
 
-    def __enter__(self) -> BatchEnvironment:
+    def __enter__(self) -> Batch:
         self._handle()
         return self
 
@@ -953,12 +971,22 @@ class BatchEnvironment:
 
         It counts device memory on the GPU and host memory on the CPU. The allocators round each
         request up. The first batch of the process on a GPU also makes the driver reserve the local
-        memory of the kernels, which `memory_estimate` gives as `local_memory_bytes` and this count
-        leaves out. A few later calls add a small buffer each, on the GPU the first
-        `reset` with seeds, with a reverse flag or with a host mask, and on the CPU the first
-        `step_async`.
+        memory of the kernels, which this count leaves out. A few later calls add a small buffer
+        each, on the GPU the first `reset` with seeds, with a reverse flag or with a host mask,
+        and on the CPU the first `step_async`.
         """
         return int(self._library.cuju_environment_memory_bytes(self._handle()))
+
+    def _out_of_memory(self, message, configuration, free, local):
+        """Returns the message of a device that ran out of memory, with the bytes it was asked
+        for and the bytes that were free before the creation."""
+        needed = ctypes.c_ulonglong()
+        status = self._library.cuju_memory_estimate(
+            ctypes.byref(configuration), ctypes.byref(needed)
+        )
+        requested = f'{needed.value + local} bytes' if status == 0 else 'an unknown number of bytes'
+        found = 'an unknown number of bytes' if free is None else f'{free} bytes'
+        return f'{message}; the batch needed {requested} and the device had {found} free'
 
     def _handle(self):
         """Returns the library's handle of the batch, or raises `ClosedError` once it is closed."""
@@ -1121,7 +1149,7 @@ class BatchEnvironment:
                 self._handle(), actions.data_ptr(), 1, self._stream(), 0
             )
         if status == -2:
-            raise ActionRangeError(self._library.cuju_last_error().decode())
+            raise ArgumentError(self._library.cuju_last_error().decode())
         self._check(status)
         self._wait_in_debug()
         self._copy_operator_outputs(outputs)
@@ -1315,6 +1343,56 @@ class BatchEnvironment:
             self._notify(None, {'reset': None if mask_array is None else mask_array.bool()})
         return observation
 
+    def _apply_difficulty(self, chosen):
+        """Hands the library the difficulty of each environment, NaN for the scenario's."""
+        # The library takes a negative difficulty for that of the scenario.
+        values = torch.nan_to_num(chosen, nan=-1.0).contiguous()
+        with self._on_device():
+            self._check(
+                self._library.cuju_environment_set_difficulty(self._handle(), values.data_ptr())
+            )
+
+    def set_difficulty(self, values: Any, mask: Any = None) -> None:
+        """Sets the difficulty that each selected environment plays from its next reset.
+
+        Args:
+            values: A `(left, right)` pair for the selected environments, each from 0 to 1 or
+                `None` for the scenario's, or `[environment_count, 2]` values with NaN for the
+                scenario's.
+            mask: `[environment_count]` booleans that select the environments, or `None` for
+                all. The others keep their difficulty.
+
+        Raises:
+            ConfigurationError: If a value lies outside 0 to 1.
+            ArgumentError: If `values` or `mask` has another shape.
+        """
+        count = self.environment_count
+        if _is_pair(values):
+            table = torch.tensor(
+                [float('nan') if value is None else float(value) for value in values]
+            ).expand(count, 2)
+        else:
+            table = torch.as_tensor(values, dtype=torch.float32)
+            if tuple(table.shape) != (count, 2):
+                raise ArgumentError(
+                    f'expected a (left, right) pair or values of the shape ({count}, 2), found '
+                    f'{tuple(table.shape)}'
+                )
+        if bool((~torch.isnan(table) & ((table < 0) | (table > 1))).any()):
+            raise ConfigurationError(
+                f"expected difficulties from 0 to 1, or None for the scenario's, found {values!r}"
+            )
+        selected = (
+            torch.ones(count, dtype=torch.bool)
+            if mask is None
+            else self._per_environment(mask, torch.uint8, 'mask').bool()
+        )
+        chosen = self._chosen_difficulty.clone()
+        chosen[selected] = table.float()[selected]
+        self._apply_difficulty(chosen)
+        self._chosen_difficulty = chosen
+        self._library.cuju_environment_difficulty(self._handle(), self.difficulty.data_ptr())
+
     def reset_done(self) -> None:
         """Starts the next episode of every environment whose episode ended.
 
@@ -1459,10 +1537,10 @@ class BatchEnvironment:
         Raises:
             TypeError: If the actions are not integers.
             ArgumentError: If the actions are not `[environment_count, agents]`, or
-                `[environment_count]` for one agent. It is a `ValueError`.
-            ActionRangeError: If an action in host memory, or with `check_actions` or `debug` in
-                GPU memory, lies outside `[-action_count, action_count)`, and then no environment
-                steps. It is an `IndexError`.
+                `[environment_count]` for one agent, or an action in host memory, or with
+                `check_actions` or `debug` in GPU memory, lies outside `[-action_count,
+                action_count)`, or `[0, action_count)` without `signed_actions`, and then no
+                environment steps. It is a `ValueError` and an `IndexError`.
             DeviceError: If the device fails in a `debug` batch. It is a `RuntimeError`.
             UndefinedPathError: If an environment reaches a path that GRF leaves undefined. It is a
                 `RuntimeError`. On the GPU the device traps, which ends the CUDA context of the
@@ -1499,6 +1577,7 @@ class BatchEnvironment:
         else:
             contiguous_actions = self._staged(_host(actions, torch.int32).reshape(shape))
             on_device = int(self.device == 'cpu')
+        self._check_unsigned(contiguous_actions)
         # GRF: an action indexes a Python list, so one outside `[-action_count, action_count)`
         # raises. The library checks host actions only, since a check on the GPU would wait for it.
         with self._on_device():
@@ -1506,7 +1585,7 @@ class BatchEnvironment:
                 self._handle(), contiguous_actions.data_ptr(), on_device, self._stream(), 0
             )
         if status == -2:
-            raise ActionRangeError(self._library.cuju_last_error().decode())
+            raise ArgumentError(self._library.cuju_last_error().decode())
         self._check(status)
         self._wait_in_debug()
         self._draw()
@@ -1532,8 +1611,27 @@ class BatchEnvironment:
             return actions.to(self._torch_device)
         return actions.clone() if copy else actions
 
+    def _check_unsigned(self, actions):
+        """Raises `ArgumentError` for an action in host memory outside `[0, action_count)`
+        without `signed_actions`.
+
+        The library counts a negative action from the end, so a batch that takes only the
+        actions from 0 refuses the others here, before it steps.
+        """
+        if self.signed_actions or actions.device.type != 'cpu':
+            return
+        count = self.action_count
+        outside = ((actions < 0) | (actions >= count)) & self.agent_mask
+        if not bool(outside.any()):
+            return
+        environment, agent = (int(index) for index in outside.nonzero()[0])
+        raise ArgumentError(
+            f'expected action indices from 0 to {count - 1}, found '
+            f'{int(actions[environment, agent])} for agent {agent} of environment {environment}'
+        )
+
     def _check_device_actions(self, actions):
-        """Raises `ActionRangeError` for an action in GPU memory outside the set, before a step."""
+        """Raises `ArgumentError` for an action in GPU memory outside the set, before a step."""
         with self._on_device():
             # The check reads its result on the host, which a CUDA graph capture cannot wait for.
             if torch.cuda.is_current_stream_capturing():
@@ -1543,12 +1641,13 @@ class BatchEnvironment:
             if self._agent_mask_on_device is None:
                 self._agent_mask_on_device = self.agent_mask.to(self._torch_device)
             count = self.action_count
-            outside = ((actions < -count) | (actions >= count)) & self._agent_mask_on_device
+            lowest = -count if self.signed_actions else 0
+            outside = ((actions < lowest) | (actions >= count)) & self._agent_mask_on_device
             if not bool(outside.any()):
                 return
             environment, agent = (int(index) for index in outside.nonzero()[0])
-            raise ActionRangeError(
-                f'expected action indices from {-count} to {count - 1}, found '
+            raise ArgumentError(
+                f'expected action indices from {lowest} to {count - 1}, found '
                 f'{int(actions[environment, agent])} on the device for agent {agent} of '
                 f'environment {environment}'
             )
@@ -1563,10 +1662,10 @@ class BatchEnvironment:
             self._check(self._library.cuju_environment_synchronize(self._handle(), self._stream()))
 
     def _environment_index(self, index):
-        """Returns `index` as an integer, or raises `EnvironmentIndexError` outside the batch."""
+        """Returns `index` as an integer, or raises `ArgumentError` outside the batch."""
         index = operator.index(index)
         if not 0 <= index < self.environment_count:
-            raise EnvironmentIndexError(
+            raise ArgumentError(
                 f'expected an environment from 0 to {self.environment_count - 1}, found {index}'
             )
         return index
@@ -1599,8 +1698,7 @@ class BatchEnvironment:
             actions: As for `step`, and the caller may reuse them at once.
 
         Raises:
-            TypeError, ArgumentError, ActionRangeError: As `step` raises them, before the step
-                starts.
+            TypeError, ArgumentError: As `step` raises them, before the step starts.
             RuntimeError: If a step is already in flight, or the library fails to start the step.
         """
         if self._step_in_flight:
@@ -1627,12 +1725,13 @@ class BatchEnvironment:
         else:
             contiguous_actions = self._staged(_host(actions, torch.int32).reshape(shape))
             on_device = int(self.device == 'cpu')
+        self._check_unsigned(contiguous_actions)
         with self._on_device():
             status = self._library.cuju_environment_step_async(
                 self._handle(), contiguous_actions.data_ptr(), on_device, self._stream()
             )
         if status == -2:
-            raise ActionRangeError(self._library.cuju_last_error().decode())
+            raise ArgumentError(self._library.cuju_last_error().decode())
         self._check(status)
         self._wait_in_debug()
         # The caller may change its actions once this returns, so the observers of `step_wait`
@@ -1685,8 +1784,8 @@ class BatchEnvironment:
             The bytes, which `set_state` here or in GRF reads.
 
         Raises:
-            EnvironmentIndexError: If the index is out of range. It is an `IndexError` and a
-                `RuntimeError`.
+            ArgumentError: If the index is out of range. It is a `ValueError` and an
+                `IndexError`.
             StateError: If `stacked` differs from the batch's `stacked`. It is a `ValueError` and a
                 `RuntimeError`.
         """
@@ -1738,8 +1837,8 @@ class BatchEnvironment:
                 stack. It needs numpy, and a batch with `stacked=True`.
 
         Raises:
-            EnvironmentIndexError: If the index is out of range. It is an `IndexError` and a
-                `RuntimeError`.
+            ArgumentError: If the index is out of range. It is a `ValueError` and an
+                `IndexError`.
             StateError: If the bytes hold no pickle of the episode logic or do not load, the
                 state belongs to another scenario or to other difficulties, `stacked` differs from
                 the batch's, or a stacked state holds no four frames of the batch's observation.
@@ -1826,8 +1925,8 @@ class BatchEnvironment:
             they equal the raw arrays of the same names without their padding.
 
         Raises:
-            EnvironmentIndexError: If the index is out of range. It is an `IndexError` and a
-                `RuntimeError`.
+            ArgumentError: If the index is out of range. It is a `ValueError` and an
+                `IndexError`.
         """
         index = self._environment_index(index)
         left = int(self.left_players[index])
@@ -1840,51 +1939,3 @@ class BatchEnvironment:
         if count < 0:
             raise _from_library(self._library.cuju_last_error().decode())
         return {'left_team_roles': roles[:left], 'right_team_roles': roles[left:]}
-
-
-def memory_estimate(assets: str | list[str], **options: Any) -> int:
-    """Returns the bytes that `BatchEnvironment(assets, **options)` requests, without creating it.
-
-    The count is what `memory_bytes` of that batch reports right after its creation, its buffers,
-    worlds and tables, in device memory on the GPU and in host memory on the CPU. On the GPU it
-    includes the work area of 12 KB per environment that the kernels use for their large lists.
-    The allocators
-    round each request up. It reads the bundles and the animation tables, as the creation does, so
-    it takes a fraction of a second, and it needs the library of the device, and on the GPU a CUDA
-    device, as the creation does.
-
-    The first batch of the process on a GPU also makes the driver reserve the local memory of the
-    kernels for every thread that the GPU runs at once, a few kilobytes each, and holds it until
-    the process ends. The result is an `int` whose attribute `local_memory_bytes` gives that
-    reservation, from the local memory of the kernels and the size of the device. It is 0 once a
-    batch was created on the device, since every later batch of the process shares the
-    reservation, and always 0 on the CPU, so that a batch created next takes the result plus
-    `local_memory_bytes`.
-
-    Args:
-        assets: As `BatchEnvironment` takes them.
-        **options: Any other argument of `BatchEnvironment`, such as `environment_count`,
-            `representation` or `device`.
-
-    Returns:
-        The bytes of memory that the batch would request, with the attribute
-        `local_memory_bytes`.
-
-    Raises:
-        LibraryError: If the library refuses the configuration. The other errors are those that
-            `BatchEnvironment` raises for the same arguments, except the check of `squeeze`
-            against the agents, which follows the creation.
-
-    Examples:
-        >>> import cuju
-        >>> per_environment = cuju.memory_estimate(
-        ...     '5_vs_5_l4_r0', environment_count=2, device='cpu'
-        ... ) - cuju.memory_estimate('5_vs_5_l4_r0', environment_count=1, device='cpu')
-    """
-    batch = BatchEnvironment.__new__(BatchEnvironment)
-    batch._estimate_only = True
-    try:
-        batch.__init__(assets, **options)
-        return batch._estimated_bytes
-    finally:
-        batch.close()

@@ -16,6 +16,7 @@ import pytest
 
 HOOK = """
 import os
+from cuju._batch import Batch
 
 
 def run(batch):
@@ -34,8 +35,9 @@ def command(arguments):
 
 BATCH = """
     import cuju
+    from cuju._batch import Batch
 
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=2, device='cpu')
+    batch = Batch('5_vs_5_l4_r0', environment_count=2, device='cpu')
     batch.reset()
     print(batch.environment_count)
     batch.close()
@@ -224,8 +226,9 @@ def test_a_plain_process_reads_no_entry_points(site):
                 return _original(*arguments, **keywords)
             setattr(metadata, name, counted)
         import cuju
+        from cuju._batch import Batch
 
-        batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=2, device='cpu')
+        batch = Batch('5_vs_5_l4_r0', environment_count=2, device='cpu')
         batch.reset()
         batch.step(torch.zeros((2, 4), dtype=torch.int32))
         batch.close()

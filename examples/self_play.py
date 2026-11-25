@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Trains a policy against a frozen copy of itself, with agents on both sides of every match.
 
-    python examples/self_play.py [--device cuda] [--scenario 5_vs_5_l4_r4] [--refresh 10]
+    python examples/self_play.py [--device cuda] [--scenario 5_vs_5] [--refresh 10]
 
 The left agents act from the learning policy, the network of `examples/ppo.py`, and the right
 agents from a frozen copy that takes the learner's weights every `--refresh` updates. Each side
@@ -26,7 +26,9 @@ import cuju
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--scenario', default='5_vs_5_l4_r4')
+    parser.add_argument('--scenario', default='5_vs_5')
+    parser.add_argument('--left-agents', type=int, default=4)
+    parser.add_argument('--right-agents', type=int, default=4)
     parser.add_argument('--rewards', default='scoring,checkpoints')
     parser.add_argument('--total-steps', type=int, default=5_000_000, help='environment steps')
     parser.add_argument('--refresh', type=int, default=10, help='updates between snapshots')
@@ -41,6 +43,8 @@ def main():
         arguments.scenario,
         environment_count=arguments.environments,
         device=arguments.device,
+        left_agents=arguments.left_agents,
+        right_agents=arguments.right_agents,
         rewards=arguments.rewards,
         seed=arguments.seed,
     ) as batch:
@@ -52,13 +56,11 @@ def main():
         frozen = copy.deepcopy(model).requires_grad_(False)
         optimizer = torch.optim.Adam(model.parameters(), lr=arguments.learning_rate, eps=1e-5)
 
-        # The first right agent sits at another slot in each bundle of a mixed batch.
-        slot = torch.arange(agents, device=device)
-        mask = batch.agent_mask.to(device)
-        is_right = (slot >= batch.left_agents.to(device)[:, None]) & mask
-        learner = mask & ~is_right
-        if not bool(is_right.any()) or not bool(learner.any()):
-            parser.error(f'{arguments.scenario} needs agents on both sides, such as 5_vs_5_l4_r4')
+        # The agent slots hold the left agents first, then the right agents.
+        if not batch.left_agents or not batch.right_agents:
+            parser.error('self-play needs agents on both sides, such as --left-agents 4')
+        is_right = (torch.arange(agents, device=device) >= batch.left_agents).expand(count, agents)
+        learner = ~is_right
 
         observations = torch.zeros((steps, count, agents, 115), device=device)
         actions = torch.zeros((steps, count, agents), dtype=torch.int64, device=device)

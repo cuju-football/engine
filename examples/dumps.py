@@ -7,7 +7,7 @@
 The batch plays one full match in every environment with random actions from a seeded generator,
 and `cuju.dumps.DumpWriter` follows the environments of `--follow`, writing each finished episode
 and each goal as GRF's `write_full_episode_dumps` and `write_goal_dumps` would. The batch writes
-the raw arrays with `with_raw=True`, so every step of a dump holds GRF's observation, which GRF's
+the raw arrays with `raw=True`, so every step of a dump holds GRF's observation, which GRF's
 `dump_to_video` needs to render it. `cuju.dumps.read_dump` then reads the first full episode back,
 without GRF, and the script prints its steps, its score, the steps of its goals, the distance the
 ball travelled and each team's share of possession.
@@ -46,7 +46,8 @@ def summarise(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--scenario', default='5_vs_5_l4_r0')
+    parser.add_argument('--scenario', default='5_vs_5')
+    parser.add_argument('--left-agents', type=int, default=4)
     parser.add_argument('--device', default='cpu', choices=['cpu', 'cuda'])
     parser.add_argument('--environments', type=int, default=8)
     parser.add_argument('--follow', type=int, nargs='+', default=[0, 1])
@@ -61,7 +62,8 @@ def main():
         environment_count=arguments.environments,
         device=arguments.device,
         seed=arguments.seed,
-        with_raw=True,
+        left_agents=arguments.left_agents,
+        raw=True,
     ) as batch:
         writer = cuju.dumps.DumpWriter(
             batch, arguments.logdir, environments=arguments.follow, write_goal_dumps=True

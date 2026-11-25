@@ -3,6 +3,7 @@
 """Trains one policy shared by every agent of a batch with proximal policy optimization.
 
     python examples/ppo.py [--device cuda] [--scenario academy_empty_goal_close] [--total-steps N]
+    python examples/ppo.py --scenario 5_vs_5 --left-agents 4 --rewards scoring,checkpoints
 
 The trainer follows the single-file style of CleanRL, in plain PyTorch. Every agent of the batch
 acts from the same network, which tells the agents apart by the active player in their observation.
@@ -179,12 +180,11 @@ def flatten(rollout, valid):
 
 def train(batch, arguments):
     """Trains an `Agent` on every agent of `batch` and saves its weights."""
-    device = batch.torch_device
+    device = batch.device
     count, agents, steps = batch.environment_count, batch.agents, arguments.rollout
     model = Agent(action_count=batch.action_count).to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=arguments.learning_rate, eps=1e-5)
-    mask = batch.agent_mask.to(device)
-    team_size = mask.sum(1)
+    everyone = torch.ones((count, agents), dtype=torch.bool, device=device)
 
     observations = torch.zeros((steps, count, agents, 115), device=device)
     actions = torch.zeros((steps, count, agents), dtype=torch.int64, device=device)
@@ -218,18 +218,17 @@ def train(batch, arguments):
             observation, reward, done, information = batch.step(step_actions)
             rewards[t].copy_(reward)
             dones[t].copy_(done)
-            episode_return += (reward * mask).sum(1) / team_size
+            episode_return += reward.mean(1)
             returns_sum += (episode_return * done).sum()
             episodes += done.sum()
             goals += (information['score_reward'] == 1).sum()
-            episode_return *= 1 - done
+            episode_return *= ~done
 
         with torch.no_grad():
             next_value = model.value(observation)
         advantage, returns = advantages(
             rewards, values, dones, next_value, arguments.gamma, arguments.gae_lambda
         )
-        # Rows of absent agents, in a batch that mixes bundles, are left out.
         rollout = flatten(
             {
                 'observations': observations,
@@ -239,7 +238,7 @@ def train(batch, arguments):
                 'advantages': advantage,
                 'returns': returns,
             },
-            mask,
+            everyone,
         )
         _, value_loss, entropy = update(model, optimizer, rollout, arguments)
 
@@ -264,6 +263,8 @@ def train(batch, arguments):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument('--scenario', default='academy_empty_goal_close')
+    parser.add_argument('--left-agents', type=int, default=1)
+    parser.add_argument('--right-agents', type=int, default=0)
     parser.add_argument('--rewards', default='scoring', choices=['scoring', 'scoring,checkpoints'])
     parser.add_argument('--total-steps', type=int, default=2_000_000, help='environment steps')
     parser.add_argument('--save', default='ppo.pt', help='where the weights go')
@@ -275,6 +276,8 @@ def main():
         arguments.scenario,
         environment_count=arguments.environments,
         device=arguments.device,
+        left_agents=arguments.left_agents,
+        right_agents=arguments.right_agents,
         rewards=arguments.rewards,
         seed=arguments.seed,
     ) as batch:

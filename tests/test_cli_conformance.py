@@ -38,7 +38,7 @@ PROFILE = Profile(
     globals=('--quiet', '--verbose'),
     settings=False,
     no_json={'completion': 'prints a shell script', 'help': 'prints help text'},
-    exempt={'replay': 'keeps GRF flags', 'dump-to-txt': 'keeps GRF flags'},
+    exempt={},
     allowed={'--list': 'keeps the self-check flag from 0.2.1'},
     variables={},
 )
@@ -100,6 +100,7 @@ METAVARS = {
     'TEAM',
     'REC',
     'NAME',
+    'OUT',
     'CODE',
     'QUERY',
     'KEY=VALUE',

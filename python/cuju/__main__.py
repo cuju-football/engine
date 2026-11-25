@@ -19,7 +19,7 @@ GROUP = 'cuju.commands'
 ENGINE = 'cuju-engine'
 # These family names have installation hints when their commands are absent.
 FAMILY = {'arena': 'cuju-arena', 'render': 'cuju-render'}
-_MODULES = {'check': '.check', 'replay': '._replay_command', 'dump-to-txt': '._dump_to_txt'}
+_MODULES = {'check': '.check', 'replay': '._replay_command', 'dump': '._dump_command'}
 
 
 def _entries() -> dict[str, metadata.EntryPoint]:

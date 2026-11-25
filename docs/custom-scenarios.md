@@ -46,15 +46,13 @@ them from `cuju.gfootball.scenarios`, GRF's package over cuju's engine, whose ro
 accepts. GRF's own `gfootball.scenarios` holds the role objects of GRF's compiled engine, and the
 builder answers them with a `ScenarioError` that names the role it expected.
 
-A batch takes the path in place of a bundle name. A scenario file gets one agent on the left, as
-GRF's `create_environment` gives, and `agent_counts` sets others.
+A batch takes the path in place of a scenario name. A scenario file gets one agent on the left, as
+GRF's `create_environment` gives, and `left_agents` and `right_agents` set others.
 
 ```python
 import cuju
 
-batch = cuju.BatchEnvironment(
-    'my_scenario.py', environment_count=256, device='cpu', agent_counts=[(2, 0)]
-)
+batch = cuju.BatchEnvironment('my_scenario.py', environment_count=256, device='cpu', left_agents=2)
 ```
 
 ## Building once
@@ -68,25 +66,26 @@ from cuju import scenarios
 
 scenarios.build_bundle('my_scenario.py', 'my_scenario_l0_r0.cjb')
 batch = cuju.BatchEnvironment(
-    'my_scenario_l0_r0.cjb', environment_count=256, device='cpu', agent_counts=[(1, 0)]
+    'my_scenario_l0_r0.cjb', environment_count=256, device='cpu', left_agents=1
 )
 ```
 
-The bundle holds the scenario without agents, `l0_r0`, and the batch sets up the agents it asks for
-when it loads it. A bundle path plays the agents that the bundle holds, whatever the file is called,
-so a batch of this bundle without `agent_counts` has none, and `batch.agents` is 0. The two backends
-build the same bytes, and a build is deterministic, so a bundle can be cited by its SHA-256.
-`name=` sets the name stored in the bundle.
+The bundle holds the scenario without agents, `l0_r0`, and the batch sets up the agents that
+`left_agents` and `right_agents` ask for when it loads it, whatever the file is called. The two
+backends build the same bytes, and a build is deterministic, so a bundle can be cited by its
+SHA-256. `name=` sets the name stored in the bundle.
 
-With the environment variable `CUJU_BUNDLE_CACHE` set, a batch builds each scenario file once and
-keeps its bundle in a cache. `1` takes `~/.cache/cuju/bundles`, under `XDG_CACHE_HOME` if set, and
-any other value names the directory. The key is the file's bytes, its name, the animations, the
-library and the builder, so an edited file builds again, and concurrent processes never read a
-partial bundle. A batch given its own `animations` builds its scenario files with those tables, in
-the cache and without it. The cache is off by default because a file that reads anything else, such as
-`os.environ` or another file, would keep its first bundle for good. `cuju.scenarios.cached_bundle`
-uses the cache explicitly, `cuju.scenarios.cache_directory()` names it, and the cache is safe to
-delete at any time.
+## Bundle cache
+
+A batch that takes a scenario file builds its bundle once and keeps it in the bundle cache, a
+folder in the user's cache directory, `$XDG_CACHE_HOME/cuju/bundles` or `~/.cache/cuju/bundles` on
+Linux, `~/Library/Caches/cuju/bundles` on macOS and `%LOCALAPPDATA%\cuju\bundles` on Windows. The
+cache is always on, and a later batch, in the same process or another, loads the bundle from there.
+The key is the file's bytes, its name, the animations, the library and the builder, so an edited file
+builds again, and concurrent processes never read a partial bundle. A file that reads anything
+else, such as `os.environ` or another file, keeps its first bundle until the file itself changes or
+the cache is cleared. `cuju.scenarios.cached_bundle` uses the cache explicitly,
+`cuju.scenarios.cache_directory()` names it, and the cache is safe to delete at any time.
 
 ## What the builder computes
 
@@ -97,8 +96,8 @@ bit, with no GRF installation. The computation is cuju's own, checked against GR
 
 A scenario may read `builder.EpisodeNumber()`, as some of GRF's do, to change from one episode to the
 next. A bundle holds one form for the even episodes and one for the odd, which covers every scenario
-that GRF ships. `episode_number`, as GRF's option of that name, sets the number of the episode before
-the first.
+that GRF ships. The first episode of a batch plays the even form, as [Episodes and
+seeds](episodes-and-seeds.md#episode-parity-and-the-two-forms) describes.
 
 A scenario file runs only while its bundle is built, which for a batch means at its creation. So
 everything that the file reads besides the parity of the episode number, such as `os.environ`,
@@ -133,7 +132,7 @@ controllable player, the condition that GRF's engine asserts. GRF plays such a s
 [Migrating from GRF](migrating-from-grf.md).
 
 `build_bundle` also warns when a form lasts longer than a batch plays at GRF's default of 10 ticks a
-step, 5,119 steps, and names the largest `physics_steps_per_frame` that fits.
+step, 5,119 steps.
 
 ## Security
 
@@ -144,20 +143,21 @@ other Python program, and [SECURITY.md](../SECURITY.md) sets out the security po
 ## Build time and variety
 
 Building takes about a second, from about half a second to under two seconds for the shipped
-scenarios and for `my_scenario.py` on the machines measured. A batch rebuilds a scenario file at every creation, so a program that creates
-many batches builds once with `build_bundle` or sets `CUJU_BUNDLE_CACHE`.
+scenarios and for `my_scenario.py` on the machines measured. The first batch of a scenario file builds it, and the
+[bundle cache](#bundle-cache) serves every later batch, so a program that creates many batches
+pays the build once. `build_bundle` writes a bundle to a path of the program's own as well.
 
 GRF's own test scenarios under `gfootball/scenarios/tests` are scenario files too, and each of them
 runs when it meets the [conditions on a scenario](#conditions-on-a-scenario).
 
 Variety in positions comes from several files, or from two forms selected by the parity of the
-episode, whose bundles mix in one batch as [Scenarios](scenarios.md) shows. Several files give as
-many starting positions as there are files, each built once, and they keep the seeds of every
+episode. Several files, each played by a batch of its own as [Scenarios](scenarios.md) shows, give
+as many starting positions as there are files, each built once, and they keep the seeds of every
 episode as GRF draws them, which positions drawn from `random` inside one file would shift.
 
 ## See also
 
-- [Scenarios](scenarios.md), the shipped scenarios and batches that mix bundles
+- [Scenarios](scenarios.md), the shipped scenarios and the agents of each team
 - [Migrating from GRF](migrating-from-grf.md), `control_all_players` and GRF's scripted players
 - [Differences from GRF](differences-from-grf.md), these conditions together with every other known difference
-- [Installation](installation.md), the environment variables, `CUJU_BUNDLE_CACHE` among them
+- [Installation](installation.md), the machine config and the bundle cache folder

@@ -12,7 +12,7 @@ pip install cuju-gfootball
 
 `pip install cuju` installs cuju-gfootball next to the engine, and `pip install cuju-gfootball` does
 the same. Each release of cuju-gfootball depends on the range of cuju-engine whose module names it
-maps, cuju-engine 0.3 for this one.
+maps, cuju-engine 0.4 for this one.
 
 ## What the alias does
 
@@ -33,7 +33,7 @@ as GRF's do. Python's `pickle` writes those names, so a dump or a state written 
 opens in GRF, and a dump of GRF opens in the port. Without the alias the port's dumps name
 `cuju.gfootball`, which GRF cannot import, and GRF's dumps name `gfootball`, which the port's
 readers cannot import, so the alias is the piece that lets dumps travel both ways between Python
-environments. cuju's own readers, `cuju.dumps.read_dump`, `cuju replay` and `cuju dump-to-txt`, read
+environments. cuju's own readers, `cuju.dumps.read_dump`, `cuju replay` and `cuju dump`, read
 either kind with or without it.
 
 ## How it activates

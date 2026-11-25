@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-import cuju
 from conftest import CUDA, play_digest
+from cuju._batch import Batch
 from test_digests import EXPECTED
 
 pytestmark = pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
@@ -15,7 +15,7 @@ pytestmark = pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
 def test_torch_counts_the_batch_and_gets_it_back():
     torch.cuda.synchronize()
     before = torch.cuda.memory_allocated()
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4, allocator='torch')
+    batch = Batch('5_vs_5_l4_r0', environment_count=4, allocator='torch')
     held = torch.cuda.memory_allocated() - before
     # Four worlds alone take more than a megabyte.
     assert held > 1 << 20
@@ -28,7 +28,7 @@ def test_torch_counts_the_batch_and_gets_it_back():
 def test_the_default_allocator_stays_outside_torch():
     torch.cuda.synchronize()
     before = torch.cuda.memory_allocated()
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4)
+    batch = Batch('5_vs_5_l4_r0', environment_count=4)
     assert torch.cuda.memory_allocated() == before
     batch.close()
 
@@ -56,7 +56,7 @@ def test_torch_limits_apply_to_the_batch():
     torch.cuda.set_per_process_memory_fraction(fraction)
     try:
         with pytest.raises(torch.cuda.OutOfMemoryError):
-            cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=512, allocator='torch')
+            Batch('5_vs_5_l4_r0', environment_count=512, allocator='torch')
     finally:
         torch.cuda.set_per_process_memory_fraction(1.0)
     torch.cuda.empty_cache()
@@ -64,4 +64,4 @@ def test_torch_limits_apply_to_the_batch():
 
 def test_an_unknown_allocator_raises():
     with pytest.raises(ValueError, match='allocator'):
-        cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=1, allocator='malloc')
+        Batch('5_vs_5_l4_r0', environment_count=1, allocator='malloc')

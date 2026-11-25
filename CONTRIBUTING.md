@@ -30,8 +30,10 @@ once, in the shared headers, and a backend only schedules it. `src/` holds the C
 library sources, and `python/cuju/` the package.
 
 In `python/cuju/`, `__init__.py` exports the public names and each public module sits at the top.
-`_batch/` holds the implementation of `BatchEnvironment`, from loading the library to the pickles
-of a state. `gfootball/` is GRF's Python package, which `ci/port_gfootball.py` generates from GRF's
+`_batch/` holds the implementation, from loading the library to the pickles of a state, and its
+class `cuju._batch.Batch` is the private class that holds every option. `_environment.py` maps the
+public `BatchEnvironment` onto it, and `_config.py` reads the machine config, which holds the
+speed settings. `gfootball/` is GRF's Python package, which `ci/port_gfootball.py` generates from GRF's
 sources with a table of import rewrites, and which changes only through that script.
 `gfootball_engine/` is GRF's engine module over the engine of `include/cuju/engine/`, and `data/`
 holds the bundles, the animations and the digests. `state.py` reads single fields of a state, `_plugins.py` suggests the package of a missing
@@ -103,5 +105,7 @@ clang-format-18 --dry-run -Werror <files>      # C++ and CUDA
 - The C API's layout. Append fields of `cuju_configuration` only, raise
     `CUJU_CONFIGURATION_VERSION` with each addition, and start each new function on its own line in
     `src/*_api.h`.
+- The public `BatchEnvironment`. An option that changes results starts on `cuju._batch.Batch`, and
+    one that changes only speed is a key of the machine config.
 - The ownership of views. A view or buffer that a batch hands out holds `batch._native`, never the
     batch, so that a dropped batch is freed.

@@ -22,7 +22,7 @@ from typing import Any
 
 import torch
 
-from .errors import ActionRangeError, ArgumentError, EnvironmentIndexError, LibraryError
+from .errors import ArgumentError, LibraryError
 
 __all__ = ['DumpWriter', 'read_dump']
 
@@ -324,7 +324,7 @@ class DumpWriter:
     level `<scenario>_difficulty_<left>_<right>` and writes that GRF scenario file into `logdir`.
 
     Attributes:
-        batch: The `BatchEnvironment`.
+        batch: The `Batch` that it follows.
         logdir: The directory of the dumps, GRF's `logdir`, which each configuration names as
             `tracesdir`.
         environments: The environments that the writer follows.
@@ -344,7 +344,7 @@ class DumpWriter:
         """Follows `environments` of `batch` from the episodes that its next steps start.
 
         Args:
-            batch: A `BatchEnvironment`.
+            batch: A `BatchEnvironment`, or the `Batch` of the engine's own commands.
             logdir: The directory of the dumps, created when the first is written.
             environments: The indices of the environments to follow, or `None` for every one.
             write_full_episode_dumps: Whether to write each selected episode as
@@ -356,12 +356,14 @@ class DumpWriter:
                 then every `dump_frequency`-th, or every one at 1 or less.
 
         Raises:
-            EnvironmentIndexError: If an environment lies outside the batch. It is an
-                `IndexError` and a `RuntimeError`.
+            ArgumentError: If an environment lies outside the batch. It is a `ValueError` and an
+                `IndexError`.
             ClosedError: If the batch is closed. It is a `RuntimeError`.
             LibraryError: If the library of the batch lacks the episode bookkeeping of this
                 version. It is a `RuntimeError`.
         """
+        # A `BatchEnvironment` holds its `Batch` in `_batch`, which the writer follows.
+        batch = getattr(batch, '_batch', batch)
         batch._handle()
         library = batch._library
         try:
@@ -383,9 +385,7 @@ class DumpWriter:
         self.environments = list(dict.fromkeys(int(environment) for environment in environments))
         outside = [index for index in self.environments if not 0 <= index < count]
         if outside:
-            raise EnvironmentIndexError(
-                f'expected environments from 0 to {count - 1}, found {outside}'
-            )
+            raise ArgumentError(f'expected environments from 0 to {count - 1}, found {outside}')
         self.batch = batch
         self.logdir = os.fspath(logdir)
         self.write_full_episode_dumps = bool(write_full_episode_dumps)
@@ -494,7 +494,7 @@ class DumpWriter:
         for agent, index in enumerate(row[: episode.left + episode.right]):
             # GRF: an action indexes a Python list.
             if not -count <= index < count:
-                raise ActionRangeError(
+                raise ArgumentError(
                     f'expected action indices from {-count} to {count - 1}, found {index} for '
                     f'environment {episode.environment}'
                 )
@@ -612,8 +612,8 @@ class DumpWriter:
             The paths of the dumps that this call wrote.
 
         Raises:
-            ArgumentError: If the actions have another shape. It is a `ValueError`.
-            ActionRangeError: If an action lies outside the action set. It is an `IndexError`.
+            ArgumentError: If the actions have another shape or an action lies outside the
+                action set. It is a `ValueError` and an `IndexError`.
         """
         return [path for _, path in self._record(actions)]
 

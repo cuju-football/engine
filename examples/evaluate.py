@@ -93,7 +93,7 @@ def main():
             goals_for += (score == 1) & live
             goals_against += (score == -1) & live
             length += live
-            finished |= done.bool()
+            finished |= done
         elapsed = time.perf_counter() - start
 
     wins = int((goals_for > goals_against).sum())

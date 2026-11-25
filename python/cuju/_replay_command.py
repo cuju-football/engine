@@ -2,13 +2,13 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""`cuju replay`, GRF's script `replay` without rendering, which plays a dump again and checks it.
+"""`cuju replay`, which plays a GRF dump again without rendering and checks it.
 
-    cuju replay --trace_file=/tmp/dumps/episode_done_20261026-120000000000.dump
+    cuju replay /tmp/dumps/episode_done_20261026-120000000000.dump
 
 It replays cuju's and GRF's dumps alike and compares every step with the dump's bit for bit, apart
 from the wall-clock time. It prints the first difference and exits 1 if there is one, and
-`check(trace_file)` does the same from Python.
+`check(file)` does the same from Python.
 """
 
 from __future__ import annotations
@@ -25,11 +25,11 @@ from .errors import ChoiceError, DeviceError, LibraryError, MissingFileError
 __all__ = ['check', 'main']
 
 
-def check(trace_file: str, device: Any = 'cpu', threads: int = 1) -> _replays.ReplayResult:
+def check(file: str, device: Any = 'cpu', threads: int = 1) -> _replays.ReplayResult:
     """Plays a dump again and compares every step with the dump's.
 
     Args:
-        trace_file: A dump that starts at the start of its episode.
+        file: A dump that starts at the start of its episode.
         device: The device that plays the replay. Every device plays the same match.
         threads: The CPU threads of the replay.
 
@@ -42,11 +42,11 @@ def check(trace_file: str, device: Any = 'cpu', threads: int = 1) -> _replays.Re
         ValueError: If the dump holds no configuration, does not start at the start of its
             episode, or holds an action outside its action set.
     """
-    return _replays.replay(trace_file, device=device, threads=threads)
+    return _replays.replay(file, device=device, threads=threads)
 
 
 def _run(arguments: argparse.Namespace) -> int:
-    path = arguments.trace_file
+    path = arguments.file
     try:
         if arguments.device != 'auto':
             _backend(arguments.device)
@@ -56,20 +56,13 @@ def _run(arguments: argparse.Namespace) -> int:
         )
     try:
         steps = dumps._read_cli_dump(path)
-        if arguments.fps is not None:
-            ticks = steps[0]['debug']['config']['physics_steps_per_frame']
-            fps = arguments.fps
-            if fps <= 0 or fps != ticks or 100 // fps != ticks:
-                arguments._command_parser.error(
-                    f'expected a frame rate for the dump of {ticks} ticks a step, found {fps}'
-                )
         result = _replays._replay_steps(steps, path, device=arguments.device)
     except (DeviceError, LibraryError, MissingFileError) as error:
         expected = str(error).partition(';')[0]
         return contract.fail(
             'cuju replay',
             expected,
-            hint=f'run cuju replay --trace_file {contract.quote_path(path)} --device cpu.'
+            hint=f'run cuju replay {contract.quote_path(path)} --device cpu.'
             if arguments.device != 'cpu'
             else 'run cuju check --device cpu to check the installation.',
             as_json=arguments.json,
@@ -82,7 +75,7 @@ def _run(arguments: argparse.Namespace) -> int:
         return contract.fail(
             'cuju replay',
             f'expected a replayable dump at {contract.quote_path(path)}, found {detail}',
-            hint='run cuju replay --trace_file FILE with a dump from the start of an episode.',
+            hint='run cuju replay FILE with a dump from the start of an episode.',
             as_json=arguments.json,
             error_id='replay.dump',
             values={'file': path},

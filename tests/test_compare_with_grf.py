@@ -8,7 +8,7 @@ import os
 import numpy as np
 import pytest
 
-import cuju
+from cuju._batch import Batch
 
 EXAMPLE = os.path.join(os.path.dirname(__file__), '..', 'examples', 'compare_with_grf.py')
 
@@ -30,7 +30,7 @@ class StandIn:
         self.example = example
         self.left, self.agents = arguments.left, arguments.left + arguments.right
         self.index = arguments.index
-        self.batch = cuju.BatchEnvironment(
+        self.batch = Batch(
             f'{arguments.scenario}_l{arguments.left}_r{arguments.right}',
             environment_count=arguments.index + 1,
             device='cpu',
@@ -128,7 +128,7 @@ def test_the_padding_of_angles_is_left_out(example, monkeypatch, capsys):
 
 
 def test_the_library_marks_the_padding_of_angles(example):
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu')
+    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu')
     batch.reset()
     match = example.match_bytes(batch.get_state(0))
     mask = np.zeros(len(match), np.uint8)
@@ -163,9 +163,7 @@ def test_a_policy_hook_plays_both_engines(example, monkeypatch, capsys, tmp_path
 
 
 def test_raw_of_an_agent_has_the_types_of_grf(example):
-    batch = cuju.BatchEnvironment(
-        '5_vs_5_l1_r1', environment_count=1, device='cpu', representation='raw'
-    )
+    batch = Batch('5_vs_5_l1_r1', environment_count=1, device='cpu', representation='raw')
     raw = batch.reset()
     left, right = (example.raw_of_agent(batch, raw, 0, agent, 1) for agent in (0, 1))
     assert left['left_team'].dtype == np.float64 and left['left_team'].shape == (5, 2)

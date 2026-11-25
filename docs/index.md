@@ -6,8 +6,8 @@ one NVIDIA GPU or on the cores of a CPU, with every match equal, bit for bit, to
 source, and a single call advances every match of a batch and returns its observations, rewards and
 done flags as PyTorch tensors.
 
-As of 0.1.0, cuju ships the 19 scenarios of GRF, keeps the names of GRF's options, and offers GRF's
-own interface for one environment beside the batched one. Release 0.1.0 runs on Linux on x86-64
+Release 0.4.0 ships the 19 scenarios of GRF, keeps the names of GRF's options, and offers GRF's
+own interface for one environment beside the batched one. It runs on Linux on x86-64
 and on Arm, on Windows, on macOS on Apple silicon and on Intel processors, and in WSL2, with a wheel
 on PyPI for each. The CPU backend runs on every one of them and the CUDA backend on Linux on
 x86-64, on Windows and in WSL2, as [Installation](installation.md) describes platform by platform.
@@ -37,7 +37,7 @@ A minimal loop creates a batch of 64 matches on the CPU and steps it 100 times w
 import cuju
 import torch
 
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=64, device='cpu')
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=64, left_agents=4, device='cpu')
 observation = batch.reset()  # [64, 4, 115], environments, agents, features
 
 for _ in range(100):
@@ -49,19 +49,19 @@ print(observation.shape, reward.shape, done.shape)
 # torch.Size([64, 4, 115]) torch.Size([64, 4]) torch.Size([64])
 ```
 
-`5_vs_5_l4_r0` is GRF's five-a-side scenario with four agents on the left team and the built-in AI
-on the right. Every environment runs its own match, and one `step` advances all 64. A match lasts
+`5_vs_5` with `left_agents=4` is GRF's five-a-side scenario with four agents on the left team and
+the built-in AI on the right. Every environment runs its own match, and one `step` advances all 64. A match lasts
 3,001 steps, so after 100 steps every episode is still running.
 
 ### GPU backend
 
 The same code runs on the GPU with `device='cuda'` and the actions on the device. `device='auto'`
 selects the GPU where PyTorch sees one and the CUDA library is installed, and the CPU elsewhere, and
-`batch.torch_device` reports the choice. The GPU reaches its throughput with thousands of
+`batch.device` reports the choice. The GPU reaches its throughput with thousands of
 environments, so a GPU batch is usually created with several thousand.
 
 ```python
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=8192, device='cuda')
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=8192, left_agents=4, device='cuda')
 observation = batch.reset()  # a CUDA tensor, [8192, 4, 115]
 actions = torch.zeros((8192, 4), dtype=torch.int32, device='cuda')
 observation, reward, done, information = batch.step(actions)
@@ -90,7 +90,7 @@ A batch holds its buffers until `close()`, or until the end of a `with` block, w
 when the block raises.
 
 ```python
-with cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=64, device='cpu') as batch:
+with cuju.BatchEnvironment('5_vs_5', environment_count=64, left_agents=4, device='cpu') as batch:
     observation = batch.reset()
 ```
 

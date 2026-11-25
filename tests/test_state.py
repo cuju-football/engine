@@ -2,14 +2,12 @@
 # SPDX-License-Identifier: Apache-2.0
 """Checks that a state moved to another environment continues the same match."""
 
-import cuju
 from conftest import actions_at, tensor_bytes
+from cuju._batch import Batch
 
 
 def test_state_round_trip(device):
-    batch = cuju.BatchEnvironment(
-        '5_vs_5_l4_r0', environment_count=2, device=device, rewards='scoring,checkpoints'
-    )
+    batch = Batch('5_vs_5_l4_r0', environment_count=2, device=device, rewards='scoring,checkpoints')
     batch.reset()
     for step in range(60):
         batch.step(actions_at(step, 2, 4, 19).to(device))
@@ -44,7 +42,7 @@ def test_a_state_of_the_other_parity_plays_as_in_grf(device):
     import cuju.state
 
     def batch(episode_number):
-        made = cuju.BatchEnvironment(
+        made = Batch(
             '11_vs_11_stochastic',
             environment_count=1,
             device=device,

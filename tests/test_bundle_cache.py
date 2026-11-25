@@ -2,14 +2,16 @@
 # SPDX-License-Identifier: Apache-2.0
 """Checks the cache of built bundles and the warning for a scenario too long for 10 ticks a step."""
 
+import os
+import sys
 import warnings
 from pathlib import Path
 
 import pytest
 
-import cuju
 from conftest import CUDA, play_digest
 from cuju import scenarios
+from cuju._batch import Batch
 
 SCENARIO = """from . import *
 
@@ -47,55 +49,56 @@ def builds(monkeypatch):
     return calls
 
 
-def test_the_cache_is_off_by_default(tmp_path, monkeypatch, builds):
-    monkeypatch.delenv('CUJU_BUNDLE_CACHE', raising=False)
-    monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path / 'cache'))
-    assert scenarios.cache_directory() is None
+@pytest.fixture
+def cache(tmp_path, monkeypatch):
+    """Points the user's cache folder at a temporary one, and returns the bundle cache in it."""
+    monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path / 'home'))
+    monkeypatch.setenv('LOCALAPPDATA', str(tmp_path / 'home'))
+    if sys.platform == 'darwin':
+        pytest.skip('the cache of macOS is in the home folder')
+    return tmp_path / 'home' / 'cuju' / 'bundles'
+
+
+def test_the_cache_is_always_on(tmp_path, cache, builds):
+    assert scenarios.cache_directory() == str(cache)
     path = scenario_file(tmp_path)
     for _ in range(2):
-        cuju.BatchEnvironment(path, environment_count=1, device='cpu').close()
-    assert len(builds) == 2
-    assert not (tmp_path / 'cache').exists()
+        Batch(path, environment_count=1, device='cpu').close()
+    assert len(builds) == 1
+    assert len(list(cache.iterdir())) == 1
 
 
-def test_the_cache_directory_follows_the_variable(tmp_path, monkeypatch):
+@pytest.mark.skipif(os.name == 'nt', reason='the cache of Windows follows LOCALAPPDATA')
+def test_the_cache_directory_follows_the_cache_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr('sys.platform', 'linux')
+    monkeypatch.setenv('CUJU_BUNDLE_CACHE', str(tmp_path / 'ignored'))
     monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path))
-    monkeypatch.setenv('CUJU_BUNDLE_CACHE', '0')
-    assert scenarios.cache_directory() is None
-    monkeypatch.setenv('CUJU_BUNDLE_CACHE', '1')
     assert scenarios.cache_directory() == str(tmp_path / 'cuju' / 'bundles')
-    monkeypatch.setenv('CUJU_BUNDLE_CACHE', str(tmp_path / 'mine'))
-    assert scenarios.cache_directory() == str(tmp_path / 'mine')
+    monkeypatch.delenv('XDG_CACHE_HOME')
+    monkeypatch.setattr(os.path, 'expanduser', lambda path: str(tmp_path / 'user'))
+    assert scenarios.cache_directory() == str(tmp_path / 'user' / '.cache' / 'cuju' / 'bundles')
 
 
-def test_a_cached_file_builds_once_and_plays_the_same(tmp_path, monkeypatch, builds):
+def test_a_cached_file_builds_once_and_plays_the_same(tmp_path, cache, builds):
     path = scenario_file(tmp_path)
-    monkeypatch.delenv('CUJU_BUNDLE_CACHE', raising=False)
     expected = play_digest(path, 'cpu', 30, environments=2)
-    monkeypatch.setenv('CUJU_BUNDLE_CACHE', str(tmp_path / 'cache'))
     assert play_digest(path, 'cpu', 30, environments=2) == expected
-    assert play_digest(path, 'cpu', 30, environments=2) == expected
-    # One build without the cache, then one for both batches with it.
-    assert len(builds) == 2
-    (cached,) = (tmp_path / 'cache').iterdir()
+    # One build for both batches.
+    assert len(builds) == 1
+    (cached,) = cache.iterdir()
     scenarios.build_bundle(path, str(tmp_path / 'direct.cjb'))
     assert cached.read_bytes() == (tmp_path / 'direct.cjb').read_bytes()
-    assert scenarios.cached_bundle(path, str(tmp_path / 'cache')) == str(cached)
-    assert len(builds) == 3
+    assert scenarios.cached_bundle(path) == str(cached)
+    assert len(builds) == 2
 
 
-@pytest.mark.parametrize('cache', [False, True])
-def test_a_scenario_file_builds_with_the_batch_animations(tmp_path, monkeypatch, cache):
+def test_a_scenario_file_builds_with_the_batch_animations(tmp_path, cache, monkeypatch):
     from cuju._batch.assets import _DATA_DIRECTORY
 
     path = scenario_file(tmp_path)
     # A copy of the shipped tables, which the batch names by a path of its own.
     tables = tmp_path / 'animations.bin'
     tables.write_bytes((Path(_DATA_DIRECTORY) / 'animations.bin').read_bytes())
-    if cache:
-        monkeypatch.setenv('CUJU_BUNDLE_CACHE', str(tmp_path / 'cache'))
-    else:
-        monkeypatch.delenv('CUJU_BUNDLE_CACHE', raising=False)
     seen = []
     build = scenarios.build_bundle
 
@@ -104,13 +107,12 @@ def test_a_scenario_file_builds_with_the_batch_animations(tmp_path, monkeypatch,
         return build(*arguments, **options)
 
     monkeypatch.setattr(scenarios, 'build_bundle', spied)
-    cuju.BatchEnvironment(path, animations=str(tables), environment_count=1, device='cpu').close()
+    Batch(path, animations=str(tables), environment_count=1, device='cpu').close()
     # The bundle and its key in the cache take the tables that the batch plays with.
     assert seen == [str(tables)]
-    if cache:
-        (cached,) = (tmp_path / 'cache').iterdir()
-        found = scenarios.cached_bundle(path, str(tmp_path / 'cache'), animations=str(tables))
-        assert found == str(cached) and len(seen) == 1
+    (cached,) = cache.iterdir()
+    found = scenarios.cached_bundle(path, animations=str(tables))
+    assert found == str(cached) and len(seen) == 1
 
 
 def test_an_edited_file_builds_anew(tmp_path, builds):
@@ -122,11 +124,13 @@ def test_an_edited_file_builds_anew(tmp_path, builds):
     assert sorted(map(str, (tmp_path / 'cache').iterdir())) == sorted([first, second])
 
 
+@pytest.mark.skipif(os.name == 'nt', reason='the cache of Windows follows LOCALAPPDATA')
 def test_an_unusable_cache_warns_and_builds_without_it(tmp_path, monkeypatch):
     (tmp_path / 'file').write_text('', encoding='utf-8')
-    monkeypatch.setenv('CUJU_BUNDLE_CACHE', str(tmp_path / 'file' / 'cache'))
+    monkeypatch.setattr('sys.platform', 'linux')
+    monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path / 'file' / 'cache'))
     with pytest.warns(UserWarning, match='builds the scenario file without it'):
-        batch = cuju.BatchEnvironment(scenario_file(tmp_path), environment_count=1, device='cpu')
+        batch = Batch(scenario_file(tmp_path), environment_count=1, device='cpu')
     assert batch.agents == 1
     batch.close()
 
@@ -146,13 +150,11 @@ def test_a_scenario_too_long_for_10_ticks_warns(tmp_path):
     with warnings.catch_warnings():
         warnings.simplefilter('error')
         bundle = scenarios.build_bundle(longest, str(tmp_path / 'longest.cjb'))
-    cuju.BatchEnvironment(bundle, environment_count=1, device='cpu').close()
+    Batch(bundle, environment_count=1, device='cpu').close()
     longer = scenario_file(tmp_path, duration=5120, name='longer')
     with pytest.warns(UserWarning, match=r'5120 steps.*5119 steps.*physics_steps_per_frame=9'):
         bundle = scenarios.build_bundle(longer, str(tmp_path / 'longer.cjb'))
     with pytest.raises(RuntimeError, match='seconds of play'):
-        cuju.BatchEnvironment(bundle, environment_count=1, device='cpu')
-    batch = cuju.BatchEnvironment(
-        bundle, environment_count=1, device='cpu', physics_steps_per_frame=9
-    )
+        Batch(bundle, environment_count=1, device='cpu')
+    batch = Batch(bundle, environment_count=1, device='cpu', physics_steps_per_frame=9)
     batch.close()

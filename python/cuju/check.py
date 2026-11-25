@@ -32,8 +32,9 @@ from typing import TYPE_CHECKING
 
 import cuju
 
-from . import _checksums, _cli_parsers
+from . import _checksums, _cli_parsers, _config
 from . import _cli_contract as contract
+from ._library_path import library_path
 from .errors import Error
 
 if TYPE_CHECKING:
@@ -83,8 +84,15 @@ def play_digest(assets, device, steps, seed=7, environments=4, **options) -> str
     every environment at the end unless the batch stacks its observations. A GPU batch runs on
     the current CUDA device.
     """
-    batch = cuju.BatchEnvironment(
-        assets, environment_count=environments, device=device, seed=seed, **options
+    from ._batch import Batch
+
+    # The speed settings of the machine config apply, and none changes an output.
+    batch = Batch(
+        assets,
+        environment_count=environments,
+        device=device,
+        seed=seed,
+        **{**_config.machine_options(), **options},
     )
     digest = hashlib.sha256()
 
@@ -265,7 +273,7 @@ def _library(device):
     """Returns the lines that describe the library of `device`, and its GPU code for `cuda`."""
     from ._batch import library as _libraries
 
-    path = cuju.library_path(device)
+    path = library_path(device)
     variable = _libraries._LIBRARIES[device][1]
     source = f'from {variable}' if os.environ.get(variable) else 'of the package'
     if not os.path.isfile(path):
@@ -349,9 +357,37 @@ def diagnostics() -> list[str]:
         'environment: '
         + (', '.join(f'{name}={os.environ[name]}' for name in names) or 'no CUJU_ variable set')
     )
-    if not os.environ.get('CUJU_LOG'):
-        lines.append('  CUJU_LOG=1 logs the creation of every batch')
+    lines += _config_lines()
     return lines
+
+
+def _config_lines() -> list[str]:
+    """Returns the lines on the machine config, its path and every value that differs."""
+    file = _config.path()
+    try:
+        given = _config.read(file)
+        differing = _config.differing()
+    except Error as error:
+        return [f'machine config: {file}, refused, {error}']
+    state = 'read' if os.path.isfile(file) else 'not found, every value is the default'
+    lines = [f'machine config: {file}, {state}']
+    if differing:
+        lines.append(
+            '  differs from the default: '
+            + ', '.join(f'{key} = {_toml(value)}' for key, value in differing.items())
+        )
+    elif given:
+        lines.append('  every value equals the default')
+    if differing.get('debug'):
+        lines.append('  debug is on, so each call of a GPU batch waits for the device')
+    return lines
+
+
+def _toml(value) -> str:
+    """Returns a value of the machine config as TOML writes it."""
+    if isinstance(value, bool):
+        return 'true' if value else 'false'
+    return json.dumps(value)
 
 
 def check_data() -> list[str]:

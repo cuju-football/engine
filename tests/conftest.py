@@ -11,10 +11,12 @@ import pytest
 import torch
 
 import cuju
+from cuju._batch import Batch
+from cuju._library_path import library_path
 
 DEVICES = ['cpu', 'cuda']
 # A CPU-only installation, such as the wheels for macOS and Linux on Arm, has no CUDA library.
-CUDA_LIBRARY = os.path.isfile(cuju.library_path('cuda'))
+CUDA_LIBRARY = os.path.isfile(library_path('cuda'))
 CUDA = torch.cuda.is_available() and CUDA_LIBRARY
 
 
@@ -42,6 +44,18 @@ def pytest_report_header(config):
     present = [name for name in ('avx2', 'bmi2', 'fma') if name in flags]
     lines.append(f'{platform.processor() or platform.machine()}, CPU flags: {" ".join(present)}')
     return lines
+
+
+@pytest.fixture(autouse=True, scope='session')
+def isolated_machine(tmp_path_factory):
+    """Gives the session a machine config that is missing and a cache folder of its own."""
+    folder = tmp_path_factory.mktemp('machine')
+    patch = pytest.MonkeyPatch()
+    patch.setenv('CUJU_CONFIG', str(folder / 'engine.toml'))
+    patch.setenv('XDG_CACHE_HOME', str(folder / 'cache'))
+    patch.setenv('LOCALAPPDATA', str(folder / 'cache'))
+    yield
+    patch.undo()
 
 
 @pytest.fixture(params=DEVICES)
@@ -72,9 +86,7 @@ def play_digest(assets, device, steps, seed=7, environments=4, **options):
     The digest covers every observation, reward and done flag of every step, then the state of
     every environment at the end (unless the batch stacks its observations).
     """
-    batch = cuju.BatchEnvironment(
-        assets, environment_count=environments, device=device, seed=seed, **options
-    )
+    batch = Batch(assets, environment_count=environments, device=device, seed=seed, **options)
     digest = hashlib.sha256()
 
     def add(observation):

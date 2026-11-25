@@ -12,13 +12,12 @@ from conftest import CUDA, actions_at
 from cuju import _replay_command as replay
 from cuju import _replays
 from cuju import _script_helpers as script_helpers
+from cuju._batch import Batch
 
 
 def episode_dump(directory, scenario='academy_3_vs_1_with_keeper_l1_r1', **options):
     """Plays one episode of a batch and returns its full dump and the actions it played."""
-    batch = cuju.BatchEnvironment(
-        scenario, environment_count=1, device='cpu', with_raw=True, seed=11, **options
-    )
+    batch = Batch(scenario, environment_count=1, device='cpu', with_raw=True, seed=11, **options)
     writer = cuju.dumps.DumpWriter(batch, directory, write_goal_dumps=True)
     batch.reset()
     rows = []
@@ -36,9 +35,9 @@ def test_a_dump_replays_equal(tmp_path, capsys):
     result = replay.check(path)
     assert result == (len(rows), True, None)
     script_helpers.ScriptHelpers().replay(path, render=False)
-    assert replay.main(['--trace_file', path]) == 0
+    assert replay.main([path]) == 0
     assert f"equals the dump's {len(rows)} steps" in capsys.readouterr().out
-    assert replay.main(['--trace_file', path, '--json']) == 0
+    assert replay.main([path, '--json']) == 0
     out, err = capsys.readouterr()
     assert json.loads(out) == {
         'schema': 'engine.replay/1',
@@ -78,7 +77,7 @@ def test_a_difference_is_found(tmp_path, capsys):
     assert result.difference.startswith(f'step {changed}.observation.ball: the replay gives ')
     with pytest.raises(ValueError, match='differs from the dump at step'):
         script_helpers.ScriptHelpers().replay(path, render=False)
-    assert replay.main([f'--trace_file={path}']) == 1
+    assert replay.main([path]) == 1
     assert 'differs from the dump at step' in capsys.readouterr().out
 
 
@@ -100,6 +99,6 @@ def test_refusals(tmp_path):
 def test_other_ticks_and_devices(tmp_path):
     path, _, rows = episode_dump(tmp_path, physics_steps_per_frame=5)
     assert replay.check(path) == (len(rows), True, None)
-    assert replay.main(['--trace_file', path, '--fps', '10']) == 2
+    assert replay.main([path]) == 0
     if CUDA:
         assert replay.check(path, device='cuda') == (len(rows), True, None)

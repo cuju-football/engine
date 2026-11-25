@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import argparse
 from typing import Any
 
 from ._cli_contract import Parser, add_globals, add_json, examples
@@ -13,8 +12,8 @@ from ._cli_contract import Parser, add_globals, add_json, examples
 # The summary that `cuju help` and the root parser give each command of the engine.
 SUMMARIES = {
     'check': 'check the engine against known match outputs',
-    'replay': 'replay a dump and check that it plays the same',
-    'dump-to-txt': 'write a dump as readable text',
+    'replay': 'check a GRF dump bit for bit, without rendering',
+    'dump': 'write a dump as text, without running its code',
     'help': 'describe the commands of the family, or one of them',
     'completion': 'print the completion script of a shell',
 }
@@ -73,37 +72,20 @@ def _check_case_names() -> tuple[str, ...]:
     return tuple(load_cases(long=True))
 
 
-def _flag(text: str) -> bool:
-    """Returns the value of a boolean flag written as absl reads it."""
-    lowered = text.lower()
-    if lowered in ('true', 't', '1'):
-        return True
-    if lowered in ('false', 'f', '0'):
-        return False
-    raise argparse.ArgumentTypeError(f'expected true or false, found {text!r}')
-
-
 def replay(group: Any = None) -> Parser:
-    """Returns the parser of `cuju replay`, with the flags of GRF's script."""
+    """Returns the parser of `cuju replay`."""
     parser = _make(
         group,
         'replay',
-        'Replay a dump and check that it plays the same. The replay compares each step with '
-        'the recorded step, apart from wall-clock time. Use --fps 10 only for a dump with '
-        '10 physics ticks per step. Omit --fps to use the rate in the dump.',
+        'Check a GRF dump bit for bit, without rendering. The replay plays the dump again and '
+        'compares each step with the recorded step, apart from wall-clock time. The command '
+        'reads dumps written by GRF and cuju, and runs no code from them.',
         examples(
-            'cuju replay --trace_file /tmp/dumps/episode_done.dump',
-            'cuju replay --trace_file /tmp/dumps/episode_done.dump --device cpu --json',
+            'cuju replay /tmp/dumps/episode_done.dump',
+            'cuju replay /tmp/dumps/episode_done.dump --device cuda --json',
         ),
     )
-    parser.add_argument('--trace_file', required=True, metavar='FILE', help='the dump to replay')
-    parser.add_argument(
-        '--fps',
-        type=int,
-        default=None,
-        metavar='N',
-        help='frames per second, the frame rate of the dump by default',
-    )
+    parser.add_argument('file', metavar='FILE', help='the dump to replay')
     device = parser.add_argument(
         '--device',
         default='cpu',
@@ -116,34 +98,24 @@ def replay(group: Any = None) -> Parser:
     return parser
 
 
-def dump_to_txt(group: Any = None) -> Parser:
-    """Returns the parser of `cuju dump-to-txt`, with the flags of GRF's script."""
+def dump(group: Any = None) -> Parser:
+    """Returns the parser of `cuju dump`."""
     parser = _make(
         group,
-        'dump-to-txt',
-        'Write a dump as readable text. The command reads dumps written by GRF and cuju.',
+        'dump',
+        'Write a dump as text, without running its code. The command reads dumps written by GRF '
+        'and cuju. It prints the text, or writes it to the file of the option -o.',
         examples(
-            'cuju dump-to-txt --trace_file /tmp/input.dump --output /tmp/output.txt --json',
-            'cuju dump-to-txt --trace_file in.dump --output out.txt --noinclude_debug',
+            'cuju dump /tmp/input.dump',
+            'cuju dump /tmp/input.dump -o /tmp/output.txt --json',
         ),
     )
-    parser.add_argument('--trace_file', required=True, metavar='FILE', help='the dump to convert')
-    parser.add_argument('--output', required=True, metavar='FILE', help='the text file to write')
-    debug = parser.add_argument(
-        '--include_debug',
-        nargs='?',
-        const=True,
-        default=True,
-        type=_flag,
-        metavar='NAME',
-        help='write the debug information of each step, accepts true or false, true by default',
-    )
-    debug.completion = ('true', 'false')
+    parser.add_argument('file', metavar='FILE', help='the dump to convert')
     parser.add_argument(
-        '--noinclude_debug',
-        dest='include_debug',
-        action='store_false',
-        help='leave out the debug information of each step',
+        '-o',
+        '--output',
+        metavar='OUT',
+        help='the text file to write, the standard output without it',
     )
     add_json(parser)
     add_globals(parser)
@@ -195,7 +167,7 @@ def completion(group: Any = None) -> Parser:
 BUILDERS = {
     'check': check,
     'replay': replay,
-    'dump-to-txt': dump_to_txt,
+    'dump': dump,
     'help': help_command,
     'completion': completion,
 }

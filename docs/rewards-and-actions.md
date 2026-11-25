@@ -7,11 +7,11 @@ same way, and the three action sets, `default`, `v2` and `full`, have the same a
 indices.
 
 The reward of an agent on the right team has the sign of the right team. The checkpoint reward
-depends in its last bits on the version of numpy under GRF, and the option `numpy_legacy` selects
-the matching precision. Movement and a few other actions are sticky and stay pressed until
-released. Actions in host memory are checked as GRF checks them, and actions already on the GPU go
-to the device as they are, with an index out of range played as `idle`, unless the option
-`check_actions` checks them as well.
+depends in its last bits on the version of numpy under GRF, and a batch adds it in the precision of
+numpy 1. Movement and a few other actions are sticky and stay pressed until released. Actions
+count from 0, so `idle` is 0. The CPU checks every action at the call, a GPU batch with the key
+`debug` of the machine config on does the same, and a GPU batch with `debug` off plays an index
+out of range as `idle`.
 
 ## Rewards
 
@@ -24,7 +24,7 @@ describes.
 | `scoring,checkpoints` | the scoring reward plus the checkpoint reward |
 
 The reward has the shape `[environment_count, agents]`, one `float32` value per agent. As in GRF, a
-batch requires `scoring`, so `rewards='checkpoints'` alone raises `cuju.ConfigurationError`, a
+batch requires `scoring`, so `rewards='checkpoints'` alone raises `cuju.errors.ConfigurationError`, a
 `ValueError`, where GRF fails an assertion. A part other than `scoring` and `checkpoints`, such as a
 misspelt name, draws a warning, since GRF ignores such a part without a message.
 
@@ -69,9 +69,9 @@ Each agent's own scoring reward, apart from the checkpoints, follows from signin
 side.
 
 ```python
-is_right = (torch.arange(batch.agents) >= batch.left_agents[:, None]) & batch.agent_mask
-sign = torch.where(is_right, -1, 1) * batch.agent_mask  # 0 for padded agents
-own_score = information['score_reward'][:, None] * sign.to(reward.device)  # [environments, agents]
+is_right = torch.arange(batch.agents) >= batch.left_agents  # the right agents come last
+sign = torch.where(is_right, -1, 1).to(reward.device)
+own_score = information['score_reward'][:, None] * sign  # [environments, agents]
 ```
 
 With `rewards='scoring'`, `own_score` equals the reward.
@@ -81,8 +81,8 @@ With `rewards='scoring'`, `own_score` equals the reward.
 Self-play with agents on both sides gives each side its own reward. With equal numbers of agents on
 each side and without checkpoints, the rewards of all agents of an environment sum to zero at every
 goal, as in a zero-sum game, so a training curve of their sum stays flat. With other counts the sum
-of a goal is the difference of the counts, so in `5_vs_5_l2_r3` a goal sums to 1 or -1, and
-checkpoints add their own.
+of a goal is the difference of the counts, so in `5_vs_5` with two left agents and three right
+agents a goal sums to 1 or -1, and checkpoints add their own.
 
 The checkpoint reward at a goal adds the zones not yet collected to the scoring reward of 1, so a
 scoring step pays an agent at most 2.0.
@@ -91,17 +91,16 @@ scoring step pays an agent at most 2.0.
 
 GRF adds the checkpoint reward with numpy, and numpy 2 changed how a Python float combines with a
 numpy `float32`, in the proposal NEP 50. The same reward can therefore differ in its last bits
-between a GRF that runs on numpy 1 and one that runs on numpy 2. `numpy_legacy=True`, the default,
-adds in the precision of numpy before version 2, and `numpy_legacy=False` follows numpy 2. GRF pins
-no numpy version, so the matching setting depends on the numpy installed with the GRF under
-comparison. The expression `numpy_legacy=int(numpy.__version__.split('.')[0]) < 2`, evaluated where
-that GRF runs, gives it. For training, the two settings differ only in the last bits of a
-`float32`.
+between a GRF that runs on numpy 1 and one that runs on numpy 2. A batch adds in the precision of
+numpy before version 2, and the environments of `cuju.env` follow the numpy that is installed, so
+that each matches the GRF that runs on the same numpy. GRF pins no numpy version, so a comparison
+with a batch in numpy 2 territory relies on the figures of numpy 1. For training, the two differ
+only in the last bits of a `float32`.
 
 ## Actions
 
 An action is an index into the action set. `step` takes one action for each agent of each
-environment, `[environment_count, agents]` of integers. The option `action_set` selects one of
+environment, `[environment_count, agents]` of integers, or `[environment_count]` for one agent. The option `action_set` selects one of
 three sets, each extending the one before, and `batch.action_count` gives the size of the chosen
 set.
 
@@ -170,27 +169,33 @@ and 13 for `full`. Each flag has a fixed index, which the table gives.
 
 ### Index range and checks
 
-GRF looks up each action in a Python list, so an index from `-action_count` to -1 counts from the
-end of the set, and cuju accepts the same indices, from -19 to 18 for `default` and from -33 to 32
-for `full`. An index outside that range raises `cuju.ActionRangeError`, an `IndexError`, before any
-environment steps, and a floating-point action raises `TypeError`, as GRF accepts only integers.
+An action is an integer from 0 to `action_count - 1`, so from 0 to 18 for `default`, 0 to 19 for `v2`
+and 0 to 32 for `full`, and `idle` is 0. A code that marked idle with -1 passes 0 to the batch. A
+floating-point action raises `TypeError`, as GRF accepts only integers.
 
-On the GPU, actions that already lie on the device go to the step as they are, which keeps every
-step free of a wait for the device. An index out of range there plays as `idle` for that agent,
-where GRF would raise, so the batch plays a match that GRF never plays. Actions stay in range by
+On the CPU, and on a GPU batch with `debug` on in the machine config, every action is checked
+against that range before any environment steps, and an index outside it raises
+`cuju.errors.ArgumentError`, a `ValueError` and an `IndexError`, that names the first such action,
+its agent and its environment. The check of a GPU batch reads its result on the host, so every step
+waits for the device, which suits the first runs of a new policy or action pipeline more than a
+long training run. A CUDA graph capture skips the check, since a capture admits no wait.
+
+```toml
+[run]
+debug = true
+```
+
+On a GPU batch with `debug` off, actions that already lie on the device go to the step as they are,
+which keeps every step free of a wait for the device. An index out of range there plays as `idle`
+for that agent, so the batch plays a match that GRF never plays. Actions stay in range by
 construction when they come from an `argmax` or a sample over `action_count` logits.
+[Backends](backends.md) describes the key `debug` in full.
 
-The option `check_actions=True` checks the actions on the GPU as well, against the same range, and
-raises `ActionRangeError` naming the first action out of range, its agent and its environment,
-before any environment steps. The check reads its result on the host, so every step waits for the
-device, which suits the first runs of a new policy or action pipeline more than a long training run.
-A CUDA graph capture skips the check, since a capture admits no wait. The option `debug=True`
-includes the same check together with a wait after every step, as described in
-[Backends](backends.md). A CPU batch checks every action at the call in any case and runs the same
-code, so it serves for debugging as well.
-
-The batch ignores the actions of padded agents, the slots beyond an environment's own agents in a
-mixed batch, on both devices.
+GRF looks up each action in a Python list, so an index from `-action_count` to -1 counts from the
+end of the set. The environments of `cuju.env` and `cuju.kaggle` accept GRF's negative indices and
+turn each into the same positive action before the step, so their outputs equal GRF's. A policy
+written for GRF's interface therefore runs there unchanged, and a policy that drives a batch passes
+indices from 0.
 
 ## See also
 

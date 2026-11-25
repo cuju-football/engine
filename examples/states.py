@@ -39,9 +39,9 @@ def find_chance(batch, line, search, generator):
         The environment, the number of steps played and the `[agents]` mask of the agent on the
         ball.
     """
-    device = batch.torch_device
+    device = batch.device
     shape = (batch.environment_count, batch.agents)
-    left = torch.arange(batch.agents, device=device) < batch.left_agents.to(device)[:, None]
+    left = (torch.arange(batch.agents, device=device) < batch.left_agents).expand(shape)
     forward = torch.tensor(FORWARD, dtype=torch.int32, device=device)
     for step in range(search):
         choice = torch.randint(0, len(FORWARD), shape, device=device, generator=generator)
@@ -63,7 +63,8 @@ def find_chance(batch, line, search, generator):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--scenario', default='5_vs_5_l4_r0')
+    parser.add_argument('--scenario', default='5_vs_5')
+    parser.add_argument('--left-agents', type=int, default=4)
     parser.add_argument('--device', default='cpu', choices=['cpu', 'cuda'])
     parser.add_argument('--line', type=float, default=0.75)
     parser.add_argument('--search', type=int, default=3000, help='steps to look for a chance')
@@ -74,7 +75,12 @@ def main():
     arguments = parser.parse_args()
 
     generator = torch.Generator(device=arguments.device).manual_seed(arguments.seed)
-    options = {'device': arguments.device, 'with_raw': True, 'seed': arguments.seed}
+    options = {
+        'device': arguments.device,
+        'raw': True,
+        'seed': arguments.seed,
+        'left_agents': arguments.left_agents,
+    }
     with cuju.BatchEnvironment(arguments.scenario, environment_count=64, **options) as search:
         search.reset()
         index, step, holder = find_chance(search, arguments.line, arguments.search, generator)
@@ -90,7 +96,7 @@ def main():
     with cuju.BatchEnvironment(arguments.scenario, environment_count=count, **options) as batch:
         for environment in range(count):
             batch.set_state(environment, state)
-        device, agents = batch.torch_device, batch.agents
+        device, agents = batch.device, batch.agents
         opening = torch.tensor(list(OPENINGS.values()), dtype=torch.int32, device=device)
         opening = torch.cat([opening.repeat_interleave(branches), opening[:1]])[:, None]
         live = torch.ones(count, dtype=torch.bool, device=device)
@@ -117,7 +123,7 @@ def main():
             goals_for += (score == 1) & live
             goals_against += (score == -1) & live
             # An ended episode restarts at a kick-off, so each branch keeps its last moment.
-            live &= ~done.bool()
+            live &= ~done
             ball_x = torch.where(live, raw['ball'][:, 0, 0], ball_x)
             owned = torch.where(live, raw['ball_owned_team'][:, 0] == 0, owned)
 

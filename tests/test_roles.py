@@ -9,6 +9,7 @@ import torch
 
 import cuju
 from conftest import tensor_bytes
+from cuju._batch import Batch
 
 # Environment 28 of seed 1, whose left goalkeeper, an agent that chases the ball and slides at the
 # opponent who holds it, is sent off on step 243 and hands the role to player 1.
@@ -48,14 +49,14 @@ def reported(batch):
 
 
 def test_the_roles_follow_a_goalkeeper_sent_off_and_leave_every_output_as_it_is(device):
-    batch = cuju.BatchEnvironment(SCENARIO, environment_count=1, device=device, **OPTIONS)
-    plain = cuju.BatchEnvironment(SCENARIO, environment_count=1, device=device, **OPTIONS)
+    batch = Batch(SCENARIO, environment_count=1, device=device, **OPTIONS)
+    plain = Batch(SCENARIO, environment_count=1, device=device, **OPTIONS)
     raw = batch.reset()
     assert tensor_bytes(plain.reset()['left_team']) == tensor_bytes(raw['left_team'])
     before = reported(batch)
     assert before == raw_roles(raw)
     assert before[0][:2] == [0, 7] and before[0].count(0) == 1
-    with pytest.raises(cuju.EnvironmentIndexError):
+    with pytest.raises(cuju.errors.ArgumentError):
         batch.roles(1)
     for step in range(SENT_OFF_STEP + 1):
         actions = chase(raw, step)
@@ -83,21 +84,9 @@ def test_the_roles_follow_a_goalkeeper_sent_off_and_leave_every_output_as_it_is(
     assert batch.get_state(0) == state
     raw, _, _, _ = batch.step(torch.zeros((1, 11), dtype=torch.int32))
     assert reported(batch) == after == raw_roles(raw)
-    fresh = cuju.BatchEnvironment(SCENARIO, environment_count=1, device=device, **OPTIONS)
+    fresh = Batch(SCENARIO, environment_count=1, device=device, **OPTIONS)
     fresh.reset()
     fresh.set_state(0, state)
     assert reported(fresh) == before == raw_roles(fresh.raw())
     for closing in (batch, plain, fresh):
         closing.close()
-
-
-def test_a_multi_device_batch_reports_the_roles_of_its_parts():
-    batch = cuju.MultiDeviceBatch('5_vs_5_l4_r0', ['cpu', 'cpu'], environment_count=3, seed=2)
-    batch.reset()
-    for index, (part, local) in enumerate([(0, 0), (0, 1), (1, 0)]):
-        roles = batch.roles(index)
-        expected = batch.parts[part].roles(local)
-        assert roles.keys() == expected.keys() == {'left_team_roles', 'right_team_roles'}
-        assert all(roles[key].tolist() == expected[key].tolist() for key in roles)
-        assert len(roles['left_team_roles']) == len(roles['right_team_roles']) == 5
-    batch.close()

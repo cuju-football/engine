@@ -11,9 +11,10 @@ GPU throughput rises with the number of environments until the device is full, a
 at about 0.38 MiB per environment plus a fixed reservation for the kernels, bounds the size of a
 batch. On small GPUs under Windows and WSL2, memory beyond the capacity of the device spills into
 shared system memory, which slowed two concurrent training processes on a 4 GB laptop GPU by a
-factor of about ten. `cuju.memory_estimate` gives the memory of a batch and the reservation for the
-kernels before the batch is created, and a GPU batch that requests more than the free memory of its
-device warns at creation.
+factor of about ten. The attribute `batch.memory_bytes` gives the memory that a batch has requested,
+and a GPU batch that requests more than the free memory of its device warns at creation on Windows
+and WSL2, where the driver spills such a batch into shared memory, and raises `DeviceError` with the
+bytes requested and free under a Linux driver.
 
 ## Method
 
@@ -57,13 +58,15 @@ from three commands, for GRF on one processor, for cuju on one processor and for
 
 ```sh
 taskset -c 0 python examples/benchmark.py --grf --scenario 5_vs_5 --left 4 --right 4
-taskset -c 0 python examples/benchmark.py --scenario 5_vs_5_l4_r4 --device cpu --environments 1 --threads 1
-python examples/benchmark.py --scenario 5_vs_5_l4_r4 --device cpu --environments 496 --threads 31
+taskset -c 0 python examples/benchmark.py --scenario 5_vs_5 --device cpu --environments 1 --left 4 --right 4
+python examples/benchmark.py --scenario 5_vs_5 --device cpu --environments 496 --left 4 --right 4
 ```
 
-The all-core GRF figure is the sum of 31 copies of the first command run at once. The 11-a-side rows
-use `--scenario 11_vs_11_stochastic --left 1 --right 0` for GRF and
-`--scenario 11_vs_11_stochastic_l1_r0` for cuju.
+The thread count is a key of the machine config, as [Installation](installation.md#machine-config)
+describes. The default `threads = 0` takes the processors that the process may use, one under
+`taskset -c 0` and 31 under the quota of the machine, which is what the second and third commands
+measured. The all-core GRF figure is the sum of 31 copies of the first command run at once. The
+11-a-side rows use `--scenario 11_vs_11_stochastic --left 1 --right 0` for GRF and for cuju.
 
 On a laptop with an AMD Ryzen 5 7535HS of 12 threads under WSL2, a build of the release tree for
 the same commands gave the following rates over one round.
@@ -94,7 +97,7 @@ The `5_vs_5` figure at 16,384 environments comes from one command, and `--scenar
 `--environments` select the others.
 
 ```sh
-python examples/benchmark.py --scenario 5_vs_5_l4_r4 --device cuda --environments 16384
+python examples/benchmark.py --scenario 5_vs_5 --left 4 --right 4 --device cuda --environments 16384
 ```
 
 On the GPUs of Google Colab, the same wheel and method were run for one round each, so these figures
@@ -134,9 +137,9 @@ within 2% of the compact kernels.
 
 | Scenario | Environments | Earlier kernels | Compact kernels | Cost |
 | --- | --- | --- | --- | --- |
-| `5_vs_5_l4_r4` | 1,024 | 3,116 | 3,022 | 3.0% |
+| `5_vs_5`, 4 agents a side | 1,024 | 3,116 | 3,022 | 3.0% |
 | | 4,096 | 3,726 | 3,510 | 5.8% |
-| `11_vs_11_stochastic_l1_r0` | 1,024 | 2,348 | 2,310 | 1.7% |
+| `11_vs_11_stochastic`, 1 agent | 1,024 | 2,348 | 2,310 | 1.7% |
 | | 4,096 | 2,662 | 2,600 | 2.3% |
 
 The compact kernels need 6,768 bytes of local memory per thread, where the earlier kernels needed
@@ -161,7 +164,7 @@ levels off. A search for the batch size starts conveniently at 4,096 environment
 count until the steps per second stop rising or the memory runs out. Past the point where the rate
 levels off, more environments add memory and latency per update without adding throughput.
 
-Each environment of `5_vs_5_l4_r0` with `simple115v2` occupies about 0.38 MiB of device memory, so
+Each environment of `5_vs_5` with four agents and `simple115v2` occupies about 0.38 MiB of device memory, so
 16,384 environments occupy about 6 GiB. Creating the first batch of a process on a GPU also makes
 the driver reserve the local memory of the kernels, which it then holds until the process ends. The
 driver keeps a stack of 1 KB for every thread that the GPU can run at a time from the creation of
@@ -170,8 +173,8 @@ bytes per thread, so the reservation adds about 5.6 KB per thread. That amounts 
 on an RTX 4090, which runs 196,608 threads at a time, and to about 135 MiB on a 4 GB RTX 3050 Laptop
 GPU, which runs 24,576. By default the library allocates outside the allocator of PyTorch, so
 `torch.cuda.memory_allocated` leaves this memory out, while `torch.cuda.mem_get_info` counts all of
-it. With `allocator='torch'`, PyTorch counts the buffers of the batch, as described in
-[Backends](backends.md).
+it. With `allocator = "torch"` in the machine config, PyTorch counts the buffers of the batch, as
+described in [Backends](backends.md).
 
 The reservation depends on the size of the GPU and on nothing else. Every environment count, every
 scenario and every representation takes the same amount, so a small batch for evaluation reserves as
@@ -181,7 +184,7 @@ environment kept its own copy of the large lists of the simulation, such as the 
 of a selection and the commands queued for a player. Those threads all hold the same values, so the
 kernels now keep one copy of these lists per environment, in a work area of 12 KB of device memory
 that the batch allocates beside its worlds. The work area scales with the number of environments,
-like the rest of the batch, and `memory_bytes` and `memory_estimate` count it, while the reservation
+like the rest of the batch, and `memory_bytes` counts it, while the reservation
 stays fixed. For 4,096 environments the work area takes 48 MiB, against a reservation that shrank by
 about 1.0 GiB on the RTX 3050 Laptop GPU and by about 8.2 GiB on the RTX 4090.
 
@@ -191,24 +194,23 @@ evaluation or for another scenario, adds only its own buffers. Each process hold
 its own, so several training processes on one GPU each pay it, and a process that runs several
 batches on one GPU pays it once.
 
-`cuju.memory_estimate` returns the bytes that a batch would request, for the same arguments as
-`BatchEnvironment`, without allocating them, and `batch.memory_bytes` returns the bytes that a
-created batch has requested. Both count the buffers, the worlds and the shared tables of the batch.
-The result of `memory_estimate` also carries the reservation for the kernels as its attribute
-`local_memory_bytes`, which the library computes from the local memory of each kernel, the current
-stack of the device and the threads that the GPU runs at a time. It is 0 once the process has
-created a batch on the GPU, and always 0 on the CPU. On an RTX 4090 the figure, 9,585,033,216 bytes,
-came within 1 to 5 MiB, or 0.06%, of the drop in free memory that `torch.cuda.mem_get_info` reported
-around the first creation, once the creation of a second batch of the same size was subtracted. The
-difference between the estimates for two environment counts gives the memory of one environment, and
-the estimate for a planned count, together with `local_memory_bytes`, the context of PyTorch and the
-model, shows before any allocation whether the batch fits the device. The estimate reads the bundles
-and animation tables as a creation does, so it takes a fraction of a second. [Recipes](recipes.md)
-gives a search for the largest batch that fits a budget.
+`batch.memory_bytes` returns the bytes that a created batch has requested, counting the buffers,
+the worlds and the shared tables of the batch, and the work area above. It leaves out the reservation
+for the kernels, which the driver makes at the first launch. The drop in free memory that
+`torch.cuda.mem_get_info` reports around the first creation on the RTX 3050 Laptop GPU, once the
+creation of a second batch of the same size is subtracted, agreed within 1.5 MiB with the reservation
+computed from the local memory of each kernel, the stack of the device and the threads that the GPU
+runs at a time, for both builds. The difference between the `memory_bytes` of two batches of different
+environment counts gives the memory of one environment, and a small batch created first gives a
+figure for the fit of a planned count, together with the reservation, the context of PyTorch and the
+model, before the large batch is allocated. A batch that does not fit raises `DeviceError` under a
+Linux driver, with the bytes requested and the bytes free, and warns on Windows and WSL2, as the
+section on [small and shared GPUs](#small-and-shared-gpus) describes. [Recipes](recipes.md) gives a
+search for the largest batch that fits a budget.
 
-On the CPU, about 16 environments per thread keep every core busy. `threads=0` uses every processor
-that the process may run on, within the CPU quota of its cgroup, as described in
-[Backends](backends.md).
+On the CPU, about 16 environments per thread keep every core busy. The default `threads = 0` of the
+machine config uses every processor that the process may run on, within the CPU quota of its
+cgroup, as described in [Backends](backends.md).
 
 The representation also affects memory. An observation of `simple115v2` holds 115 `float32` values,
 460 bytes per agent, while the SMM of `extracted` at the default 96 by 72 cells holds four channels
@@ -218,17 +220,17 @@ that hold every step of an update. [Observations](observations.md) gives the lay
 representation.
 
 The memory of a batch by scenario and representation was measured on the RTX 3050 Laptop GPU with
-`allocator='torch'`, which counts every buffer of the batch. Each batch also takes about 31 MiB
+`allocator = "torch"` in the machine config, which counts every buffer of the batch. Each batch also takes about 31 MiB
 regardless of its size, and the figures leave out the local memory of the kernels, the context of
 PyTorch and the model. The SMM costs more than its observation alone, since the batch also keeps the
 last observation of each ended episode in `final_observation`.
 
 | Scenario | Representation | MiB per environment | 1,024 environments | 4,096 |
 | --- | --- | --- | --- | --- |
-| `5_vs_5_l4_r4` | `simple115v2` | 0.38 | 419 MiB | 1,583 MiB |
+| `5_vs_5`, 4 agents a side | `simple115v2` | 0.38 | 419 MiB | 1,583 MiB |
 | | `extracted` | 0.80 | 845 MiB | 3,288 MiB |
 | | `raw` | 0.38 | 417 MiB | 1,575 MiB |
-| `11_vs_11_stochastic_l1_r0` | `simple115v2` | 0.37 | 413 MiB | 1,557 MiB |
+| `11_vs_11_stochastic`, 1 agent | `simple115v2` | 0.37 | 413 MiB | 1,557 MiB |
 | | `extracted` | 0.42 | 468 MiB | 1,771 MiB |
 | | `raw` | 0.37 | 413 MiB | 1,559 MiB |
 
@@ -236,8 +238,8 @@ last observation of each ended episode in `final_observation`.
 
 A GPU with a few gigabytes of memory, such as that of a laptop, fills quickly, since the batch, the
 local memory of the kernels, the context of PyTorch and the model share it. When the memory runs
-out, a Linux driver fails the allocation, and creating the batch raises an error that names the
-memory it requested, the memory the batch already held and the free memory of the GPU. A Windows
+out, a Linux driver fails the allocation, and creating the batch raises `DeviceError` with a message
+that names the bytes requested and the bytes free on the GPU. A Windows
 driver under WDDM, the driver model that WSL2 also uses, may instead move memory into the shared
 system memory of the machine, which the GPU reads over the PCIe bus. The allocation then succeeds,
 and every kernel that touches that memory runs many times slower. Two training processes that each
@@ -246,7 +248,7 @@ process alone.
 
 A GPU batch compares at creation the memory it requested with the free memory of the GPU
 immediately before, and when the request is larger it issues a `UserWarning` that names both
-amounts in MiB. With `allocator='torch'`, the memory that the cache of PyTorch holds unused counts
+amounts in MiB. With `allocator = "torch"`, the memory that the cache of PyTorch holds unused counts
 as free, since the batch may take it. Under a Linux driver such a request fails, and the creation
 raises the error that names the memory, so the warning matters on Windows and WSL2, where the batch
 is created and runs anyway, and there it is the main sign of a spill. A run that shows the warning
@@ -256,17 +258,23 @@ creation reserves for the kernels, and the warning names that share. Later batch
 find the reservation held and compare their own memory alone.
 
 One process with one batch per GPU, sized to the free memory that `torch.cuda.mem_get_info()[0]`
-reports less room for PyTorch and the model, avoids the spill. `cuju.memory_estimate` with the
-planned arguments gives the size of the batch for that comparison before any allocation, and its
-`local_memory_bytes` the reservation that a first batch adds for the kernels. On a laptop,
+reports less room for PyTorch and the model, avoids the spill. The `memory_bytes` of a small batch
+scaled to the planned count gives the size of the large batch for that comparison, and the figures
+of the table above give the reservation that a first batch adds for the kernels. On a laptop,
 evaluation on the CPU with `device='cpu'` beside training on the GPU takes the place of a second GPU
 batch. A spill appears in the Windows Task Manager as shared GPU memory greater than zero, together
-with a drop in steps per second of an order of magnitude. With `CUJU_LOG=1`, each batch logs at
-creation the device memory it took, so a log of the run shows how the memory of the GPU was spent.
+with a drop in steps per second of an order of magnitude. With the key `log = true` in the machine
+config, each batch logs at creation the device memory it took, so a log of the run shows how the
+memory of the GPU was spent.
+
+```toml
+[run]
+log = true
+```
 
 ## Rendering
 
-A batch that renders GRF's frames, with `pixels`, `pixels_gray` or `render_frames=True`, spends
+A batch that renders GRF's frames, with `pixels`, `pixels_gray` or `frames=True`, spends
 almost all of its time drawing, on the host's processors whatever the backend. On one core of a
 laptop's AMD Ryzen 5 7535HS at about 2.3 GHz, a frame of 1280 by 720 pixels of an eleven a side
 match takes about 0.56 seconds, and with four threads about 0.16 seconds, against 0.72 and 0.22
@@ -275,8 +283,9 @@ frames a second in all and a batch of 32 about ten, with each environment on a w
 and about 200 MB of memory per environment. The figures scale with the clock of the processor,
 which on that laptop ranges from about 2.3 to 4.5 GHz. The rates of the
 tables above therefore apply to batches that do not render, and
-[Frames and videos](rendering.md#speed) gives the figures of the renderer, the split of workers and threads,
-and advice on [training on pixels](rendering.md#training-on-pixels).
+[Frames and videos](rendering.md#speed) gives the figures of the renderer, the split of workers and
+threads by the keys `render_workers` and `render_threads`, and advice on
+[training on pixels](rendering.md#training-on-pixels).
 
 ## Timing
 
@@ -288,8 +297,8 @@ to its number of players, as the single-processor rates of 2,018 and 914 steps p
 
 ## See also
 
-- [Backends](backends.md), for the execution model and the options of each backend
+- [Backends](backends.md), for the execution model and the settings of each backend
 - [Exactness](exactness.md), for the equality of the CPU and GPU outputs that the figures compare
-- [Installation](installation.md), for the wheel and the GPUs it covers
+- [Installation](installation.md), for the wheel, the GPUs it covers and the machine config
 - [Recipes](recipes.md), for training loops that keep a batch on the GPU
 - [Frames and videos](rendering.md), for the speed and memory of GRF's frames

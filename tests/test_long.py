@@ -17,6 +17,7 @@ import torch
 
 import cuju
 from conftest import CUDA, play_digest
+from cuju._batch import Batch
 
 DIGESTS = os.path.join(os.path.dirname(os.path.abspath(cuju.__file__)), 'data', 'digests.json')
 with open(DIGESTS, encoding='utf-8') as handle:
@@ -48,9 +49,7 @@ def test_the_long_cases_play_beyond_the_short_ones():
     assert all(entry['steps'] > 3000 for name, entry in LONG.items() if 'full_match' in name)
     for entry in LONG.values():
         # The assets and options are valid, at the cost of one environment and one step.
-        batch = cuju.BatchEnvironment(
-            entry['assets'], environment_count=1, device='cpu', **entry['options']
-        )
+        batch = Batch(entry['assets'], environment_count=1, device='cpu', **entry['options'])
         batch.reset()
         batch.step(torch.zeros((1, batch.agents), dtype=torch.int32))
         batch.close()

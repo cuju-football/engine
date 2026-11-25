@@ -8,8 +8,9 @@ import random
 import pytest
 import torch
 
-import cuju
 from conftest import tensor_bytes
+from cuju._batch import Batch
+from cuju.errors import ConfigurationError
 
 np = pytest.importorskip('numpy')
 cuju_env = pytest.importorskip('cuju.env')
@@ -75,10 +76,10 @@ def bundle(scenario, tmp_path_factory):
 
 
 def test_agents_must_hold_every_player(bundle):
-    batch = cuju.BatchEnvironment(bundle, environment_count=1, device='cpu', agent_counts=[(11, 0)])
+    batch = Batch(bundle, environment_count=1, device='cpu', agent_counts=[(11, 0)])
     batch.close()
-    with pytest.raises(RuntimeError, match='control_all_players'):
-        cuju.BatchEnvironment(bundle, environment_count=1, device='cpu', agent_counts=[(2, 0)])
+    with pytest.raises(ConfigurationError, match='control_all_players'):
+        Batch(bundle, environment_count=1, device='cpu', agent_counts=[(2, 0)])
 
 
 def designated_actions(batch, actions, sides):
@@ -103,8 +104,8 @@ def test_wrapper_equals_grf_selection(bundle, counts):
     options = dict(
         environment_count=3, device='cpu', action_set='v2', with_raw=True, agent_counts=[counts]
     )
-    wrapped = cuju.BatchEnvironment(bundle, **options)
-    plain = cuju.BatchEnvironment(bundle, **options)
+    wrapped = Batch(bundle, **options)
+    plain = Batch(bundle, **options)
     wrapper = cuju_wrappers.MultiAgentToSingleAgent(
         wrapped, *(int(bool(count)) for count in counts), action_set='default'
     )
@@ -135,11 +136,9 @@ def test_stacked_wrapper_stacks_the_designated_observations(bundle):
         environment_count=2, device='cpu', action_set='v2', with_raw=True, agent_counts=[(11, 0)]
     )
     stacked = cuju_wrappers.MultiAgentToSingleAgent(
-        cuju.BatchEnvironment(bundle, **options), 1, 0, stacked=True, squeeze=True
+        Batch(bundle, **options), 1, 0, stacked=True, squeeze=True
     )
-    single = cuju_wrappers.MultiAgentToSingleAgent(
-        cuju.BatchEnvironment(bundle, **options), 1, 0, squeeze=True
-    )
+    single = cuju_wrappers.MultiAgentToSingleAgent(Batch(bundle, **options), 1, 0, squeeze=True)
     frames = [single.reset()] * 4
     assert torch.equal(stacked.reset(), torch.cat(frames, -1))
     for step in range(30):
@@ -180,7 +179,7 @@ def test_create_environment_with_control_all_players(scenario):
     # GRF: the wrapper passes on the reward of all 22 agents.
     assert reward.shape == (22,)
     env.close()
-    with pytest.raises(RuntimeError, match='control_all_players'):
+    with pytest.raises(ConfigurationError, match='control_all_players'):
         cuju_env.create_environment(scenario, number_of_left_players_agent_controls=2)
 
 

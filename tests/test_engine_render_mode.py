@@ -10,9 +10,9 @@ import hashlib
 
 import pytest
 
-import cuju
 import cuju.gfootball_engine._render_hooks as hooks
 from conftest import CUDA
+from cuju._batch import Batch
 from cuju.gfootball_engine import _gameplayfootball, _native
 
 
@@ -193,9 +193,7 @@ def test_saves_and_loads_count_for_the_nets(renderer):
 def batch_run(device, steps=40):
     import torch
 
-    batch = cuju.BatchEnvironment(
-        '5_vs_5_l1_r0', environment_count=3, device=device, seed=7, representation='raw'
-    )
+    batch = Batch('5_vs_5_l1_r0', environment_count=3, device=device, seed=7, representation='raw')
     batch._set_render(render_mode=1, referee_animations=True)
     batch.reset()
     actions = torch.zeros((3, batch.agents), dtype=torch.int32, device=batch.torch_device)

@@ -6,12 +6,13 @@ are compiled from one header-only C++ source and execute the same floating-point
 same order, so they produce bitwise identical outputs, which also equal those of Google Research
 Football, or GRF.
 
-The backend of a batch is chosen at creation through the `device` option. On the GPU each
+The backend of a batch is chosen at creation through the `device` argument. On the GPU each
 environment occupies one warp, and a step is a single kernel launch on the current PyTorch stream,
 which CUDA graphs and `torch.compile` can capture. On the CPU a thread pool steps the environments,
-with options for asynchronous steps, thread pinning, NUMA placement and page-locked outputs. On
-both backends the outputs are PyTorch tensors that view the buffers of the batch. A run spans
-several GPUs either with one process per GPU or with `cuju.MultiDeviceBatch` in a single process.
+with settings of the machine config for thread count, thread pinning, NUMA placement and
+page-locked outputs, and the method `step_async` for asynchronous steps. On both backends the
+outputs are PyTorch tensors that view the buffers of the batch. A run spans several GPUs with one
+process per GPU.
 
 ## Architecture
 
@@ -42,23 +43,22 @@ and [Installation](installation.md) lists the platforms with their wheels and re
 
 ## Device selection
 
-The `device` option accepts a backend name, a CUDA device or `'auto'`, and each value places the
+The `device` argument accepts a backend name, a CUDA device or `'auto'`, and each value places the
 batch on one device.
 
 | Value | Runs on |
 | --- | --- |
 | `'cuda'` | the current CUDA device of PyTorch |
-| `'cuda:N'`, `torch.device('cuda', N)`, or an integer `N` | GPU `N` |
+| `'cuda:N'` or `torch.device('cuda', N)` | GPU `N` |
 | `'cpu'` | the CPU |
 | `'auto'` | the current CUDA device where PyTorch sees a GPU and the CUDA library is installed, else the CPU |
 
-The default is `'cuda'`. The value `'auto'` selects once, at creation, and suits code that runs on
-machines with and without a GPU, such as quick starts and notebooks. Only an explicit `'auto'`
-selects, so a program that names `'cuda'` on a machine without a GPU raises `DeviceError` at
-creation and reports the problem at once. The attribute `batch.device` records the chosen backend,
-`'cuda'` or `'cpu'`, and `batch.torch_device` the `torch.device` of the buffers, such as `cuda:0` or
-`cpu`. Every call of a batch runs on its own device, independent of the device that is current at
-the time of the call.
+The default is `'auto'`. The value selects once, at creation, logs its choice once per process
+through the logger `cuju`, and suits code that runs on machines with and without a GPU, such as
+quick starts and notebooks. A program that names `'cuda'` on a machine without a GPU raises
+`DeviceError` at creation and reports the problem at once. The attribute `batch.device` is the
+`torch.device` of the buffers, such as `cuda:0` or `cpu`. Every call of a batch runs on its own
+device, independent of the device that is current at the time of the call.
 
 ## Comparison
 
@@ -93,7 +93,7 @@ of the batch and computes the next actions.
 import cuju
 import torch
 
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4096, device='cuda')
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=4096, device='cuda', left_agents=4)
 policy = torch.nn.Linear(115, 19).cuda()
 observation = batch.reset()
 actions = torch.zeros((4096, 4), dtype=torch.int32, device='cuda')
@@ -166,47 +166,68 @@ removes much of it. With thousands of environments the step kernel dominates, an
 little. A graph also fixes the shapes and the memory of everything it contains, which constrains
 the training loop built around it.
 
-### GPU options
+### GPU settings
 
-The GPU options control how the work runs and leave every output unchanged. They apply to the GPU
-alone.
+The GPU settings are keys of the table `[run]` of the machine config, the file `engine.toml` that
+`CUJU_CONFIG` names or that sits at `~/.config/cuju/engine.toml` on Linux and macOS and at
+`%APPDATA%\cuju\engine.toml` on Windows, as [Installation](installation.md#machine-config)
+describes. They control how the work runs and leave every output unchanged, and the argument
+`config` of `cuju.BatchEnvironment` overrides them for one batch. They apply to the GPU alone.
 
-**`allocator='torch'`** draws the device memory of the batch from the caching allocator of PyTorch,
-so that `torch.cuda.memory_allocated`, the related statistics and
-`set_per_process_memory_fraction` include it. The default, `'cuda'`, allocates with `cudaMalloc`,
+**`allocator = "torch"`** draws the device memory of the batch from the caching allocator of
+PyTorch, so that `torch.cuda.memory_allocated`, the related statistics and
+`set_per_process_memory_fraction` include it. The default, `"cuda"`, allocates with `cudaMalloc`,
 outside the accounting of PyTorch. With either value, the local memory that the driver reserves for
 the kernels remains outside PyTorch.
 
+```toml
+[run]
+allocator = "torch"
+```
+
 Under the default, the memory of a batch is accounted separately and returns to the driver when the
-batch closes. Under `'torch'`, a batch and a model on the same GPU share one memory budget, the
+batch closes. Under `"torch"`, a batch and a model on the same GPU share one memory budget, the
 memory statistics of PyTorch cover both, a memory fraction limits the batch as well, and the memory
 of a closed batch stays in the cache of PyTorch for later tensors instead of returning to the
 driver. The second behaviour benefits long runs that create and close batches repeatedly, such as an
 evaluation batch every few updates, since the cache reuses the same memory each time.
 
-**`check_actions=True`** checks actions that already lie in GPU memory against the action set
-before each step, as the library checks actions in host memory, and raises `ActionRangeError`
-before any environment steps. The check reads its result on the host, so each step waits for the
-device, and a CUDA graph capture skips it. By default such actions go to the step as they are, and
-an index out of range plays as `idle`, as described in
-[Rewards and actions](rewards-and-actions.md). The option suits the first runs of a new policy or
-action pipeline, and a long run leaves it off once the actions are known to stay in range.
+**Memory.** The attribute `batch.memory_bytes` gives the bytes that the batch has requested,
+counting its buffers, its worlds and its shared tables. A GPU batch compares that request with the
+free memory of its GPU at creation and warns when the request is larger. Under a Linux driver such a
+request fails, and the creation raises `DeviceError` with the bytes requested and the bytes free.
+On Windows and WSL2, the driver may place the batch in shared system memory instead, where it runs
+many times slower, and the warning is then the sign of it, as [Performance](performance.md#small-and-shared-gpus)
+describes.
 
 ### Debugging and profiling
 
 A GPU batch enqueues its work on the stream and returns, so a failure on the device, such as a read
-of an invalid address, surfaces at a later call that waits, often far from its cause. The option
-**`debug=True`** makes every `step`, `step_async`, `reset_done` and `reset` wait for the device
+of an invalid address, surfaces at a later call that waits, often far from its cause. The key
+**`debug = true`** makes every `step`, `step_async`, `reset_done` and `reset` wait for the device
 before it returns, so that such a failure raises `DeviceError` at the call that caused it, with the
-CUDA call that reported it. It also checks the actions as `check_actions` does. A CUDA graph
-capture admits no wait for the device, so a capture skips both the waits and the check. The waits
-remove the overlap of the batch with the rest of the program, so `debug` serves the search for a
-fault, and a training run leaves it off. A failure that ends the CUDA context, such as the trap of
-an undefined path, still ends it, and the process restarts. The CPU waits at every call anyway, so
-it ignores the option.
+CUDA call that reported it. It also checks every action, including those in GPU memory, against the
+action set. A CUDA graph capture admits no wait for the device, so a capture skips both the waits
+and the check. The waits remove the overlap of the batch with the rest of the program, so `debug`
+serves the search for a fault, and a training run leaves it off. A failure that ends the CUDA
+context, such as the trap of an undefined path, still ends it, and the process restarts. The CPU
+waits at every call anyway, and checks every action in any case, so it ignores the key. With
+`debug` off, an action in GPU memory that lies outside the action set plays as `idle`, as
+[Rewards and actions](rewards-and-actions.md#index-range-and-checks) describes, while with `debug`
+on it raises `ArgumentError` before any environment steps.
+
+```toml
+[run]
+debug = true
+```
+
+The same setting applies to one batch through the call, and `batch.run_config` shows the value in
+force with its source.
 
 ```python
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4096, device='cuda', debug=True)
+batch = cuju.BatchEnvironment(
+    '5_vs_5', environment_count=4096, device='cuda', left_agents=4, config={'debug': True}
+)
 ```
 
 For profiling, a source build with the CMake option `CUJU_NVTX` wraps each call of the C API in an
@@ -230,18 +251,34 @@ nsys profile --trace=cuda,nvtx python train.py
 
 On the CPU a pool of threads runs the environments. Each thread claims the next unclaimed
 environment and runs its whole step, which balances the load when matches differ in cost, as they do
-in a mixed batch. The calling thread participates, and `step` returns when every environment has
+in a batch of scenarios of unequal length. The calling thread participates, and `step` returns when every environment has
 finished.
 
-The `threads` option sets the size of the pool, including the calling thread. The default,
-`threads=0`, uses one thread per logical processor in the affinity mask of the process, capped by
-the CPU quota of its cgroup, rounded up. Slurm and `docker run --cpuset-cpus` set the affinity mask
-and `docker run --cpus` sets the quota, so that `docker run --cpus=2.5` yields three threads. On
-Windows and macOS, `threads=0` uses one thread per logical processor of the machine. The outputs
-are identical for every number of threads.
+The key `threads` of the machine config sets the size of the pool, including the calling thread.
+The default, `threads = 0`, uses one thread per logical processor in the affinity mask of the
+process, capped by the CPU quota of its cgroup, rounded up. Slurm and `docker run --cpuset-cpus` set
+the affinity mask and `docker run --cpus` sets the quota, so that `docker run --cpus=2.5` yields
+three threads. On Windows and macOS, `threads = 0` uses one thread per logical processor of the
+machine. The outputs are identical for every number of threads.
+
+```toml
+[run]
+threads = 12
+```
+
+The same key applies to one batch through the `config` argument, as in the example, which also
+shows `batch.run_config` reporting where the value came from.
 
 ```python
-batch = cuju.BatchEnvironment('5_vs_5_l4_r4', environment_count=192, device='cpu', threads=12)
+batch = cuju.BatchEnvironment(
+    '5_vs_5',
+    environment_count=192,
+    device='cpu',
+    left_agents=4,
+    right_agents=4,
+    config={'threads': 12},
+)
+print(batch.run_config['threads'])  # {'value': 12, 'source': 'call'}
 ```
 
 Two mechanisms reduce the overhead of the pool. A worker that has finished a step polls for the next
@@ -259,11 +296,12 @@ defaults of each other platform listed in [Installation](installation.md#source-
 rejects flags that change the rounding of floating-point operations, such as `-ffast-math`, and a
 build with other flags, such as `-march=native`, is checked with `pytest tests` before use.
 
-### CPU options
+### CPU settings
 
-The CPU options likewise leave every output unchanged. The last three apply to the CPU alone, and on
-the GPU `step_async` behaves as `step`. Each option improves throughput under some conditions and
-reduces it under others, so each starts switched off and is enabled where its conditions hold.
+The CPU settings are keys of the same table `[run]` and likewise leave every output unchanged. The
+last three apply to the CPU alone, and on the GPU `step_async` behaves as `step`. Each setting
+improves throughput under some conditions and reduces it under others, so each starts switched off,
+`pin_memory` excepted, and is enabled where its conditions hold.
 
 **`step_async(actions)` and `step_wait()`** divide a step in two. The CPU steps in a thread of the
 batch while the calling code continues, and `step_wait` returns the result that `step` would. The
@@ -272,29 +310,38 @@ next step. The gain is bounded by the shorter of the two durations, so it is lar
 learner and the step take similar time. The outputs are complete once `step_wait` returns, and any
 other call on the batch first waits for the step.
 
-**`pin_threads=True`** binds each thread of the pool to a processor of its own, while the calling
+**`pin_threads = true`** binds each thread of the pool to a processor of its own, while the calling
 thread stays where the operating system places it. On a dedicated machine, pinning keeps threads on
 their cores and caches, which reduces the variance of the step time. On a shared machine it
 increases the step time, since a pinned thread remains on a core that another process occupies, and
 the whole step waits for it. Pinning applies under Linux, and on Windows and macOS the threads stay
 where the operating system places them.
 
-**`numa=True`** forms one group of threads per NUMA node, each stepping a fixed range of
+**`numa = true`** forms one group of threads per NUMA node, each stepping a fixed range of
 environments whose memory its own threads touch first. On servers with two or more sockets, memory
 attached to another socket has higher latency, and this placement keeps each environment on the
-node that holds its memory. On a single-node machine, and on Windows and macOS, the option leaves
-the pool as it is, so code that runs on every kind of machine can enable it unconditionally.
+node that holds its memory. On a single-node machine, and on Windows and macOS, the setting leaves
+the pool as it is, so a config file that serves every kind of machine can enable it
+unconditionally. A string in place of `true`, such as `numa = "0,0,1,1"`, gives the NUMA node of
+each processor in order, and stands in for what the system reports, which serves tests of the
+placement on a machine with one node.
 
-**`pin_memory=True`** page-locks the output buffers, so that `tensor.to('cuda', non_blocking=True)`
-copies them asynchronously. It requires a CUDA GPU that PyTorch sees. It is intended for runs that
-send the observations of every step to a GPU, usually together with `step_async`, in a loop that
-overlaps the CPU step with a learner update. Page-locked memory stays resident in physical memory,
-which makes the option costly for a very large batch on a machine with little memory.
+**`pin_memory`** page-locks the output buffers of a CPU batch, so that
+`tensor.to('cuda', non_blocking=True)` copies them asynchronously. The default, `"auto"`, turns it
+on where PyTorch sees a CUDA GPU and leaves it off elsewhere, `true` requires such a GPU, and
+`false` leaves it off. It is intended for runs that send the observations of every step to a GPU,
+usually together with `step_async`, in a loop that overlaps the CPU step with a learner update.
+Page-locked memory stays resident in physical memory, which makes the setting costly for a very
+large batch on a machine with little memory, and a machine with little memory sets it to `false`.
+
+```toml
+[run]
+pin_threads = true
+pin_memory = true
+```
 
 ```python
-batch = cuju.BatchEnvironment(
-    '5_vs_5_l4_r0', environment_count=512, device='cpu', pin_threads=True, pin_memory=True
-)
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=512, device='cpu', left_agents=4)
 observation = batch.reset()
 for _ in range(steps):
     batch.step_async(actions)  # the CPU steps
@@ -302,6 +349,9 @@ for _ in range(steps):
     observation, reward, done, information = batch.step_wait()
     observation_gpu = observation.to('cuda', non_blocking=True)
 ```
+
+The machine config belongs to the machine, and the same program runs with the settings of each
+machine that it meets, a laptop with `threads = 4` and a server with `numa = true` among them.
 
 ## Integration with PyTorch
 
@@ -315,7 +365,7 @@ incur a conversion and an allocation at every step, which applies to the `int64`
 and `Categorical.sample`, and copying such actions into an `int32` buffer allocated once avoids
 that cost. Actions elsewhere, in host memory or on another GPU, pass through the host. Actions on the
 host are copied and checked, while actions on the GPU of the batch are read in place and checked
-only with `check_actions=True` or `debug=True`, as described in
+only with `debug = true`, as described in
 [Rewards and actions](rewards-and-actions.md).
 
 `step` releases the global interpreter lock of Python while the library runs, so other Python
@@ -333,7 +383,9 @@ views it can be hard to locate. A `with` statement closes the batch at the end o
 exception included, so the memory returns even when the training code raises.
 
 ```python
-with cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4096, device='cuda') as batch:
+with cuju.BatchEnvironment(
+    '5_vs_5', environment_count=4096, device='cuda', left_agents=4
+) as batch:
     observation = batch.reset()
     for _ in range(1000):
         observation, reward, done, information = batch.step(policy(observation))
@@ -355,55 +407,39 @@ with their process, and pickling a batch raises `TypeError` with that advice.
 
 ## Several GPUs
 
-A run spans several GPUs in one of two layouts, depending on where the learner runs.
-
-**One process per GPU.** When each GPU trains its own copy of the model, as with the distributed
-data parallel of PyTorch, each process holds a batch on its own GPU. The GPU is named with
-`device=f'cuda:{local_rank}'`, and `first_index` assigns each rank its own range of the seed rule,
-so that the ranks together play the environments of one large batch.
+A run spans several GPUs with one process per GPU, which is the layout that scales furthest. When
+each GPU trains its own copy of the model, as with the distributed data parallel of PyTorch, each
+process holds a batch on its own GPU and keeps its observations, actions and policy on that device,
+and only the gradients cross between GPUs. The GPU is named with `device=f'cuda:{local_rank}'`, and
+the seed of the batch is `base + rank`, so that each rank plays matches of its own, drawn by the rule
+of [Episodes and seeds](episodes-and-seeds.md#seeds) from a seed that no other rank uses.
 
 ```python
 import os
 
 rank = int(os.environ['LOCAL_RANK'])
-count = 4096
 batch = cuju.BatchEnvironment(
-    '5_vs_5_l4_r0', environment_count=count, device=f'cuda:{rank}', first_index=rank * count
+    '5_vs_5', environment_count=4096, device=f'cuda:{rank}', left_agents=4, seed=1000 + rank
 )
 ```
 
-In this layout every process keeps its observations, actions and policy on its own device, and only
-the gradients cross between GPUs, which makes it the layout that scales furthest.
+A launcher such as `torchrun` starts the processes and sets `LOCAL_RANK`. The ranks play different
+matches, and the environments of one rank are the environments of a batch of that size with that
+seed on any machine. A run that must reproduce keeps the number of ranks, the batch size and the
+base seed.
 
-**One process over several devices.** When one learner consumes more environments than one device
-can play, `cuju.MultiDeviceBatch` holds one batch per device and steps them together.
-
-```python
-batch = cuju.MultiDeviceBatch('5_vs_5_l4_r0', ['cuda:0', 'cuda:1'], environment_count=32768)
-observation = batch.reset()
-```
-
-Environment `i` plays as environment `i` of a single batch of 32,768, regardless of the split. A
-step is launched on every device before any is awaited, so the GPUs step concurrently and a CPU part
-steps in a thread of its own. The outputs of `reset` and `step` are gathered on `output_device`, by
-default the first device, at the cost of one copy per step, and `batch.parts` exposes each part as a
-`BatchEnvironment` with its own outputs and no copy. A CPU part with `pin_memory=True` copies its
-outputs to a GPU without waiting, and its next step, reset or state waits only until that copy has
-run. The `reset` method takes `seeds` and `reverse`,
-as for a single batch. A masked reset goes through `batch.parts`, each part taking the mask of its
-own range.
-
-The `devices` list may mix GPUs and the CPU and may repeat a device, and `split` sets the number of
-environments of each part, by default an even split. Since a step waits for the slowest part, a
-split in proportion to the speed of each device balances the step, with the rates in
-[Performance](performance.md) as a starting point.
+A process may also hold one batch per GPU and step them in turn. A GPU step returns without waiting
+for the device, so the batches of the several devices run concurrently, and the outputs of each stay
+on its own device. [Recipes](recipes.md) shows both layouts, with the curricula across scenarios and
+the fixed evaluation sets that `reset(seeds=...)` gives.
 
 cuju 0.1.0 was checked on machines with a single GPU, and the batches on further GPUs of a machine
 run the same code on another device. Reports from machines with several GPUs are welcome as issues.
 
 ## See also
 
-- [API reference](api.md), for every option of both backends in table form
+- [API reference](api.md), for every argument and attribute of the batch in table form
 - [Concepts](concepts.md), for batches, bundles and environments
-- [Episodes and seeds](episodes-and-seeds.md), for the seed rule that `first_index` shifts
+- [Episodes and seeds](episodes-and-seeds.md), for the seed rule behind `seed=base + rank`
+- [Installation](installation.md), for the machine config that holds the settings of speed
 - [Performance](performance.md), for the throughput and memory of each backend

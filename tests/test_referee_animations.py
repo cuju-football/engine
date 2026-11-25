@@ -6,13 +6,13 @@ import hashlib
 
 import pytest
 
-import cuju
 from conftest import CUDA, actions_at, tensor_bytes
+from cuju._batch import Batch
 
 
 def play(device, animations, steps=600, mask=None):
     """Returns the SHA-256 of every raw observation, reward and done flag of a batch's run."""
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         '11_vs_11_stochastic_l1_r1',
         environment_count=2,
         device=device,

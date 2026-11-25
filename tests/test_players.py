@@ -11,6 +11,7 @@ import torch
 import cuju
 import cuju.players
 from conftest import CUDA
+from cuju._batch import Batch
 
 np = pytest.importorskip('numpy')
 cuju_env = pytest.importorskip('cuju.env')
@@ -174,7 +175,7 @@ def views(batch, agent):
 @pytest.mark.parametrize('assets', ['11_vs_11_stochastic_l1_r1', '5_vs_5_l1_r1'])
 def test_bot_equals_grf_bot(assets):
     environments = 2
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         assets, environment_count=environments, device='cpu', action_set='full', with_raw=True
     )
     bots = [cuju.players.Bot(batch, agent) for agent in (0, 1)]
@@ -208,7 +209,7 @@ def test_scripted_players_of_create_environment():
         extra_players=['bot:left_players=1', 'lazy:right_players=1'],
         other_config_options={'action_set': 'full'},
     )
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_3_vs_1_with_keeper',
         environment_count=1,
         device='cpu',
@@ -235,7 +236,7 @@ def test_scripted_players_of_create_environment():
 
 
 def test_refusals_and_lazy():
-    batch = cuju.BatchEnvironment('5_vs_5_l2_r0', environment_count=2, device='cpu', with_raw=True)
+    batch = Batch('5_vs_5_l2_r0', environment_count=2, device='cpu', with_raw=True)
     with pytest.raises(ValueError, match='full'):
         cuju.players.Bot(batch, 0)
     lazy = cuju.players.Lazy(batch, [0, 1])
@@ -255,7 +256,7 @@ def test_refusals_and_lazy():
 def test_bot_on_the_gpu_equals_the_cpu():
     actions = {}
     for device in ('cpu', 'cuda'):
-        batch = cuju.BatchEnvironment(
+        batch = Batch(
             '11_vs_11_stochastic_l1_r1',
             environment_count=4,
             device=device,

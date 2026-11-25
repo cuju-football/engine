@@ -1,6 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks `cuju check`, its diagnostics, and the log of `CUJU_LOG=1`."""
+"""Checks `cuju check`, its diagnostics, and the log of the machine config."""
 
 import json
 import logging
@@ -11,9 +11,10 @@ import sys
 import pytest
 import torch
 
-import cuju
 from conftest import CUDA, play_digest
 from cuju import check
+from cuju._batch import Batch
+from cuju._library_path import library_path
 
 CASE = '5_vs_5/simple115v2'
 
@@ -69,7 +70,7 @@ def test_the_diagnostics_name_the_setup():
 
 @pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
 def test_the_cuda_library_holds_code_for_this_gpu():
-    architectures = check.cuda_architectures(cuju.library_path('cuda'))
+    architectures = check.cuda_architectures(library_path('cuda'))
     assert architectures
     capability = torch.cuda.get_device_capability()
     assert 'build cuju' not in check.code_for(capability, architectures)
@@ -81,7 +82,7 @@ def test_the_code_a_gpu_runs():
     assert check.code_for((8, 7), wheel) == 'runs the machine code of sm_86'
     assert 'build cuju' in check.code_for((9, 0), wheel)
     assert 'PTX of compute_86' in check.code_for((9, 0), ['sm_86', 'compute_86'])
-    assert check.cuda_architectures(cuju.library_path('cpu')) in ([], None)
+    assert check.cuda_architectures(library_path('cpu')) in ([], None)
 
 
 def test_the_module_runs():
@@ -97,19 +98,20 @@ def test_the_module_runs():
     assert CASE in result.stdout
 
 
-def test_cuju_log_logs_each_creation(caplog, monkeypatch):
-    monkeypatch.setenv('CUJU_LOG', '1')
+def test_the_log_key_logs_each_creation(caplog, tmp_path, monkeypatch):
+    configuration = tmp_path / 'engine.toml'
+    configuration.write_text('[run]\nlog = true\n', encoding='utf-8')
+    monkeypatch.setenv('CUJU_CONFIG', str(configuration))
     with caplog.at_level(logging.INFO, logger='cuju'):
-        cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=2, device='cpu', threads=1).close()
+        Batch('5_vs_5_l4_r0', environment_count=2, device='cpu', threads=1).close()
     (record,) = [record for record in caplog.records if record.name == 'cuju']
     assert "created 2 environments of ['5_vs_5_l4_r0']" in record.getMessage()
     assert 'the CPU with 1 threads' in record.getMessage()
 
 
-def test_cuju_log_measures_the_memory_of_the_batch_gpu(monkeypatch):
+def test_the_log_measures_the_memory_of_the_batch_gpu(monkeypatch):
     from cuju._batch import log
 
-    monkeypatch.setenv('CUJU_LOG', '1')
     asked = []
 
     def free_memory(device=None):
@@ -119,14 +121,13 @@ def test_cuju_log_measures_the_memory_of_the_batch_gpu(monkeypatch):
     # A batch on GPU 3, which is not the current device, reads the free memory of GPU 3.
     monkeypatch.setattr(torch.cuda, 'is_available', lambda: True)
     monkeypatch.setattr(torch.cuda, 'mem_get_info', free_memory)
-    _, free = log.start('cuda', torch.device('cuda', 3))
+    _, free = log.start('cuda', torch.device('cuda', 3), True)
     assert asked == [3] and free == 1024
 
 
-def test_no_log_by_default(caplog, monkeypatch):
-    monkeypatch.delenv('CUJU_LOG', raising=False)
+def test_no_log_by_default(caplog):
     with caplog.at_level(logging.INFO, logger='cuju'):
-        cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=2, device='cpu').close()
+        Batch('5_vs_5_l4_r0', environment_count=2, device='cpu').close()
     assert not [record for record in caplog.records if record.name == 'cuju']
 
 

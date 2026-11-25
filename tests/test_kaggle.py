@@ -8,8 +8,8 @@ import json
 import pytest
 import torch
 
-import cuju
 from conftest import tensor_bytes
+from cuju._batch import Batch
 
 np = pytest.importorskip('numpy')
 kaggle = pytest.importorskip('cuju.kaggle')
@@ -45,9 +45,7 @@ KEYS = {
 
 @pytest.fixture(scope='module')
 def batch():
-    batch = cuju.BatchEnvironment(
-        '5_vs_5_l1_r1', environment_count=2, device='cpu', representation='raw', seed=4
-    )
+    batch = Batch('5_vs_5_l1_r1', environment_count=2, device='cpu', representation='raw', seed=4)
     batch.reset()
     for step in range(20):
         batch.step(torch.tensor([[step % 19, (step * 3) % 19]] * 2, dtype=torch.int32))
@@ -89,8 +87,8 @@ class Action(enum.Enum):
 
 def test_kaggle_agent_plays_as_its_actions():
     options = dict(environment_count=3, device='cpu', representation='raw', seed=1)
-    played = cuju.BatchEnvironment('academy_3_vs_1_with_keeper_l1_r1', **options)
-    direct = cuju.BatchEnvironment('academy_3_vs_1_with_keeper_l1_r1', **options)
+    played = Batch('academy_3_vs_1_with_keeper_l1_r1', **options)
+    direct = Batch('academy_3_vs_1_with_keeper_l1_r1', **options)
     seen = []
 
     def agent(obs, configuration):
@@ -119,13 +117,11 @@ def test_kaggle_agent_plays_as_its_actions():
 
 
 def test_refusals():
-    plain = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu')
+    plain = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu')
     with pytest.raises(ValueError, match='raw'):
         kaggle.KaggleAgent(lambda obs: [0], plain, 0)
     plain.close()
-    batch = cuju.BatchEnvironment(
-        '5_vs_5_l1_r0', environment_count=1, device='cpu', representation='raw'
-    )
+    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', representation='raw')
     batch.reset()
     with pytest.raises(IndexError):
         kaggle.KaggleAgent(lambda obs: [19], batch, 0).act()

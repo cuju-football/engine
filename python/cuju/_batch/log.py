@@ -1,6 +1,7 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""The log that `CUJU_LOG=1` turns on, a line for each batch created, through the logger `cuju`.
+"""The log that the `log` key of the machine config turns on, a line for each batch created,
+through the logger `cuju`.
 
 The lines go to the handlers of the program's logging when it configured any, and otherwise to
 standard error, each starting with `cuju:`.
@@ -9,7 +10,6 @@ standard error, each starting with `cuju:`.
 from __future__ import annotations
 
 import logging
-import os
 import sys
 import time
 from typing import TYPE_CHECKING
@@ -32,9 +32,13 @@ class _StandardError(logging.StreamHandler):
         pass
 
 
-def enabled() -> bool:
-    """Returns whether `CUJU_LOG` is set to a value other than an empty string or `0`."""
-    return os.environ.get('CUJU_LOG', '') not in ('', '0')
+def enabled(override: bool | None = None) -> bool:
+    """Returns `override` if given, else the `log` key of the machine config."""
+    if override is not None:
+        return bool(override)
+    from .. import _config
+
+    return bool(_config.values()['log'])
 
 
 def _handler():
@@ -48,21 +52,24 @@ def _handler():
 
 
 def info(message: str) -> None:
-    """Logs a line if `CUJU_LOG` asks for it."""
+    """Logs a line if the machine config asks for it."""
     if enabled():
         _handler()
         LOGGER.info(message)
 
 
-def start(device: str, torch_device: torch.device | None = None) -> tuple[float, int | None] | None:
+def start(
+    device: str, torch_device: torch.device | None = None, log: bool | None = None
+) -> tuple[float, int | None] | None:
     """Returns the time and the free device memory before a batch's creation, or `None` if off.
 
     Args:
         device: The backend of the batch, `cuda` or `cpu`.
         torch_device: The batch's own `torch.device`, whose free memory counts on the GPU, which
             need not be the current CUDA device.
+        log: Whether this batch logs, or `None` for the machine config.
     """
-    if not enabled():
+    if not enabled(log):
         return None
     _handler()
     free = None

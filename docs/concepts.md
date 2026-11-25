@@ -7,8 +7,8 @@ its outputs into buffers that it owns, and returns them as PyTorch tensors. Both
 same C++ code and produce GRF's bits for the same seed and actions.
 
 The batched design gives the interface five properties. Outputs are shared buffers, episodes reset
-inside the step, every environment has room for the same number of agents, options are fixed at
-creation, and the seed of each environment depends on its index alone. A batch is built from three
+inside the step, every environment has the same agents, options are fixed at creation, and the seed
+of each environment depends on its index alone. A batch is built from three
 kinds of data, the bundles of its scenarios, the animation tables that all scenarios share, and one
 world per environment. The rest of cuju's vocabulary, from the environment to the padded slot,
 keeps GRF's meanings where GRF has the term.
@@ -30,14 +30,14 @@ The terms of cuju's interface have fixed meanings.
 | active player | The player that an agent controls at a given moment. With fewer agents than players, it changes during a match. |
 | built-in AI | GRF's AI, which drives every player without an agent. |
 | tick | One update of the simulation, 10 milliseconds of match time. |
-| step | One call to `step`, a round of `physics_steps_per_frame` ticks, 10 by default, which repeats while the ball is out of play, as in GRF. |
+| step | One call to `step`, a round of 10 ticks, which repeats while the ball is out of play, as in GRF. |
 | episode | The steps from a reset to the end of a match. |
 | representation | The encoding of an observation, `simple115`, `simple115v2`, `extracted` (the SMM) or `raw`. |
 | action set | The actions an agent can take, `default` (19), `v2` (20) or `full` (33). |
 | difficulty | A number from 0 to 1 for each team, which scales the statistics of its players and slows the reactions of its built-in AI. |
 | form | The version of a scenario that an episode plays. A bundle holds an even and an odd form, by the parity of GRF's episode number. The two forms of `5_vs_5` and of the 11-a-side matches alternate the kick-off, and those of the academies, `1_vs_1_easy` and `test_example_multiagent` are the same. |
 | state | The whole match of one environment as bytes in GRF's format, from `get_state`. |
-| padded slot | Room in an output for an agent or a player that an environment does not have, in a batch that mixes bundles. It holds zeros. |
+| padded slot | Room in a raw output for a player that a team does not have, as the teams of a scenario can differ in size. It holds zeros. |
 
 ## From one environment to a batch
 
@@ -73,7 +73,7 @@ taken at the reset keeps the first observation after the step has overwritten th
 import cuju
 import torch
 
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=8, device='cpu')
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=8, left_agents=4, device='cpu')
 observation = batch.reset()
 kept = observation.clone()  # a copy that the next step leaves alone
 actions = torch.zeros((8, 4), dtype=torch.int32)
@@ -89,29 +89,31 @@ of the next episode, and the last observation of the episode that ended is held 
 `information['final_observation']`. The automatic reset and the option `auto_reset=False`, which
 leaves the reset to the caller, are covered in [Episodes and seeds](episodes-and-seeds.md).
 
-**A fixed number of agent slots.** The outputs are tensors with a fixed shape,
-`[environment_count, agents, ...]`. A batch can mix scenarios with different numbers of agents, so
-`agents` is the largest number of any bundle, and `batch.agent_mask` marks the agents that exist in
-each environment. The other slots output zeros, and the batch ignores their actions.
+**The same agents in every environment.** The outputs are tensors with a fixed shape,
+`[environment_count, agents, ...]`, where `agents` is `left_agents + right_agents`. A batch plays one
+scenario with one set of agent counts, so every environment has every agent, and the agent axis is
+kept even for a single agent. Training across scenarios, which differ in their agents, uses one batch
+for each, as in [Recipes](recipes.md#curriculum-across-scenarios).
 
 **Options fixed at creation.** Everything that shapes the buffers is fixed when the batch is
 created. The seed of an environment's next episode remains open and is set at its reset through
-`reset(seeds=)`.
+`reset(seeds=)`. The settings that change only speed, such as the thread count, live in the machine
+config that [API reference](api.md#machine-config) describes, and leave every output unchanged.
 
 **Seeds by environment index.** Environment `index` of a batch with seed `seed` plays the episodes
-that GRF plays after `random.seed(seed * 2**32 + first_index + index)`, where `first_index` is 0 by
-default and offsets the indices when a run is split over machines. The same index plays the same
-matches whatever the size of the batch, which makes runs reproducible across machines of different
-sizes.
+that GRF plays after `random.seed(seed * 2**32 + index)`. The same index plays the same matches
+whatever the size of the batch, which makes runs reproducible across machines of different sizes. A
+run split over machines gives each machine its own `seed`, as in
+[Recipes](recipes.md#one-process-per-gpu).
 
 ## Components of a batch
 
 A batch is made of three kinds of data.
 
-**Bundles.** A batch loads one bundle for each entry of the list of scenarios that it is given. The
-package ships one bundle for each of GRF's 19 scenarios, and a name such as `5_vs_5_l4_r0` asks for
-that scenario with four agents on the left and none on the right, which the batch sets up when it
-loads the bundle. The shipped bundles are listed in [Scenarios](scenarios.md).
+**Bundles.** A batch loads the bundle of the scenario that it is given. The package ships one bundle
+for each of GRF's 19 scenarios, and `BatchEnvironment('5_vs_5', left_agents=4, right_agents=0)` asks
+for that scenario with four agents on the left and none on the right, which the batch sets up when
+it loads the bundle. The shipped scenarios are listed in [Scenarios](scenarios.md).
 
 **Animation tables.** One file, `animations.bin`, serves every scenario. It holds GRF's player
 animations, the motion data from which the engine chooses how a player runs, turns, kicks and

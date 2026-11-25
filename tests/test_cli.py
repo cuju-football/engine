@@ -158,20 +158,6 @@ def test_a_leading_unknown_root_option_is_reported(tail, capsys):
     assert "cuju: error: expected a root option or a command, found '--bad'" in err
 
 
-def test_an_invalid_replay_frame_rate_is_a_usage_error(capsys):
-    assert cli.main(['replay', '--trace_file', 'game.dump', '--fps', 'no', '--json']) == 2
-    out, err = capsys.readouterr()
-    assert json.loads(out)['error'] == "expected an integer for --fps, found 'no'"
-    assert err.startswith('usage: cuju replay ')
-
-
-def test_replay_help_explains_when_to_set_the_frame_rate(capsys):
-    assert cli.main(['replay', '--help']) == 0
-    help_text = ' '.join(capsys.readouterr().out.split())
-    assert 'Use --fps 10 only for a dump with 10 physics ticks per step.' in help_text
-    assert 'Omit --fps to use the rate in the dump.' in help_text
-
-
 @pytest.mark.parametrize('flags', [[], ['--verbose'], ['-qv']])
 def test_unexpected_errors_exit_70_with_optional_traceback(capsys, monkeypatch, flags):
     def broken_metadata(**kwargs):
@@ -259,7 +245,7 @@ def test_the_windows_launcher_uses_the_command_name(monkeypatch, capsys):
     assert 'cuju replay: hint: run cuju replay --help' in err
 
 
-@pytest.mark.parametrize('command', ['replay', 'dump-to-txt'])
+@pytest.mark.parametrize('command', ['replay', 'dump'])
 @pytest.mark.parametrize(
     ('suffix', 'escape'), [('', False), ('\u00a0', False), ("'", True), ('"', True), ('\n', True)]
 )
@@ -272,8 +258,8 @@ def test_dump_input_errors_quote_windows_paths(command, suffix, escape, monkeypa
         raise FileNotFoundError(errno.ENOENT, 'No such file or directory')
 
     monkeypatch.setattr(dumps, '_read_cli_dump', missing)
-    extra = ['--output', 'output.txt'] if command == 'dump-to-txt' else []
-    assert cli.main([command, '--trace_file', path, *extra, '--json']) == 1
+    extra = ['-o', 'output.txt'] if command == 'dump' else []
+    assert cli.main([command, path, *extra, '--json']) == 1
     out, err = capsys.readouterr()
     error, _ = err.splitlines()
     assert f' at {quoted}, found ' in error
@@ -288,15 +274,15 @@ def test_check_errors_quote_a_windows_library_path(monkeypatch, capsys):
     assert f"CUJU_CPU_LIBRARY names '{path}', which is no file" in err
 
 
-@pytest.mark.parametrize('command', ['replay', 'dump-to-txt'])
+@pytest.mark.parametrize('command', ['replay', 'dump'])
 @pytest.mark.parametrize('content', [None, b'', b'bad pickle', pickle.dumps(1), b'\x80\x04'])
 def test_dump_input_errors_have_one_error_and_one_hint(command, content, tmp_path, capsys):
     path = tmp_path / 'input.dump'
     output = tmp_path / 'output.txt'
     if content is not None:
         path.write_bytes(content)
-    rest = ['--output', str(output)] if command == 'dump-to-txt' else []
-    assert cli.main([command, '--trace_file', str(path), *rest]) == 1
+    rest = ['-o', str(output)] if command == 'dump' else []
+    assert cli.main([command, str(path), *rest]) == 1
     out, err = capsys.readouterr()
     assert out == '' and not output.exists()
     error, hint = err.splitlines()
@@ -305,21 +291,24 @@ def test_dump_input_errors_have_one_error_and_one_hint(command, content, tmp_pat
     assert hint.startswith(f'cuju {command}: hint: ')
 
 
-def test_dump_text_prints_the_written_path_and_keeps_grf_flags(tmp_path, capsys):
+def test_dump_text_prints_the_text_or_the_written_path(tmp_path, capsys):
     path = tmp_path / 'input.dump'
     output = tmp_path / 'output.txt'
     step = {'observation': {}, 'debug': {'time': 1}}
     path.write_bytes(pickle.dumps(step))
-    options = ['dump-to-txt', '--trace_file', str(path), '--output', str(output)]
-    assert cli.main([*options, '--include_debug=false']) == 0
-    assert output.read_text() == "[{'observation': {}}]"
+    text = "[{'observation': {}, 'debug': {'time': 1}}]"
+    assert cli.main(['dump', str(path)]) == 0
+    assert capsys.readouterr() == (text, '')
+    assert cli.main(['dump', str(path), '-o', str(output)]) == 0
+    assert output.read_text() == text
     assert capsys.readouterr() == (f'{output}\n', '')
-    assert cli.main([*options, '--noinclude_debug']) == 0
-    assert output.read_text() == "[{'observation': {}}]"
-    assert capsys.readouterr() == (f'{output}\n', '')
-    assert cli.main([*options, '--json']) == 0
+    assert cli.main(['dump', str(path), '--json']) == 0
     out, err = capsys.readouterr()
-    assert json.loads(out) == {'schema': 'engine.dump_to_txt/1', 'files': [str(output)]}
+    assert json.loads(out) == {'schema': 'engine.dump/1', 'text': text}
+    assert err == ''
+    assert cli.main(['dump', str(path), '--output', str(output), '--json']) == 0
+    out, err = capsys.readouterr()
+    assert json.loads(out) == {'schema': 'engine.dump/1', 'files': [str(output)]}
     assert err == ''
 
 
@@ -469,8 +458,8 @@ def test_bash_completes_nested_choices_and_files(packages, capsys):
             COMP_CWORD=7
             _cuju
             printf '<%s>\n' "${COMPREPLY[@]}"
-            COMP_WORDS=(cuju replay --trace_file ga)
-            COMP_CWORD=3
+            COMP_WORDS=(cuju replay ga)
+            COMP_CWORD=2
             _cuju
             printf '<%s>\n' "${COMPREPLY[@]}"
             COMP_WORDS=(cuju check --device=c)
@@ -491,14 +480,8 @@ def test_bash_completes_nested_choices_and_files(packages, capsys):
                 _cuju
                 printf '<%s>\n' "${COMPREPLY[@]}"
             done
-            for value in fa tr; do
-                COMP_WORDS=(cuju dump-to-txt --include_debug "$value")
-                COMP_CWORD=3
-                _cuju
-                printf '<%s>\n' "${COMPREPLY[@]}"
-            done
-            COMP_WORDS=(cuju dump-to-txt --include_debug --out)
-            COMP_CWORD=3
+            COMP_WORDS=(cuju dump --out)
+            COMP_CWORD=2
             _cuju
             printf '<%s>\n' "${COMPREPLY[@]}"
             """,
@@ -525,8 +508,6 @@ def test_bash_completes_nested_choices_and_files(packages, capsys):
         '<auto>',
         '<cpu>',
         '<cuda>',
-        '<false>',
-        '<true>',
         '<--output>',
     ]
 
@@ -581,8 +562,7 @@ def test_zsh_completes_commands_options_and_choices(packages, capsys, setup, reg
         'cuju replay --device au': 'cuju replay --device auto',
         'cuju replay --device cp': 'cuju replay --device cpu',
         'cuju replay --device cu': 'cuju replay --device cuda',
-        'cuju dump-to-txt --include_debug fa': 'cuju dump-to-txt --include_debug false',
-        'cuju dump-to-txt --include_debug tr': 'cuju dump-to-txt --include_debug true',
+        'cuju dump --ou': 'cuju dump --output',
         'cuju lo': 'cuju look',
         'cuju help look te': 'cuju help look team',
         'cuju help look team ad': 'cuju help look team add',

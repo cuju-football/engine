@@ -539,8 +539,6 @@ def _warn_if_too_long(descriptions):
     )
 
 
-# The cache is off unless this variable names its directory, or is 1 for the default directory.
-_CACHE_VARIABLE = 'CUJU_BUNDLE_CACHE'
 # Part of every key, so that a change to the key's layout builds anew.
 _CACHE_FORMAT = b'cuju bundle cache 1'
 # The SHA-256 of a file, by its real path, size and modification time.
@@ -556,21 +554,21 @@ def _file_digest(path):
     return _file_digests[key]
 
 
-def cache_directory() -> str | None:
-    """Returns the directory of the bundle cache, or `None` while the cache is off.
+def cache_directory() -> str:
+    """Returns the directory of the bundle cache, in the user's cache folder.
 
-    `CUJU_BUNDLE_CACHE` turns the cache on with a directory, or with `1` for
-    `$XDG_CACHE_HOME/cuju/bundles`, which is `~/.cache/cuju/bundles` without `XDG_CACHE_HOME`.
-    Unset, empty or `0`, it leaves the cache off, and a batch builds each scenario file at each
-    creation.
+    It is `$XDG_CACHE_HOME/cuju/bundles`, which is `~/.cache/cuju/bundles` without
+    `XDG_CACHE_HOME`, on Linux, `~/Library/Caches/cuju/bundles` on macOS and
+    `%LOCALAPPDATA%` followed by `cuju` and `bundles` on Windows. A batch builds each scenario
+    file once and later batches load the bundle from here.
     """
-    value = os.environ.get(_CACHE_VARIABLE, '')
-    if value in ('', '0'):
-        return None
-    return _default_cache_directory() if value == '1' else value
-
-
-def _default_cache_directory():
+    if os.name == 'nt':
+        base = os.environ.get('LOCALAPPDATA') or os.path.join(
+            os.path.expanduser('~'), 'AppData', 'Local'
+        )
+        return os.path.join(base, 'cuju', 'bundles')
+    if sys.platform == 'darwin':
+        return os.path.join(os.path.expanduser('~'), 'Library', 'Caches', 'cuju', 'bundles')
     base = os.environ.get('XDG_CACHE_HOME') or os.path.join(os.path.expanduser('~'), '.cache')
     return os.path.join(base, 'cuju', 'bundles')
 
@@ -580,8 +578,8 @@ def cached_bundle(scenario, directory=None, device='cpu', library=None, animatio
 
     The bundle is the one that `build_bundle` writes with the name of the file. Its key is the
     SHA-256 of the file's bytes, its name, the animation tables, the library that builds it and this
-    builder, so a change to any of them builds anew. A batch with `CUJU_BUNDLE_CACHE` set takes its
-    scenario files from the cache through this function.
+    builder, so a change to any of them builds anew. Every batch takes its scenario files from the
+    cache through this function.
 
     The file runs only when its key is new. A file that reads anything besides its own bytes, such
     as another file or `os.environ`, keeps the bundle of its first build until the file changes or
@@ -589,8 +587,7 @@ def cached_bundle(scenario, directory=None, device='cpu', library=None, animatio
 
     Args:
         scenario: The path of a GRF scenario file.
-        directory: The cache directory, created if missing. `None` takes `cache_directory()`, or
-            the directory of `CUJU_BUNDLE_CACHE=1` while the variable leaves the cache off.
+        directory: The cache directory, created if missing. `None` takes `cache_directory()`.
         device: The library that builds the bundle on a miss, `cpu` or `cuda`. Both give the same
             bytes, under keys of their own.
         library: The path of that library, or `None` for `library_path(device)`.
@@ -605,7 +602,7 @@ def cached_bundle(scenario, directory=None, device='cpu', library=None, animatio
         OSError: If the file cannot be read, or the cache directory cannot be created or written.
     """
     if directory is None:
-        directory = cache_directory() or _default_cache_directory()
+        directory = cache_directory()
     name = os.path.splitext(os.path.basename(scenario))[0]
     with open(scenario, 'rb') as handle:
         source = handle.read()
@@ -639,21 +636,19 @@ def cached_bundle(scenario, directory=None, device='cpu', library=None, animatio
 
 
 def _batch_bundle(scenario, device, library, animations=None):
-    """Returns the cached bundle of a scenario file, or `None` if the cache is off or unwritable.
+    """Returns the cached bundle of a scenario file, or `None` if the cache is unwritable.
 
     The bundle and its key take the animation tables at `animations`, the batch's.
     """
     directory = cache_directory()
-    if directory is None:
-        return None
     try:
         path = cached_bundle(
             scenario, directory, device=device, library=library, animations=animations
         )
     except OSError as error:
         warnings.warn(
-            f'the bundle cache {directory!r} of {_CACHE_VARIABLE} cannot be used ({error}), so '
-            'the batch builds the scenario file without it',
+            f'the bundle cache {directory!r} cannot be used ({error}), so the batch builds the '
+            'scenario file without it',
             stacklevel=3,
         )
         return None

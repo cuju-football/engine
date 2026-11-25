@@ -3,6 +3,7 @@
 """Plays random actions in a batch and reports the episodes it finished and its speed.
 
     python examples/random_rollout.py [--device cuda] [--environments 4096] [--steps 1000]
+    python examples/random_rollout.py --scenario 5_vs_5 --left-agents 4 --right-agents 4
 
 Every agent draws a uniform action from a seeded generator, so a run repeats exactly.
 """
@@ -17,14 +18,20 @@ import cuju
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--scenario', default='5_vs_5_l4_r0')
+    parser.add_argument('--scenario', default='5_vs_5')
+    parser.add_argument('--left-agents', type=int, default=4)
+    parser.add_argument('--right-agents', type=int, default=0)
     parser.add_argument('--device', default='cpu', choices=['cpu', 'cuda'])
     parser.add_argument('--environments', type=int, default=64)
     parser.add_argument('--steps', type=int, default=1000)
     arguments = parser.parse_args()
 
     batch = cuju.BatchEnvironment(
-        arguments.scenario, environment_count=arguments.environments, device=arguments.device
+        arguments.scenario,
+        environment_count=arguments.environments,
+        device=arguments.device,
+        left_agents=arguments.left_agents,
+        right_agents=arguments.right_agents,
     )
     batch.reset()
     generator = torch.Generator(device=arguments.device).manual_seed(0)

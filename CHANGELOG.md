@@ -7,18 +7,93 @@ compare only within one version, or across versions whose entries say the output
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.4.0] - 2026-11-25
+
+Every output of a batch and of `cuju.env` stays as it was in 0.3.0, bit for bit, on both backends,
+and the digests of `cuju check` stay the same. The interface of the batch is smaller and breaks
+with 0.3.0 without keeping old names. The migration table in [the API reference](docs/api.md)
+maps every old name to its replacement.
+
+### Added
+
+- `cuju.BatchEnvironment` is the public batch, with the arguments `scenario`, `environment_count`,
+    `device`, `seed`, `left_agents`, `right_agents`, `difficulty`, `representation`, `rewards`,
+    `action_set`, `auto_reset`, `stacked`, `channel_dimensions`, `raw`, `frames`, `frame_size` and
+    `config`. It maps onto `cuju._batch.Batch`, the private class that holds every option of
+    0.3.0 and that `cuju check`, `cuju.env`, `cuju.kaggle`, the replays and the other packages of
+    the family use. The scenario is a shipped name without agent counts, such as `5_vs_5`, or the
+    path of a scenario file, and the agents come from `left_agents` and `right_agents`. Observations
+    always keep the agent axis, `done` is `bool`, and `information` holds `final_observation`,
+    `score_reward` and, with the raw observation on, `final_raw`. `frame_size` is a `(width, height)`
+    pair or a width alone, which leaves the height at 720.
+- The machine config, a file `engine.toml` with the table `[run]`, which holds the settings that
+    change speed and no result. It is read from `CUJU_CONFIG`, else from
+    `~/.config/cuju/engine.toml` on Linux and macOS, else from `%APPDATA%\cuju\engine.toml` on
+    Windows. The keys are `threads`, `debug`, `allocator`, `pin_threads`, `numa`, `pin_memory`,
+    `render_threads`, `render_workers` and `log`. `numa` takes `true`, `false` or a string with the
+    node of each processor such as `"0,0,1,1"`. A file with another table or key is refused, and the
+    argument `config` overrides the keys of `[run]` for one batch. `BatchEnvironment.run_config` lists
+    each resolved key with its value and its source, and `cuju check` prints the path it read and every
+    value that differs from the default.
+- `BatchEnvironment.set_difficulty(values, mask=None)` sets the difficulty of chosen environments
+    from their next reset, through the per-environment difficulty that the C API already takes.
+- `cuju.scenario_names()` lists the shipped scenarios.
+
+### Changed
+
+- Actions are integers from 0 to `action_count - 1`. A GPU batch with `debug` off plays an action
+    outside that range as idle, as before, so code that passed `-1` for idle passes 0. `cuju.env` and `cuju.kaggle` still take GRF's negative indices
+    and turn them into the same positive action before stepping, so their outputs do not change, and
+    the C API keeps its range from `-n` to `n - 1`. The CPU and a batch with `debug` on refuse an
+    action outside the range with `ArgumentError`.
+- The bundle cache is always on. It lives in the user cache folder, `$XDG_CACHE_HOME/cuju/bundles`
+    or `~/.cache/cuju/bundles` on Linux, `~/Library/Caches/cuju/bundles` on macOS and
+    `%LOCALAPPDATA%\cuju\bundles` on Windows. The variable `CUJU_BUNDLE_CACHE` is gone.
+- The variables `CUJU_NUMA_NODES`, `CUJU_RENDER_THREADS`, `CUJU_RENDER_WORKERS` and `CUJU_LOG` are
+    keys of the table `[run]` of the machine config. `CUJU_CONFIG`, `CUJU_BATCH_HOOKS`,
+    `CUJU_GRF_MEDIA`, `CUJU_CUDA_LIBRARY`, `CUJU_CPU_LIBRARY` and `CUJU_RENDER_LIBRARY` remain.
+- `import cuju` shows `BatchEnvironment`, `scenario_names`, `Error`, `errors`, `engine_status` and
+    `__version__`. The public submodules are `cuju.scenarios`, `cuju.dumps`, `cuju.env`,
+    `cuju.gfootball` and `cuju.gfootball_engine`. The observers, `roles`, `observation`, `cuju.kaggle`,
+    `cuju.raw`, `cuju.state`, `cuju.players`, `cuju.wrappers`, the action logs, the digests and the
+    replays stay private, for the packages of the family.
+- `ActionLog`, `Digest`, `digest` and `replay` left the top level and live in `cuju.action_log`.
+- `bundled_scenarios` is `scenario_names`, and the arguments `with_raw`, `render_frames` and
+    `render_resolution_x` and `_y` are `raw`, `frames` and `frame_size`. `torch_device` is `device`.
+    The arguments `assignment`, `first_index`, `episode_number`, `physics_steps_per_frame`,
+    `game_engine_random_seed`, `numpy_legacy`, `squeeze`, `animations`, `library` and
+    `agent_counts`, mixed batches of several scenarios, and the attributes `agent_mask`, `players`,
+    `threads`, `squeeze`, `channel_dimensions`, `check_actions`, `debug`, `auto_reset` and
+    `observers`, with the methods `roles`, `observation`, `final_raw`, `add_observer` and
+    `remove_observer`, belong to the private class. `threads`, `allocator`, `pin_threads`, `numa`,
+    `pin_memory`, `check_actions` and `debug` are keys of the machine config.
+- The errors fold. `ActionRangeError` and `EnvironmentIndexError` are `ArgumentError`, which is also
+    a `ValueError` and an `IndexError`. `ConfigurationError` covers more agents than players. A
+    `DeviceError` for a full device reports the bytes requested and free. `SignatureError` and
+    `TrackerError` moved to `cuju.gfootball_engine`, the only place that raises them. `step` before
+    `reset`, and `raw()` or `frame()` without that output, raise `LibraryError`.
+- The command `cuju replay FILE` takes the dump as an argument in place of `--trace_file`, and
+    `cuju dump FILE -o OUT` replaces `cuju dump-to-txt`. Without `-o` the text goes to standard
+    output. The options `--include_debug` and `--noinclude_debug` are gone. The JSON documents are
+    `engine.replay/1` and `engine.dump/1`. GRF's own scripts in `cuju.gfootball` keep their flags.
+- The engine commands complete their help topics and static values such as the built-in difficulty
+    examples, and the batch modules stay out of help and completion.
+- `cuju check --list` prints the cases without loading PyTorch or the batch modules, with two spaces
+    between its columns. Static shell completion offers the shipped case names, the replay devices
+    and the Boolean values of the text exporter.
+- The single-environment migration guide names the `spaces` extra as a prerequisite.
+
+### Removed
+
+- `MultiDeviceBatch`. One process per GPU, each with `seed=base + rank`, plays the same part, as
+    the recipes show.
+- `memory_estimate`, `bundled_assets` and `library_path` as public names, and `bundled_scenarios`,
+    which `scenario_names` replaces.
+- The variables `CUJU_NUMA_NODES`, `CUJU_RENDER_THREADS`, `CUJU_RENDER_WORKERS`, `CUJU_LOG` and
+    `CUJU_BUNDLE_CACHE`.
+- The option `--fps` of `cuju replay`.
 
 ### Fixed
-
-- Complete family help topics and static values such as built-in difficulty examples.
-- Keep batch modules out of family help and completion.
-- Name the spaces prerequisite in the single-environment migration guide.
-- List self-check cases without loading PyTorch or the batch modules.
-- Use two spaces between columns in the self-check case list.
-- Complete shipped self-check case names in static shell scripts.
-- Complete replay device names and text exporter Boolean values in static shell scripts.
-- Explain which dumps accept an explicit frame rate in replay help.
 
 - Windows builds export the C API functions of the CPU and renderer libraries from their headers.
 - CPU CI runs GRF's replay and video export tests with OpenCV. Local test runs without OpenCV
@@ -439,7 +514,7 @@ The first public release.
 - GRF's ids registered with Gymnasium, and with gym before 0.26, as soon as either is imported, so
     that `import cuju` leaves both unloaded.
 
-[Unreleased]: https://github.com/cuju-football/engine/compare/v0.3.0...HEAD
+[0.4.0]: https://github.com/cuju-football/engine/compare/v0.3.0...HEAD
 [0.3.0]: https://github.com/cuju-football/engine/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/cuju-football/engine/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/cuju-football/engine/compare/v0.1.0...v0.2.0

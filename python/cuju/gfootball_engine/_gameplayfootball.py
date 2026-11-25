@@ -20,6 +20,7 @@ import weakref
 
 from .. import errors as _errors
 from ..scenarios import ScenarioError
+from . import _errors as _own_errors
 from . import _native, _pickle_names, _render_hooks
 
 __all__ = [
@@ -79,7 +80,7 @@ def _type_name(value):
 
 def _signature_error(owner, method, arguments, signature):
     names = ', '.join(_type_name(value) for value in arguments)
-    return _errors.SignatureError(
+    return _own_errors.SignatureError(
         f'Python argument types in\n    {owner}.{method}({names})\n'
         f'did not match C++ signature:\n    {signature}'
     )
@@ -1238,7 +1239,7 @@ class _Tracker:
             detail = f'\nState position: {offset.value}'
         if not failed:
             return None
-        return _errors.TrackerError(
+        return _own_errors.TrackerError(
             f'Validation range: {self.start} - {self.end}\n'
             f'Position: {position} vs {waiting_position}{detail}\n'
             'State comparison failure, where GRF ends the process'

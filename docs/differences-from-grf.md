@@ -43,7 +43,7 @@ byte, and states of the two engines are compared by their fields or by loading t
 
 GRF's `bot` player varies with the processor. It computes norms and dot products with numpy, whose
 BLAS may fuse a multiplication and an addition on a processor with AVX-512, where GRF's own bot can
-then decide differently in the last bit. `cuju.players.Bot` computes as numpy does without fusing,
+then decide differently in the last bit. cuju's `bot` computes as numpy does without fusing,
 as on an AVX2 processor, so it gives the same decisions on every machine.
 
 ## Interface
@@ -53,15 +53,15 @@ gives each with its reason.
 
 | GRF | cuju | Reason |
 | --- | --- | --- |
-| one environment per `create_environment` | `BatchEnvironment` with `environment_count` environments | to run thousands of matches per call, with `cuju.env.create_environment` giving GRF's interface for one |
+| one environment per `create_environment` | `cuju.BatchEnvironment` with `environment_count` environments | to run thousands of matches per call, with `cuju.env.create_environment` giving GRF's interface for one |
 | observations as numpy arrays | PyTorch tensors that view the buffers of the batch, overwritten by each call | copying would cost more than the simulation on the GPU |
-| one observation per agent, the agent axis dropped for one agent | `[environment_count, agents, ...]`, padded to the largest number of agents of the batch, with `squeeze=True` dropping the axis for one agent | a mixed batch needs one shape |
+| one observation per agent, the agent axis dropped for one agent | `[environment_count, agents, ...]`, the agent axis always kept, which `observation[:, 0]` drops for one agent | one fixed shape for every number of agents |
 | default `representation='extracted'` | default `simple115v2` | a vector occupies 460 bytes per agent, and an SMM of thousands of environments occupies gigabytes |
 | `raw` values in numpy's types | `float32`, `int32`, `bool` and `uint8` tensors, holding GRF's values | one fixed type per array on every device |
 | `info` with `score_reward` | `information` with `score_reward` and `final_observation` | the automatic reset hands over the last observation of an episode in the step that ends it |
 | a step after the end of an episode raises | the step that ends an episode starts the next one with `auto_reset=True`, the default, and with `auto_reset=False` the environment stays at its end, with a reward of 0, until `reset_done` or `reset` | stopping a batch for the few environments that ended would idle the rest |
 | `create_environment` resets in its constructor, so a step before `reset` plays the first episode | a batch steps after its first `reset`, or after `set_state` of every environment, and raises `LibraryError` before | the batch allocates its worlds without playing |
-| actions are always checked | actions in host memory are checked as GRF checks them, and actions already on the GPU play as `idle` when out of range unless `check_actions=True` checks them too | a check on the GPU makes every step wait for the device, so it is an option |
+| actions are always checked | actions in host memory are checked as GRF checks them, and actions already on the GPU play as `idle` when out of range unless `debug` is on in the machine config, which checks them and raises `ArgumentError` | a check on the GPU makes every step wait for the device, so it is a setting |
 | the pickle inside a state is written with Python's default protocol, wrapper keys first | protocol 2, the episode logic first | the batch writes the pickle itself, and both sides read each other's states |
 | dumps are limited by wall-clock time, a full episode at most every 10 seconds | `DumpWriter` writes every selected episode and goal | a batch plays many episodes per second of wall-clock time |
 | a dump is named by its kind and the time to the microsecond, `<kind>_<date>-<time>.dump` | the same names from the dump options of `cuju.env.create_environment`, and names by environment, episode and goal step from `DumpWriter` over a batch | the environments of a batch can start dumps in the same microsecond, where their names would collide |
@@ -139,7 +139,7 @@ built for another platform or C library can play other matches, for the reasons 
 ### Undefined paths
 
 GRF leaves a few paths of its engine undefined, such as a set piece without a taker, and at such a
-path it has no result for cuju to equal. cuju stops there, on the CPU with `cuju.UndefinedPathError`
+path it has no result for cuju to equal. cuju stops there, on the CPU with `cuju.errors.UndefinedPathError`
 naming the environment and GRF's reason, and on the GPU with a trap of the device. Every shipped
 scenario avoids them, as far as is known. The behaviour on each device, and the checkpoints that
 protect a long run, are described in [Episodes and seeds](episodes-and-seeds.md#undefined-paths).
@@ -170,7 +170,7 @@ cannot import the name. With the package cuju-gfootball active, the classes repo
 in GRF and GRF's dumps open in `cuju.gfootball`, as
 [Migrating from GRF](migrating-from-grf.md#grfs-names-through-cuju-gfootball) describes. The dumps
 of GRF, of `cuju.env` and of a batch name `gfootball`, as GRF's tools expect.
-`cuju.dumps.read_dump`, `cuju replay` and `cuju dump-to-txt` read all of them, and so does the
+`cuju.dumps.read_dump`, `cuju replay` and `cuju dump` read all of them, and so does the
 `replay` player of `cuju.env`.
 
 The values of `GameEnv.config` that GRF's engine reads during a match reach cuju's engine at the
@@ -272,12 +272,12 @@ as the table shows.
 
 | GRF | cuju |
 | --- | --- |
-| `render`, the representations `pixels` and `pixels_gray`, and `write_video` with `render` | GRF's, in `cuju.gfootball`, drawn by cuju's software renderer, and the representations `pixels` and `pixels_gray` and `render_frames` of a batch, as described in [Frames and videos](rendering.md) |
+| `render`, the representations `pixels` and `pixels_gray`, and `write_video` with `render` | GRF's, in `cuju.gfootball`, drawn by cuju's software renderer, and the representations `pixels` and `pixels_gray` and `frames` of a batch, as described in [Frames and videos](rendering.md) |
 | the tracker, `tracker_setup` | GRF's, in `cuju.gfootball`, as described above |
 | keyboard and gamepad control and the bundled `ppo2_cnn` player | GRF's modules in `cuju.gfootball.env.players`, which need pygame and TensorFlow as in GRF |
 | the `replay` player, which plays a dump's actions | GRF's, in `cuju.gfootball.env.players.replay` |
-| the `bot` and `lazy` players | GRF's in `cuju.gfootball.env.players`, and `cuju.players` for a batch |
-| the observation wrappers | GRF's classes in `cuju.gfootball.env.wrappers`, and representations and options of the batch, `stacked`, `channel_dimensions` and `squeeze` |
+| the `bot` and `lazy` players | GRF's in `cuju.gfootball.env.players`, and `extra_players` of `cuju.env` |
+| the observation wrappers | GRF's classes in `cuju.gfootball.env.wrappers`, and representations and options of the batch, `stacked` and `channel_dimensions` |
 | `CheckpointRewardWrapper` | GRF's class in `cuju.gfootball.env.wrappers`, and `rewards='scoring,checkpoints'` for a batch |
 | `PixelsStateWrapper` | GRF's class in `cuju.gfootball.env.wrappers`, and `representation='pixels'` or `'pixels_gray'` for a batch |
 

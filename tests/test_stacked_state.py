@@ -10,8 +10,8 @@ import types
 
 import pytest
 
-import cuju
 from conftest import actions_at, tensor_bytes
+from cuju._batch import Batch
 
 np = pytest.importorskip('numpy')
 
@@ -65,7 +65,7 @@ def steps(batch, start, count):
     ],
 )
 def test_a_stacked_state_continues_the_stack(device, assets, representation):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         assets, environment_count=2, device=device, representation=representation, stacked=True
     )
     batch.reset()
@@ -77,7 +77,7 @@ def test_a_stacked_state_continues_the_stack(device, assets, representation):
 
 
 def test_the_pickle_holds_grf_frame_stack(grf_classes):
-    batch = cuju.BatchEnvironment('5_vs_5_l2_r1', environment_count=1, device='cpu', stacked=True)
+    batch = Batch('5_vs_5_l2_r1', environment_count=1, device='cpu', stacked=True)
     batch.reset()
     steps(batch, 0, 6)
     unpickled, _ = split(batch.get_state(0, stacked=True))
@@ -91,14 +91,14 @@ def test_the_pickle_holds_grf_frame_stack(grf_classes):
 
 
 def test_one_agent_frames_drop_the_agent_axis(grf_classes):
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu', stacked=True)
+    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', stacked=True)
     batch.reset()
     unpickled, _ = split(batch.get_state(0, stacked=True))
     assert [frame.shape for frame in unpickled['FrameStack']] == [(115,)] * 4
 
 
 def test_a_stack_from_elsewhere_sets_the_observation(grf_classes):
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu', stacked=True)
+    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', stacked=True)
     batch.reset()
     steps(batch, 0, 3)
     unpickled, match = split(batch.get_state(0, stacked=True))
@@ -110,7 +110,7 @@ def test_a_stack_from_elsewhere_sets_the_observation(grf_classes):
 
 
 def test_malformed_stacks(grf_classes):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         '5_vs_5_l1_r0', environment_count=1, device='cpu', stacked=True, representation='extracted'
     )
     batch.reset()
@@ -134,11 +134,11 @@ def test_malformed_stacks(grf_classes):
 
 
 def test_the_stack_option_must_match():
-    stacked = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu', stacked=True)
+    stacked = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', stacked=True)
     stacked.reset()
     with pytest.raises(ValueError, match='stacked=True'):
         stacked.get_state(0)
-    plain = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu')
+    plain = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu')
     plain.reset()
     with pytest.raises(ValueError, match='stacked=True'):
         plain.get_state(0, stacked=True)
@@ -148,7 +148,7 @@ def test_the_stack_option_must_match():
 
 def test_an_unstacked_state_is_unchanged():
     # The pickle without a stack keeps its bytes, as the digests read them.
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=1, device='cpu')
+    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu')
     batch.reset()
     state = batch.get_state(0)
     (length,) = struct.unpack_from('<i', state)

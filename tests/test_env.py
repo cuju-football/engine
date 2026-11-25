@@ -8,8 +8,8 @@ import re
 
 import pytest
 
-import cuju
 from conftest import CUDA
+from cuju._batch import Batch
 
 gymnasium = pytest.importorskip('gymnasium')
 np = pytest.importorskip('numpy')
@@ -72,7 +72,7 @@ def test_episodes_follow_the_seed_rule():
     # Environment 0 of a batch with seed 5 plays GRF's environment after random.seed(5 * 2**32).
     random.seed(5 * 2**32)
     env = cuju_env.create_environment('academy_run_to_score', representation='simple115v2')
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_run_to_score', environment_count=1, device='cpu', seed=5, auto_reset=False
     )
     for episode in range(2):
@@ -100,7 +100,7 @@ def test_a_step_before_reset_plays_the_creation_episode():
     draws = grf_draws(9, 3)
     # GRF: the creation plays episode 1, the odd form, from the third draw, and the second draw
     # sets the team order.
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         '5_vs_5_l2_r0', environment_count=1, device='cpu', auto_reset=False, episode_number=1
     )
     batch.reset(seeds=draws[2], reverse=draws[1] % 2)

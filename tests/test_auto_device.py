@@ -6,28 +6,29 @@ import os
 
 import torch
 
-import cuju
 from conftest import play_digest
+from cuju._batch import Batch
+from cuju._library_path import library_path
 
 
 def expected_backend():
-    gpu_library = os.path.isfile(cuju.library_path('cuda')) or os.environ.get('CUJU_CUDA_LIBRARY')
+    gpu_library = os.path.isfile(library_path('cuda')) or os.environ.get('CUJU_CUDA_LIBRARY')
     return 'cuda' if torch.cuda.is_available() and gpu_library else 'cpu'
 
 
 def test_auto_picks_a_backend():
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=2, device='auto')
+    batch = Batch('5_vs_5_l1_r0', environment_count=2, device='auto')
     assert batch.device == expected_backend()
     assert batch.reset().device == batch.torch_device
     if batch.device == 'cuda':
         assert batch.torch_device.index == torch.cuda.current_device()
     batch.close()
-    assert cuju.library_path('auto') == cuju.library_path(expected_backend())
+    assert library_path('auto') == library_path(expected_backend())
 
 
 def test_auto_without_a_gpu_takes_the_cpu(monkeypatch):
     monkeypatch.setattr(torch.cuda, 'is_available', lambda: False)
-    batch = cuju.BatchEnvironment('5_vs_5_l1_r0', environment_count=2, device='auto')
+    batch = Batch('5_vs_5_l1_r0', environment_count=2, device='auto')
     assert batch.device == 'cpu' and batch.torch_device == torch.device('cpu')
     batch.close()
 

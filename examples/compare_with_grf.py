@@ -6,7 +6,8 @@
     python examples/compare_with_grf.py --scenario 11_vs_11_kaggle --left 1 --right 1 \\
         --representation raw --agent submission.py:agent
 
-It needs `gfootball` installed. Two routes are compared:
+It needs `gfootball` installed. It builds its batches with `cuju._batch.Batch`, since the
+parity with a GRF on NumPy 2 needs the private option `numpy_legacy`. Two routes are compared:
 
 - by seed: environment `index` of a cuju batch with seed `seed` plays the episodes of a GRF
     environment created after `random.seed(seed * 2**32 + index)`;
@@ -41,7 +42,8 @@ import sys
 import numpy as np
 import torch
 
-import cuju
+from cuju._batch import Batch
+from cuju._library_path import library_path
 
 
 def grf_environment(arguments):
@@ -69,7 +71,7 @@ def match_bytes(state):
 @functools.cache
 def padding_function():
     """Returns the CPU library's `cuju_state_padding`, which marks match bytes GRF never sets."""
-    function = ctypes.CDLL(cuju.library_path('cpu')).cuju_state_padding
+    function = ctypes.CDLL(library_path('cpu')).cuju_state_padding
     function.restype = ctypes.c_int
     function.argtypes = [ctypes.c_char_p, ctypes.c_ulonglong, ctypes.c_void_p]
     return function
@@ -254,14 +256,15 @@ def grf_step(env, actions, agents):
     return result[0], np.asarray(result[1], dtype=np.float32).reshape(agents), done
 
 
-def play(arguments, batch, index, env, actions, grf_observation, start_step=0, one_episode=False):
+def play(
+    arguments, batch, ours, index, env, actions, grf_observation, start_step=0, one_episode=False
+):
     """Steps environment `index` of `batch` and `env` with the same actions and compares them.
 
     Returns the number of steps compared, or -1 at the first difference.
     """
     left, agents = arguments.left, arguments.left + arguments.right
     rows = torch.zeros((batch.environment_count, batch.agents), dtype=torch.int32)
-    ours = batch.observation()
     for step in range(start_step, arguments.steps):
         theirs = grf_agents(grf_observation, agents)
         grf_actions, cuju_actions = actions.pick(
@@ -329,26 +332,28 @@ def main(argv=None):
     )
     arguments = parser.parse_args(argv)
     agents = arguments.left + arguments.right
-    name = f'{arguments.scenario}_l{arguments.left}_r{arguments.right}'
+    counts = [(arguments.left, arguments.right)]
     # The checkpoint reward adds in the precision of the numpy that GRF runs with here.
     legacy = int(np.__version__.split('.')[0]) < 2
     options = {
         'device': 'cpu',
         'rewards': arguments.rewards,
         'numpy_legacy': legacy,
+        'agent_counts': counts,
         'representation': arguments.representation,
     }
 
     # By seed: the GRF environment is created after the seed of environment `index`.
-    batch = cuju.BatchEnvironment(
-        name, environment_count=arguments.index + 1, seed=arguments.seed, **options
+    batch = Batch(
+        arguments.scenario, environment_count=arguments.index + 1, seed=arguments.seed, **options
     )
     actions = Actions(arguments, agents, batch.action_count)
     random.seed(arguments.seed * 2**32 + arguments.index)
     env = grf_environment(arguments)
     theirs = first_observation(env.reset())
+    ours = batch.reset()
     found = difference(
-        cuju_agents(batch, batch.reset(), arguments.index, arguments.left, agents),
+        cuju_agents(batch, ours, arguments.index, arguments.left, agents),
         grf_agents(theirs, agents),
     )
     if found is None and arguments.state_interval:
@@ -359,7 +364,7 @@ def main(argv=None):
         print(f'{found} differs after the first reset')
         return 1
     actions.start()
-    steps = play(arguments, batch, arguments.index, env, actions, theirs)
+    steps = play(arguments, batch, ours, arguments.index, env, actions, theirs)
     if steps < 0:
         return 1
     print(f'by seed: {steps} steps equal')
@@ -375,11 +380,14 @@ def main(argv=None):
         theirs, _, done = grf_step(env, grf_actions, agents)
         if done:
             theirs = first_observation(env.reset())
-    single = cuju.BatchEnvironment(name, environment_count=1, **options)
+    single = Batch(arguments.scenario, environment_count=1, **options)
     single.set_state(0, env.get_state())
+    ours = single.observation()
     # Both engines' policies start afresh from the state.
     actions.start()
-    steps = play(arguments, single, 0, env, actions, theirs, start_step=middle, one_episode=True)
+    steps = play(
+        arguments, single, ours, 0, env, actions, theirs, start_step=middle, one_episode=True
+    )
     if steps < 0:
         return 1
     print(f'by state: {steps} steps equal after the state of step {middle}')

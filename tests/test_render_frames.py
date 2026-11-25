@@ -27,6 +27,7 @@ import pytest
 
 import cuju
 from cuju import _media, _pixels
+from cuju._batch import Batch
 from cuju.errors import ArgumentError, MissingFileError, StateError
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -256,9 +257,7 @@ def test_a_batch_takes_grf_resolution_options(monkeypatch):
         {'render_resolution_y': 16388},
     ):
         with pytest.raises(cuju.errors.ConfigurationError, match='render_resolution'):
-            cuju.BatchEnvironment(
-                '5_vs_5_l1_r0', environment_count=1, device='cpu', render_frames=True, **options
-            )
+            Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', render_frames=True, **options)
 
 
 def test_a_batch_draws_at_grf_resolutions(pixels, media, monkeypatch):
@@ -268,7 +267,7 @@ def test_a_batch_draws_at_grf_resolutions(pixels, media, monkeypatch):
         ({'render_resolution_x': 640}, (1, 720, 640, 3)),
         ({'render_resolution_x': 96, 'render_resolution_y': 54}, (1, 54, 96, 3)),
     ):
-        batch = cuju.BatchEnvironment(
+        batch = Batch(
             '5_vs_5_l1_r0',
             environment_count=1,
             device='cpu',
@@ -306,20 +305,15 @@ def test_the_frame_goes_into_a_given_array(pixels, media):
             renderer.pixels(out=np.zeros((72, 96, 3), np.float32))
 
 
-def test_a_batch_splits_the_processors_between_workers_and_threads(monkeypatch):
+def test_a_batch_splits_the_processors_between_workers_and_threads():
     from cuju._batch.pixels import split
 
-    monkeypatch.delenv('CUJU_RENDER_WORKERS', raising=False)
-    monkeypatch.delenv('CUJU_RENDER_THREADS', raising=False)
     assert split(16, cpus=12) == (12, 1)
     assert split(3, cpus=12) == (3, 4)
     assert split(1, cpus=12) == (1, 12)
-    monkeypatch.setenv('CUJU_RENDER_THREADS', '4')
-    assert split(16, cpus=12) == (3, 4)
-    monkeypatch.setenv('CUJU_RENDER_WORKERS', '2')
-    assert split(16, cpus=12) == (2, 4)
-    monkeypatch.delenv('CUJU_RENDER_THREADS')
-    assert split(16, cpus=12) == (2, 6)
+    assert split(16, cpus=12, threads=4) == (3, 4)
+    assert split(16, cpus=12, workers=2, threads=4) == (2, 4)
+    assert split(16, cpus=12, workers=2) == (2, 6)
     assert split(1, cpus=12) == (1, 12)
 
 
@@ -642,7 +636,7 @@ def test_cuju_matches_render_as_grf_does(pixels, media, episode, monkeypatch):
 def rendering_batch(device, kind, steps, scenario='5_vs_5_l1_r0', observations=None):
     """The digests of a rendering batch's observations and frames over a reset and `steps`."""
     torch = pytest.importorskip('torch')
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         scenario,
         environment_count=2,
         device=device,
@@ -704,7 +698,7 @@ def test_a_batch_draws_the_same_frames_for_every_split(pixels, media, monkeypatc
     for workers, threads in [(1, 1), (3, 1), (2, 3)]:
         monkeypatch.setenv('CUJU_RENDER_WORKERS', str(workers))
         monkeypatch.setenv('CUJU_RENDER_THREADS', str(threads))
-        batch = cuju.BatchEnvironment(
+        batch = Batch(
             entry['scenario'],
             environment_count=3,
             device='cpu',
@@ -739,7 +733,7 @@ def test_a_rendering_batch_draws_grf_frames(pixels, media, episode, monkeypatch)
     torch = pytest.importorskip('torch')
     monkeypatch.setenv('CUJU_GRF_MEDIA', media)
     entry = EXPECTED['episodes'][episode]
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         entry['scenario'],
         environment_count=1,
         device='cpu',
@@ -882,7 +876,7 @@ def play_batch_ops(name, device, kind):
     if not entry.get('only_x'):
         options['render_resolution_y'] = height
     left = 1 if entry.get('players') else 0
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         entry['scenario'],
         environment_count=1,
         device=device,

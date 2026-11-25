@@ -2,13 +2,18 @@
 # SPDX-License-Identifier: Apache-2.0
 """Measures the environment steps per second of a batch, as docs/performance.md reports them.
 
-    python examples/benchmark.py --scenario 5_vs_5_l4_r4 --device cuda --environments 16384
-    python examples/benchmark.py --scenario 5_vs_5_l4_r4 --device cpu --environments 1 --threads 1
+    python examples/benchmark.py --scenario 5_vs_5 --left 4 --right 4 --device cuda \
+        --environments 16384
+    python examples/benchmark.py --scenario 5_vs_5 --left 4 --right 4 --device cpu --environments 1
     python examples/benchmark.py --grf --scenario 5_vs_5 --left 4 --right 4
 
-Each round drops the first steps, then times the rest; the median of the rounds is reported with
-the spread. With `--grf`, it times one GRF environment in this process instead, which needs
+Each round drops the first steps, then times the rest, and the median of the rounds is reported
+with the spread. With `--grf`, it times one GRF environment in this process instead, which needs
 `gfootball` installed.
+
+The CPU threads and the other speed settings come from the machine config, the file `engine.toml`
+that `CUJU_CONFIG` names, and its table `[run]`. For one thread, set `threads = 1` there before the
+run, and `cuju check` prints the file it read.
 """
 
 import argparse
@@ -25,7 +30,8 @@ def time_cuju(arguments):
         arguments.scenario,
         environment_count=arguments.environments,
         device=arguments.device,
-        threads=arguments.threads,
+        left_agents=arguments.left,
+        right_agents=arguments.right,
     )
     batch.reset()
     generator = torch.Generator(device=arguments.device).manual_seed(0)
@@ -84,16 +90,15 @@ def time_grf(arguments):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument('--scenario', default='5_vs_5_l4_r4')
+    parser.add_argument('--scenario', default='5_vs_5')
     parser.add_argument('--device', default='cpu', choices=['cpu', 'cuda'])
     parser.add_argument('--environments', type=int, default=64)
-    parser.add_argument('--threads', type=int, default=0)
     parser.add_argument('--steps', type=int, default=1000)
     parser.add_argument('--warmup', type=int, default=100)
     parser.add_argument('--rounds', type=int, default=3)
     parser.add_argument('--grf', action='store_true', help='time GRF instead of cuju')
-    parser.add_argument('--left', type=int, default=1, help='GRF agents on the left')
-    parser.add_argument('--right', type=int, default=0, help='GRF agents on the right')
+    parser.add_argument('--left', type=int, default=4, help='agents on the left')
+    parser.add_argument('--right', type=int, default=4, help='agents on the right')
     arguments = parser.parse_args()
 
     measure = time_grf if arguments.grf else time_cuju

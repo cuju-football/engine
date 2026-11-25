@@ -4,13 +4,13 @@
 
 import pytest
 
-import cuju
 from conftest import actions_at
+from cuju._batch import Batch
 
 
 def state_of(assets, device):
     """Returns the state of one environment of `assets` after a few steps."""
-    batch = cuju.BatchEnvironment(assets, environment_count=1, device=device)
+    batch = Batch(assets, environment_count=1, device=device)
     batch.reset()
     for step in range(5):
         batch.step(actions_at(step, 1, batch.agents, batch.action_count).to(device))
@@ -20,7 +20,7 @@ def state_of(assets, device):
 
 
 def started(assets, device):
-    batch = cuju.BatchEnvironment(assets, environment_count=1, device=device)
+    batch = Batch(assets, environment_count=1, device=device)
     batch.reset()
     return batch
 

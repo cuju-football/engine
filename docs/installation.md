@@ -77,9 +77,9 @@ and 2026, and macOS 14 on Apple silicon and macOS 15 on an Intel processor with 
 
 On macOS on Intel processors, PyTorch ends with release 2.2, which predates the custom operators
 that `torch.compile` traces, so there a compiled function breaks its graph at each step and runs
-the step eagerly with the same results, as [Backends](backends.md) describes. The CPU options
-`pin_threads` and `numa` place threads under Linux alone, and on Windows and macOS the threads stay
-where the system puts them.
+the step eagerly with the same results, as [Backends](backends.md) describes. The settings
+`pin_threads` and `numa` of the [machine config](#machine-config) place threads under Linux alone,
+and on Windows and macOS the threads stay where the system puts them.
 
 On every platform, [`cuju check`](#install-check) reports whether the build plays GRF's
 matches, and the same command confirms each new machine.
@@ -405,8 +405,8 @@ for machine code alone, as in the wheel. Its default is the wheel's four archite
 `75-real;80-real;86-real;89-real`, and a build for the RTX 40 series alone names `89-real`.
 
 ```sh
-docker build --build-arg CUDA_ARCHITECTURES=89-real -t cuju:0.3.0 .
-docker run --rm --gpus all cuju:0.3.0 python3 -m cuju.check
+docker build --build-arg CUDA_ARCHITECTURES=89-real -t cuju:0.4.0 .
+docker run --rm --gpus all cuju:0.4.0 python3 -m cuju.check
 ```
 
 The image installs PyTorch from PyPI by default. The build argument `TORCH_INDEX_URL` names another
@@ -414,7 +414,7 @@ index, such as `https://download.pytorch.org/whl/cu126` for a host whose driver 
 CUDA version of PyPI's build.
 
 ```sh
-docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 -t cuju:0.3.0 .
+docker build --build-arg TORCH_INDEX_URL=https://download.pytorch.org/whl/cu126 -t cuju:0.4.0 .
 ```
 
 The image needs only the NVIDIA driver on the host, since the libraries link the CUDA runtime
@@ -424,17 +424,17 @@ published image keeps or offers under the terms in the License section of the
 the tests.
 
 ```sh
-docker run --rm --gpus all cuju:0.3.0 python -m pytest -p no:cacheprovider /usr/share/cuju/tests
+docker run --rm --gpus all cuju:0.4.0 python -m pytest -p no:cacheprovider /usr/share/cuju/tests
 ```
 
 ## Apptainer image
 
 The repository's `apptainer.def` makes an Apptainer image from the image that the `Dockerfile`
 builds, for clusters that run Apptainer, version 1.2 or later. By default it takes the image
-`cuju:0.3.0` from the local Docker daemon, so the Docker image is built first with that tag.
+`cuju:0.4.0` from the local Docker daemon, so the Docker image is built first with that tag.
 
 ```sh
-docker build -t cuju:0.3.0 .
+docker build -t cuju:0.4.0 .
 apptainer build cuju.sif apptainer.def
 ```
 
@@ -443,7 +443,7 @@ and `IMAGE`, so a cluster without Docker builds from an image that another machi
 
 ```sh
 apptainer build --build-arg BOOTSTRAP=docker \
-    --build-arg IMAGE=registry.example.org/cuju:0.3.0 cuju.sif apptainer.def
+    --build-arg IMAGE=registry.example.org/cuju:0.4.0 cuju.sif apptainer.def
 ```
 
 The image runs Python with its arguments, and `--nv` brings in the host's NVIDIA driver. Its test
@@ -470,8 +470,8 @@ and cuju.
 Code and virtual environments belong in the Linux file system under `~/`, where file access stays
 inside WSL, since on a Windows drive as WSL mounts it every file access crosses into Windows. WSL2
 receives part of the machine's memory and processors by default. `memory=` and `processors=` under
-`[wsl2]` in `%UserProfile%\.wslconfig` change its share, and `threads=0` uses the processors that WSL
-has.
+`[wsl2]` in `%UserProfile%\.wslconfig` change its share, and the default `threads = 0` of the
+[machine config](#machine-config) uses the processors that WSL has.
 
 On a GPU with a few gigabytes of memory, one process with one batch at a time keeps the GPU fast.
 The Windows driver moves memory that the GPU lacks into shared system memory, where a Linux driver
@@ -502,20 +502,66 @@ batch too small to fill a GPU, so the GPU cases depend on the time of one step o
 and they run again on every GPU of the machine. The first GPU batch also loads the kernels, and the
 line of each case gives its time.
 
+## Machine config
+
+The **machine config** is a TOML file that holds the settings that change the speed of a run and
+leave every output unchanged, which belong to the machine and not to the program. Its path is the
+value of `CUJU_CONFIG` when that variable is set, else `~/.config/cuju/engine.toml` on Linux and
+macOS, with `$XDG_CONFIG_HOME` in place of `~/.config` where it is set, and
+`%APPDATA%\cuju\engine.toml` on Windows. A missing file leaves every key at its default. The file
+holds the table `[run]` and no other, and a table, a key or a value that it does not define raises
+`ConfigurationError` at the creation of a batch, with the path in the message.
+
+```toml
+[run]
+threads = 12           # 0 for every processor the process may use
+pin_memory = true
+log = true
+```
+
+| Key | Default | Effect |
+| --- | --- | --- |
+| `threads` | `0` | the size of the CPU thread pool, the calling thread included, where 0 takes every processor that the process may use |
+| `debug` | `false` | waits for the device after each call and checks every action, to find where a GPU fault starts |
+| `allocator` | `"cuda"` | `"torch"` draws the memory of a GPU batch from the caching allocator of PyTorch |
+| `pin_threads` | `false` | binds each thread of the CPU pool to a processor of its own, under Linux |
+| `numa` | `false` | one group of threads per NUMA node, or a string such as `"0,0,1,1"` that gives the node of each processor in place of what the system reports, under Linux |
+| `pin_memory` | `"auto"` | page-locks the outputs of a CPU batch, which `"auto"` does when PyTorch sees a CUDA GPU |
+| `render_threads` | `0` | the threads that draw each frame, where 0 divides the processors among the workers |
+| `render_workers` | `0` | the environments drawn at once, where 0 takes one worker per environment up to the processors available |
+| `log` | `false` | logs one line per batch created, through the logger `cuju`, with the environments, the device, the memory, the library and the time it took |
+
+A `config` dictionary in the call of `cuju.BatchEnvironment` overrides keys of `[run]` for that batch
+alone, for example `config={'threads': 4}`. The attribute `batch.run_config` returns the resolved
+settings as a plain dictionary from each key to its `value` and its `source`, which is `default`, the
+word `file` with the path, or `call`. The command `cuju check` prints the path that it read and each
+value that differs from the default, and [Backends](backends.md) and
+[Performance](performance.md) describe when each setting pays.
+
 ## Environment variables
 
-cuju reads five environment variables, which override the libraries it loads, its logging, the
-bundle cache and the NUMA layout.
+cuju reads six environment variables, which locate the machine config, the libraries it loads, GRF's
+media and the hooks of a running batch. Every setting of speed lives in the
+[machine config](#machine-config).
 
 | Variable | Effect |
 | --- | --- |
+| `CUJU_CONFIG` | the path of the machine config, in place of the default path |
 | `CUJU_CUDA_LIBRARY` | the path of the CUDA library to load, in place of the one in the package |
 | `CUJU_CPU_LIBRARY` | the path of the CPU library to load |
-| `CUJU_LOG` | `1` logs one line per batch created, through the logger `cuju`, with the environments, the device, the memory, the library and the time it took |
-| `CUJU_BUNDLE_CACHE` | `1`, or a directory, to keep the bundles built from scenario files, as in [Custom scenarios](custom-scenarios.md) |
-| `CUJU_NUMA_NODES` | the NUMA node of each processor in order, such as `0,0,1,1`, in place of what the system reports, for `numa=True` under Linux |
+| `CUJU_RENDER_LIBRARY` | the path of the renderer library to load |
+| `CUJU_GRF_MEDIA` | the folder of GRF's media for the renderer, as in [Frames and videos](rendering.md#installing-the-media) |
+| `CUJU_BATCH_HOOKS` | the hooks that attach a viewer to the batches of a running training process |
 
-The two library variables load a rebuilt library without a reinstall of the package.
+The three library variables load a rebuilt library without a reinstall of the package.
+
+## Bundle cache
+
+The bundle of a scenario file, which holds the scenario in the form that the libraries read, is built
+once and kept in the user cache folder, `$XDG_CACHE_HOME/cuju/bundles` or `~/.cache/cuju/bundles` on
+Linux, `~/Library/Caches/cuju/bundles` on macOS and `%LOCALAPPDATA%\cuju\bundles` on Windows. The
+cache is always on, a changed scenario file builds a new bundle, and deleting the folder only
+costs the build time of the next creation, as [Custom scenarios](custom-scenarios.md) describes.
 
 ## Troubleshooting
 
@@ -531,10 +577,11 @@ Each common install failure has a cause and a fix.
 | `torch.compile` on a GPU under Windows fails with `TritonMissing` | PyTorch's wheels for Windows ship without Triton, which Inductor needs for GPU code | the step called eagerly, with the same results |
 | nvcc fails on an unsupported host compiler | nvcc 12.0 to 12.3 supports GCC up to 12, and Ubuntu 24.04 defaults to 13 | `CMAKE_ARGS="-DCMAKE_CUDA_HOST_COMPILER=g++-12"` |
 | CMake cannot detect the GPU on a cluster login node | `native` needs a GPU at build time | `CMAKE_CUDA_ARCHITECTURES` set explicitly |
-| a batch on the CPU is slower than expected in a container | another process shares the processors that `threads=0` counts | `threads` set to the processors the container was given |
+| a batch on the CPU is slower than expected in a container | another process shares the processors that `threads = 0` counts | the key `threads` of the [machine config](#machine-config) set to the processors the container was given |
 | the first GPU step is slow | CUDA loads the kernel | expected, with timing from the second step |
-| "the GPU is out of memory", with the bytes needed and free | the batch does not fit next to what else holds the GPU | the batch created before other large allocations, a call to `torch.cuda.empty_cache()`, or fewer environments |
-| every step about ten times slower on Windows or WSL2 | the driver moved GPU memory into shared system memory | one batch per GPU and fewer environments, as in [Performance](performance.md) |
+| `DeviceError` that the GPU is out of memory, with the bytes requested and free | the batch does not fit next to what else holds the GPU | the batch created before other large allocations, a call to `torch.cuda.empty_cache()`, or fewer environments |
+| every step about ten times slower on Windows or WSL2, and a `UserWarning` at creation that the batch exceeds the free memory | the driver moved GPU memory into shared system memory | one batch per GPU and fewer environments, as in [Performance](performance.md) |
+| `ConfigurationError` that names the machine config | `engine.toml` holds a table other than `[run]`, an unknown key or a value of the wrong kind | the file corrected, as in [Machine config](#machine-config) |
 | `MissingFileError` naming cuju-grf-media and `pip install 'cuju-engine[pixels]'` | GRF's media are not installed, or an installed version holds media of another format | `pip install 'cuju-engine[pixels]'`, which takes the version that the installed cuju reads |
 | `RendererMissingError` at `start_game` in `cuju.gfootball` | a rendering engine finds no renderer library or no media | `pip install 'cuju-engine[pixels]'`, and for a source build the CMake option `CUJU_RENDER` left on |
 | `ArgumentError` at `start_game` naming a multiple of 4 | `render_resolution_x` is not a multiple of 4, which GRF would draw with sliding rows, or a side exceeds 16,384 | a width that is, such as GRF's default of 1280 |

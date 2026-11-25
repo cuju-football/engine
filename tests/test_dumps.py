@@ -11,6 +11,7 @@ import torch
 import cuju
 import cuju.dumps
 from conftest import CUDA, actions_at, tensor_bytes
+from cuju._batch import Batch
 
 DIRECTIONS = [
     'left',
@@ -82,7 +83,7 @@ def replay_dump(path, device, directory, with_raw=True):
     if config['players']:
         fields = dict(part.split('=') for part in config['players'][0].split(':')[1].split(','))
         left, right = int(fields['left_players']), int(fields['right_players'])
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         f'{config["level"]}_l{left}_r{right}',
         environment_count=1,
         device=device,
@@ -107,7 +108,7 @@ def replay_dump(path, device, directory, with_raw=True):
 
 
 def test_full_episode_dumps_hold_grf_steps(tmp_path):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_3_vs_1_with_keeper_l1_r1', environment_count=3, device='cpu', with_raw=True
     )
     writer = cuju.dumps.DumpWriter(batch, tmp_path, environments=[0, 2])
@@ -141,7 +142,7 @@ def test_full_episode_dumps_hold_grf_steps(tmp_path):
 
 
 def test_a_team_without_agents_has_its_designated_player(tmp_path):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_counterattack_easy_l2_r0', environment_count=1, device='cpu', with_raw=True
     )
     writer = cuju.dumps.DumpWriter(batch, tmp_path)
@@ -158,7 +159,7 @@ def test_a_team_without_agents_has_its_designated_player(tmp_path):
 
 
 def test_dump_plays_again_from_its_actions(tmp_path):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_pass_and_shoot_with_keeper_l1_r1',
         environment_count=2,
         device='cpu',
@@ -180,7 +181,7 @@ def test_dump_plays_again_from_its_actions(tmp_path):
 
 
 def test_goal_dumps_end_at_the_goal(tmp_path):
-    batch = cuju.BatchEnvironment('academy_empty_goal_close', environment_count=1, device='cpu')
+    batch = Batch('academy_empty_goal_close', environment_count=1, device='cpu')
     writer = cuju.dumps.DumpWriter(
         batch, tmp_path, write_full_episode_dumps=False, write_goal_dumps=True
     )
@@ -200,7 +201,7 @@ def test_goal_dumps_end_at_the_goal(tmp_path):
 
 
 def test_dump_frequency_selects_every_other_episode(tmp_path):
-    batch = cuju.BatchEnvironment('academy_empty_goal_close', environment_count=1, device='cpu')
+    batch = Batch('academy_empty_goal_close', environment_count=1, device='cpu')
     writer = cuju.dumps.DumpWriter(batch, tmp_path, dump_frequency=2)
     batch.reset()
     actions = torch.full((1, 1), DEFAULT_ACTIONS.index('right'), dtype=torch.int32)
@@ -217,7 +218,7 @@ def test_dump_frequency_selects_every_other_episode(tmp_path):
 
 def test_a_writer_changes_no_output(tmp_path):
     def outputs(with_writer):
-        batch = cuju.BatchEnvironment('5_vs_5_l2_r1', environment_count=2, device='cpu')
+        batch = Batch('5_vs_5_l2_r1', environment_count=2, device='cpu')
         writer = cuju.dumps.DumpWriter(batch, tmp_path) if with_writer else None
         result = [tensor_bytes(batch.reset())]
         for step in range(40):
@@ -232,7 +233,7 @@ def test_a_writer_changes_no_output(tmp_path):
 
 
 def test_a_writer_met_mid_episode_starts_with_the_next(tmp_path):
-    batch = cuju.BatchEnvironment('academy_empty_goal_close', environment_count=1, device='cpu')
+    batch = Batch('academy_empty_goal_close', environment_count=1, device='cpu')
     batch.reset()
     actions = torch.full((1, 1), DEFAULT_ACTIONS.index('right'), dtype=torch.int32)
     batch.step(actions)
@@ -248,7 +249,7 @@ def test_a_writer_met_mid_episode_starts_with_the_next(tmp_path):
 
 
 def test_difficulties_name_a_scenario_file(tmp_path):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_empty_goal_close', environment_count=1, device='cpu', difficulty=[(0.5, None)]
     )
     writer = cuju.dumps.DumpWriter(batch, tmp_path)
@@ -274,7 +275,7 @@ def test_read_dump_refuses_other_objects(tmp_path):
 def test_gpu_dumps_equal_cpu_dumps(tmp_path):
     loaded = []
     for device in ('cpu', 'cuda'):
-        batch = cuju.BatchEnvironment(
+        batch = Batch(
             'academy_3_vs_1_with_keeper_l1_r1', environment_count=2, device=device, with_raw=True
         )
         writer = cuju.dumps.DumpWriter(batch, tmp_path / device, write_goal_dumps=True)
@@ -287,15 +288,15 @@ def test_gpu_dumps_equal_cpu_dumps(tmp_path):
 
 
 def test_a_writer_raises_cuju_errors(tmp_path):
-    batch = cuju.BatchEnvironment('academy_empty_goal_close', environment_count=1, device='cpu')
-    with pytest.raises(cuju.EnvironmentIndexError, match=r'found \[1\]'):
+    batch = Batch('academy_empty_goal_close', environment_count=1, device='cpu')
+    with pytest.raises(cuju.errors.ArgumentError, match=r'found \[1\]'):
         cuju.dumps.DumpWriter(batch, tmp_path, environments=[1])
     writer = cuju.dumps.DumpWriter(batch, tmp_path)
     batch.reset()
     actions = torch.zeros((1, 1), dtype=torch.int32)
     batch.step(actions)
-    with pytest.raises(cuju.ArgumentError, match='actions of the step'):
+    with pytest.raises(cuju.errors.ArgumentError, match='actions of the step'):
         writer.record(torch.zeros((1, 2), dtype=torch.int32))
-    with pytest.raises(cuju.ActionRangeError, match='from -19 to 18, found 19'):
+    with pytest.raises(cuju.errors.ArgumentError, match='from -19 to 18, found 19'):
         writer.record(torch.full((1, 1), 19, dtype=torch.int32))
     batch.close()

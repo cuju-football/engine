@@ -10,6 +10,7 @@ import typing
 import pytest
 
 import cuju.dumps
+from cuju._batch import Batch
 
 np = pytest.importorskip('numpy')
 pytest.importorskip('gymnasium')
@@ -193,7 +194,7 @@ def test_refusals(modules):
 
 
 def test_the_replay_player_plays_a_dump(tmp_path):
-    batch = cuju.BatchEnvironment(
+    batch = Batch(
         'academy_3_vs_1_with_keeper_l1_r1', environment_count=1, device='cpu', with_raw=True
     )
     writer = cuju.dumps.DumpWriter(batch, tmp_path)

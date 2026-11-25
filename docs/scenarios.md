@@ -6,11 +6,11 @@ each team. cuju ships the 19 scenarios of GRF as bundles, from full 11-a-side ma
 academy drills, and plays any number of agents on either side of each, from none up to the size of
 the team.
 
-A suffix such as `_l4_r0` on a scenario's name sets the agents of each team, and with fewer agents
-than controllable players each agent controls the player that GRF makes active. One batch holds
-several bundles at once, mixing scenarios, team sizes and sides, and a pair of difficulties per
-bundle overrides the scenario's own. Some drills reward a constant action, so a result on them is
-weighed against such a baseline.
+The arguments `left_agents` and `right_agents` of a batch set the agents of each team, and with fewer
+agents than controllable players each agent controls the player that GRF makes active. One batch
+plays one scenario, a curriculum across scenarios holds one batch for each, and a pair of
+difficulties overrides the scenario's own. Some drills reward a constant action, so a result on
+them is weighed against such a baseline.
 
 ## Shipped scenarios
 
@@ -50,7 +50,8 @@ scenarios alternate the kick-off from one episode to the next, by the parity of 
 while the academies, `1_vs_1_easy` and `test_example_multiagent` play the same form in every
 episode, a behaviour covered in [Episodes and seeds](episodes-and-seeds.md).
 
-`cuju.bundled_scenarios()` lists the names. The bundles are built from GRF's own files of these
+`cuju.scenario_names()` lists the names, which a batch takes as its first argument without any agent
+counts. The bundles are built from GRF's own files of these
 scenarios, which are in [GRF's repository at commit 3d9e754][grf-scenarios] and make the starting
 point for a variant of one, written as a [custom scenario](custom-scenarios.md).
 
@@ -69,25 +70,27 @@ few seconds on the CPU and shows how much of a scoring rate the policy itself ea
 
 ## Agents on each side
 
-A name `<scenario>_l<left>_r<right>` asks for that scenario with `left` agents on the left team and
-`right` on the right, each from 0 to the players of the team, as GRF's
-`number_of_left_players_agent_controls` and `number_of_right_players_agent_controls` do. A few
-names show the range of the suffix.
+The arguments `left_agents` and `right_agents` ask for a scenario with that many agents on the left
+team and on the right, each from 0 to the players of the team, as GRF's
+`number_of_left_players_agent_controls` and `number_of_right_players_agent_controls` do. More
+agents than players raise `cuju.errors.ConfigurationError`, and a scenario name that carries agent
+counts is refused with a message that names the plain scenario. A few
+settings show the range of the arguments.
 
-| Name | Agents |
-| --- | --- |
-| `5_vs_5` | one on the left, as GRF's `create_environment` gives by default |
-| `5_vs_5_l4_r0` | four on the left against the built-in AI |
-| `5_vs_5_l4_r4` | four on each side, for self-play |
-| `5_vs_5_l0_r0` | none, the built-in AI plays both teams |
-| `11_vs_11_stochastic_l11_r0` | a whole team of agents |
+| Scenario | Arguments | Agents |
+| --- | --- | --- |
+| `5_vs_5` | the defaults | one on the left, as GRF's `create_environment` gives by default |
+| `5_vs_5` | `left_agents=4` | four on the left against the built-in AI |
+| `5_vs_5` | `left_agents=4, right_agents=4` | four on each side, for self-play |
+| `5_vs_5` | `left_agents=0` | none, the built-in AI plays both teams |
+| `11_vs_11_stochastic` | `left_agents=11` | a whole team of agents |
 
 The agents of an environment come in a fixed order, the left agents first. A right agent sees the
 pitch turned by 180 degrees, its actions turn the same way, and its rewards have the sign of its own
 team, as set out in [Rewards and actions](rewards-and-actions.md). When a team has as many agents as
 controllable players, each agent keeps its player for the whole episode. An agent without a player,
-such as the fifth of `5_vs_5_l5_r0`, whose goalkeepers are not controllable, still counts in
-`agent_mask`, and its `active` in `raw` is -1.
+such as the fifth of `5_vs_5` with `left_agents=5`, whose goalkeepers are not controllable, still
+holds its slot on the agent axis, and its `active` in `raw` is -1.
 
 **Fewer agents than players.** When a team has more controllable players than agents, each agent
 controls the player that GRF makes active for it, which changes during the match. It is usually the
@@ -96,83 +99,84 @@ goalkeeper. The built-in AI drives everyone else. This is GRF's dynamic player s
 way GRF's single-agent benchmarks work.
 
 **Goalkeepers.** A scenario can mark players as not controllable. `5_vs_5` does so for both
-goalkeepers, so four players of each team can be controlled there. `5_vs_5_l5_r0` still gives five
+goalkeepers, so four players of each team can be controlled there. `left_agents=5` in `5_vs_5` still gives five
 agents, one of which never has a player of its own, exactly as in GRF. In the 11-a-side scenarios
 every player, the goalkeeper included, can be controlled.
 
 One bundle per scenario serves every number of agents. The batch sets up the agents when it loads
 the bundle, as GRF does when it builds a match.
 
-## Mixed batches
+## Several scenarios
 
-A batch can hold several bundles. `assignment` gives each environment the index of its bundle, so
-one batch mixes scenarios, team sizes and sides, and self-play, play against the built-in AI and
-evaluation share one launch.
+A batch plays one scenario with one agent layout, so every output has a fixed shape that a policy,
+a rollout buffer or a CUDA graph can rely on. A run that plays several scenarios, such as a
+curriculum from an academy drill to the full match, or self-play beside play against the built-in
+AI, holds one batch for each, steps them in turn and passes each its own actions. On a machine with
+several GPUs, each process holds the batches of one GPU. [Recipes](recipes.md) shows curricula across
+scenarios and [Backends](backends.md) the layout over several GPUs.
 
 ```python
 import cuju
-import torch
 
-batch = cuju.BatchEnvironment(
-    ['5_vs_5_l4_r4', '5_vs_5_l4_r0', '11_vs_11_stochastic_l1_r0'],
-    environment_count=96,
-    device='cpu',
-    assignment=torch.arange(3).repeat_interleave(32),
+selfplay = cuju.BatchEnvironment(
+    '5_vs_5', environment_count=64, device='cpu', left_agents=4, right_agents=4
 )
-print(batch.agents)  # 8, the most agents of any bundle
-print(batch.agent_mask.sum(1))  # 8 for the first 32, 4 for the next 32, 1 for the last 32
+against_ai = cuju.BatchEnvironment('5_vs_5', environment_count=64, device='cpu', left_agents=4)
+full_match = cuju.BatchEnvironment('11_vs_11_stochastic', environment_count=32, device='cpu')
+print(selfplay.agents, against_ai.agents, full_match.agents)  # 8 4 1
 ```
-
-Every output has room for `batch.agents` agents. `batch.left_agents` and `batch.right_agents` give
-the agents of each environment, and `batch.agent_mask` the slots that exist. The other slots output
-zeros, and the batch ignores their actions. The raw team arrays have room for `batch.players`
-players, the real players first and zeros after them, and `batch.left_players` and
-`batch.right_players` give the number of real players in each environment, as detailed in
-[Observations](observations.md).
 
 ## Difficulty
 
-Each team has a difficulty from 0 to 1, which the scenario sets. `difficulty` overrides it for the
-teams of each bundle, a pair per bundle, with `None` to keep the scenario's value. A pair plays
-exactly GRF's matches of the scenario file with `left_team_difficulty` and `right_team_difficulty`
-set to it.
+Each team has a difficulty from 0 to 1, which the scenario sets. `difficulty=(left, right)` overrides
+it for every environment of the batch, with `None` to keep the scenario's value. A pair plays exactly
+GRF's matches of the scenario file with `left_team_difficulty` and `right_team_difficulty` set to
+it.
 
 ```python
 batch = cuju.BatchEnvironment(
-    ['5_vs_5_l4_r0', '5_vs_5_l4_r0'],
-    environment_count=64,
-    device='cpu',
-    assignment=torch.arange(2).repeat_interleave(32),
-    difficulty=[(None, None), (None, 0.95)],
+    '5_vs_5', environment_count=64, device='cpu', left_agents=4, difficulty=(None, 0.95)
 )
+```
+
+The method `set_difficulty(values, mask=None)` changes the difficulty from the next reset, which
+serves a curriculum that strengthens the opponents during training. `values` is a `(left, right)`
+pair for the selected environments, or `[environment_count, 2]` values with NaN where the
+scenario's value stays, and `mask` selects the environments, so one batch can play several
+difficulties at once.
+
+```python
+import torch
+
+batch.set_difficulty((None, 0.6), mask=torch.arange(64) < 32)  # from the next reset
 ```
 
 The difficulty belongs to the team, as in GRF, rather than to the built-in AI. It scales the
 statistics of every player of the team by `0.3 + 0.7 * difficulty`, the players of agents included,
 and the players that the built-in AI drives react up to 100 milliseconds later as it falls. Lowering
 the right team's difficulty thus weakens the opponents, and lowering the left team's weakens the
-agents' own players too. `batch.difficulty` reports the difficulties that play in each environment,
-the scenario's where nothing overrides them. It is a copy, so a write into it leaves the batch
-unchanged.
+agents' own players too. `batch.difficulty`, a tensor of `[environment_count, 2]`, reports the difficulties that are set for
+each environment, the scenario's where nothing overrides them. It is a copy, so a write into it
+leaves the batch unchanged.
 
 **Self-play.** `11_vs_11_competition`, `11_vs_11_kaggle`, `5_vs_5` and `1_vs_1_easy` give both
 teams the same difficulty. In the other scenarios, agents on the right play with weaker players than
 those on the left. In `11_vs_11_stochastic` that is 0.6 against 1.0, which scales their statistics
-by 0.72 against 1.0. An even match sets both sides, as `difficulty=[(1.0, 1.0)]`.
+by 0.72 against 1.0. An even match sets both sides, as `difficulty=(1.0, 1.0)`.
 
-## Cost, length and naming
+## Cost, length and bundles
 
 An 11-a-side environment costs more than a five-a-side one, since the built-in AI and the animation
-of every player run each tick, and [Performance](performance.md) gives the figures for both. A mixed
-batch steps as fast as its most expensive environments allow on the GPU, and spreads the cost evenly
-on the CPU.
+of every player run each tick, and [Performance](performance.md) gives the figures for both. A GPU
+batch steps as fast as its most expensive environment allows, and a CPU batch spreads the cost
+evenly over its threads.
 
 Academy episodes often end within tens of steps. The automatic reset starts the next one in the
 same step, and comparisons with GRF's results count episodes rather than steps.
 
-Every name of the form `<scenario>_l<left>_r<right>`, such as `academy_corner_l3_r2`, loads the one
-shipped bundle of its scenario, which holds the match without agents, and the batch sets up the
-agents that the name asks for. Matches beyond the shipped scenarios are written as scenario files,
+Every scenario loads from one shipped bundle, which holds the match without agents, and the batch
+sets up the agents that `left_agents` and `right_agents` ask for, so `academy_corner` with
+`left_agents=3` and `right_agents=2` needs no further file. Matches beyond the shipped scenarios are written as scenario files,
 in GRF's format, as [Custom scenarios](custom-scenarios.md) describes.
 
 ## See also
@@ -180,5 +184,5 @@ in GRF's format, as [Custom scenarios](custom-scenarios.md) describes.
 - [Custom scenarios](custom-scenarios.md), scenario files written the way GRF writes them
 - [Episodes and seeds](episodes-and-seeds.md), the end of an episode and the form it plays
 - [Rewards and actions](rewards-and-actions.md), the rewards and actions of agents on each side
-- [Observations](observations.md), the shapes and padded slots of a mixed batch
+- [Observations](observations.md), the shapes of every representation
 - [Performance](performance.md), the cost of each scenario on each backend

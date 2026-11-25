@@ -56,15 +56,6 @@ def _warn_memory(requested, free, device, local=0):
         f'the batch requested {requested / 2**20:.1f} MiB of {device}{kernels} and the GPU had '
         f'{free / 2**20:.1f} MiB free before its creation. On Windows and WSL the WDDM driver may '
         'then place the batch in shared system memory, which runs many times slower and raises '
-        'no error. Use fewer environments, or check cuju.memory_estimate before the creation',
+        'no error. Use fewer environments',
         stacklevel=3,
     )
-
-
-class _MemoryEstimate(int):
-    """The bytes of a batch, as `memory_estimate` returns them, with `local_memory_bytes`."""
-
-    def __new__(cls, value, local_memory_bytes=0):
-        estimate = super().__new__(cls, value)
-        estimate.local_memory_bytes = local_memory_bytes
-        return estimate

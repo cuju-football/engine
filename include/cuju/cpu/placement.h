@@ -112,7 +112,9 @@ struct Placement {
         if (allowed.empty()) return Placement();
         std::sort(allowed.begin(), allowed.end());
         std::vector<int> nodeGroup;
-        placement.processorGroup.assign(allowed.back().second + 1, -1);
+        int highest = 0;
+        for (const auto &[node, processor] : allowed) highest = std::max(highest, processor);
+        placement.processorGroup.assign(highest + 1, -1);
         for (const auto &[node, processor] : allowed) {
             if (node >= (int)nodeGroup.size()) nodeGroup.resize(node + 1, -1);
             if (nodeGroup[node] < 0) {

@@ -19,7 +19,7 @@ from typing import Any
 
 import torch
 
-from . import BatchEnvironment
+from ._batch import Batch
 
 __all__ = ['ActionLog', 'Digest', 'digest', 'replay']
 
@@ -118,19 +118,17 @@ def digest(
     of 4 environments with seed 7, with those in its `digests.json`.
 
     Args:
-        assets: The assets of the batch, as `BatchEnvironment` takes them.
+        assets: The assets of the batch, as `Batch` takes them.
         device: `cpu` or `cuda`, which give the same digest.
         steps: The steps after the reset.
         seed: The seed of the batch.
         environment_count: The number of environments.
-        **options: Other keyword arguments of `BatchEnvironment`.
+        **options: Other keyword arguments of `Batch`.
 
     Returns:
         The SHA-256 in hexadecimal.
     """
-    batch = BatchEnvironment(
-        assets, environment_count=environment_count, device=device, seed=seed, **options
-    )
+    batch = Batch(assets, environment_count=environment_count, device=device, seed=seed, **options)
     try:
         value = Digest()
         value.update(batch.reset())
@@ -170,7 +168,7 @@ class ActionLog:
     the state of every environment, as `digest` does.
 
     Attributes:
-        batch: The `BatchEnvironment` that the log created.
+        batch: The `Batch` that the log created.
         calls: The calls so far, each a dictionary with its name and arguments.
 
     Examples:
@@ -189,8 +187,8 @@ class ActionLog:
         """Creates the batch.
 
         Args:
-            assets: The assets of the batch, as `BatchEnvironment` takes them.
-            **options: The keyword arguments of `BatchEnvironment`. `device`, `library`,
+            assets: The assets of the batch, as `Batch` takes them.
+            **options: The keyword arguments of `Batch`. `device`, `library`,
                 `threads`, `pin_memory`, `allocator`, `pin_threads`, `numa`, `debug` and
                 `check_actions` change no output, so the log leaves them out and a replay chooses
                 its own.
@@ -203,7 +201,7 @@ class ActionLog:
             key: _plain(value) for key, value in options.items() if key not in _MACHINE_OPTIONS
         }
         json.dumps([self._assets, self._options])
-        self.batch = BatchEnvironment(assets, **options)
+        self.batch = Batch(assets, **options)
         self.calls: list[dict[str, Any]] = []
         self._actions: list[bytes] = []
         self._states: list[bytes] = []
@@ -324,9 +322,7 @@ def replay(path: str, device: str | None = None, **options: Any) -> str:
     for key in ('difficulty', 'agent_counts'):
         if batch_options.get(key) is not None:
             batch_options[key] = [tuple(pair) for pair in batch_options[key]]
-    batch = BatchEnvironment(
-        header['assets'], device=device or header['device'], **batch_options, **options
-    )
+    batch = Batch(header['assets'], device=device or header['device'], **batch_options, **options)
     try:
         value = Digest()
         offset = 0

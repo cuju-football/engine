@@ -23,7 +23,7 @@ def main():
     arguments = parser.parse_args()
 
     batch = cuju.BatchEnvironment(
-        '5_vs_5_l4_r0', environment_count=arguments.environments, device='cuda'
+        '5_vs_5', environment_count=arguments.environments, device='cuda', left_agents=4
     )
     policy = torch.nn.Sequential(
         torch.nn.Linear(115, 256), torch.nn.ReLU(), torch.nn.Linear(256, batch.action_count)

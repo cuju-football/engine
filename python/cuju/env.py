@@ -39,7 +39,9 @@ except ImportError:
             "cuju.env needs gymnasium, from pip install 'cuju-engine[spaces]', or GRF's gym"
         ) from None
 
-from . import BatchEnvironment, _replays, bundled_scenarios
+from . import _replays
+from ._assets import scenario_names
+from ._batch import Batch
 from ._batch import frame_stack as _frame_stack
 from ._batch.state import _pickle_episode, _StateUnpickler
 from .errors import ChoiceError, StateError
@@ -565,7 +567,11 @@ class FootballEnvironment(_gym.Env):
             raise RuntimeError("can't call step() once the episode finished; call reset() first")
         actions, scripted = self._actions(action)
         if self._wrapper is None:
-            _, reward, done, information = self.batch.step([actions])
+            # GRF: a negative index counts from the end, which the batch plays as the same action.
+            count = self._settings['action_count']
+            _, reward, done, information = self.batch.step(
+                [[value + count if value < 0 else value for value in actions]]
+            )
             played = [actions]
         else:
             _, reward, done, information = self._wrapper.step([actions], _others=scripted)
@@ -995,7 +1001,7 @@ def _create(
     if creation is not None:
         creation.append(random.randint(0, _SEED_LIMIT))
     numpy_legacy = int(np.__version__.split('.')[0]) < 2
-    batch = BatchEnvironment(
+    batch = Batch(
         level,
         environment_count=1,
         representation=representation,
@@ -1149,7 +1155,7 @@ def _register_with(module: str) -> None:
     registration = importlib.import_module(f'{module}.envs.registration')
     registry = registration.registry
     specs = registry if isinstance(registry, dict) else registry.env_specs
-    for scenario in bundled_scenarios():
+    for scenario in scenario_names():
         for suffix, representation in _GYM_REPRESENTATIONS:
             name = f'GFootball-{scenario}-{suffix}-v0'
             spec = specs[name] if name in specs else None

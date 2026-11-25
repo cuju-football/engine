@@ -5,8 +5,8 @@
 import pytest
 import torch
 
-import cuju
 from conftest import CUDA, actions_at, tensor_bytes
+from cuju._batch import Batch
 
 ASSETS = '5_vs_5_l2_r1'
 
@@ -34,7 +34,7 @@ def play(batch, indices, steps, start=0):
 
 
 def test_only_the_masked_environments_reset(device):
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=3, seed=4, device=device)
+    batch = Batch(ASSETS, environment_count=3, seed=4, device=device)
     batch.reset()
     before = play(batch, [0, 1, 2], 25)
     mask = torch.tensor([False, True, False], device=device)
@@ -43,14 +43,14 @@ def test_only_the_masked_environments_reset(device):
     after = play(batch, [0, 1, 2], 25, start=25)
 
     # The unmasked environments play on as if nothing happened.
-    plain = cuju.BatchEnvironment(ASSETS, environment_count=3, seed=4, device=device)
+    plain = Batch(ASSETS, environment_count=3, seed=4, device=device)
     plain.reset()
     unbroken = play(plain, [0, 1, 2], 50)
     for environment in (0, 2):
         assert before[environment] + after[environment] == unbroken[environment]
 
     # The masked environment plays as a GRF environment with a second `reset()` after 25 steps.
-    alone = cuju.BatchEnvironment(ASSETS, environment_count=1, seed=4, first_index=1, device=device)
+    alone = Batch(ASSETS, environment_count=1, seed=4, first_index=1, device=device)
     alone.reset()
     assert play(alone, [1], 25)[0] == before[1]
     assert outputs(alone, alone.reset())[0] == reset_rows[1]
@@ -58,9 +58,9 @@ def test_only_the_masked_environments_reset(device):
 
 
 def test_masked_first_resets_equal_one_reset(device):
-    whole = cuju.BatchEnvironment(ASSETS, environment_count=3, seed=8, device=device)
+    whole = Batch(ASSETS, environment_count=3, seed=8, device=device)
     expected = outputs(whole, whole.reset())
-    parts = cuju.BatchEnvironment(ASSETS, environment_count=3, seed=8, device=device)
+    parts = Batch(ASSETS, environment_count=3, seed=8, device=device)
     parts.reset(mask=[True, False, True])
     with pytest.raises(RuntimeError, match='before its first step'):
         parts.step(torch.zeros((3, parts.agents), dtype=torch.int32))
@@ -69,11 +69,11 @@ def test_masked_first_resets_equal_one_reset(device):
 
 
 def test_masked_reset_with_seeds(device):
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=2, device=device)
+    batch = Batch(ASSETS, environment_count=2, device=device)
     batch.reset()
     play(batch, [0, 1], 5)
     batch.reset(mask=[True, True], seeds=[123, 456])
-    seeded = cuju.BatchEnvironment(ASSETS, environment_count=2, device=device)
+    seeded = Batch(ASSETS, environment_count=2, device=device)
     seeded.reset()
     play(seeded, [0, 1], 5)
     seeded.reset(seeds=[123, 456])
@@ -81,7 +81,7 @@ def test_masked_reset_with_seeds(device):
 
 
 def test_mask_errors():
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=2, device='cpu')
+    batch = Batch(ASSETS, environment_count=2, device='cpu')
     with pytest.raises(ValueError, match='mask'):
         batch.reset(mask=[True, False, True])
     with pytest.raises(TypeError, match='mask'):
@@ -93,7 +93,7 @@ def test_mask_errors():
 @pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
 def test_a_cuda_graph_captures_a_masked_reset():
     def run(capture):
-        batch = cuju.BatchEnvironment(ASSETS, environment_count=4, seed=2, device='cuda')
+        batch = Batch(ASSETS, environment_count=4, seed=2, device='cuda')
         batch.reset()
         mask = torch.tensor([True, False, False, True], device='cuda')
         actions = torch.zeros((4, batch.agents), dtype=torch.int32, device='cuda')

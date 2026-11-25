@@ -10,7 +10,7 @@ import pytest
 
 import cuju
 from cuju import gfootball_engine as lg
-from cuju.errors import SignatureError
+from cuju.gfootball_engine import SignatureError
 from cuju.scenarios import ScenarioError
 
 E = lg.e_PlayerRole
@@ -257,7 +257,7 @@ def test_game_env_before_a_reset():
     env.start_game()
     with pytest.raises(RuntimeError, match='start_game'):
         env.start_game()
-    with pytest.raises(cuju.LibraryError, match='reset'):
+    with pytest.raises(cuju.errors.LibraryError, match='reset'):
         env.get_info()
     with pytest.raises(RuntimeError, match=r'Pickling of "_gameplayfootball\.GameEnv"'):
         pickle.dumps(env)
@@ -299,9 +299,9 @@ def test_actions_and_sticky_actions():
     assert env.sticky_action_state(right, True, 0) is True
     with pytest.raises(SignatureError):
         env.perform_action(1.0, True, 0)
-    with pytest.raises(cuju.ArgumentError, match='sticky'):
+    with pytest.raises(cuju.errors.ArgumentError, match='sticky'):
         env.sticky_action_state(int(lg.e_BackendAction.short_pass), True, 0)
-    with pytest.raises(cuju.ArgumentError, match='controller'):
+    with pytest.raises(cuju.errors.ArgumentError, match='controller'):
         env.perform_action(0, True, 30)
 
 
@@ -318,7 +318,7 @@ def test_states_round_trip():
 
 def test_states_of_another_scenario_refused():
     first, second = started(), started(five_a_side(left_agents=2))
-    with pytest.raises(cuju.StateError, match='left_agents'):
+    with pytest.raises(cuju.errors.StateError, match='left_agents'):
         second.set_state(first.get_state(b''))
 
 

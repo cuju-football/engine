@@ -21,7 +21,7 @@ The claim is stated in one sentence.
 > for bit, what GRF 2.10.3, commit 3d9e754, produces without rendering, and in render mode what it
 > produces with rendering, as built by GCC for x86-64 Linux with glibc 2.39 on a processor with FMA.
 > The two backends give the same bits, whatever the number of threads. The checkpoint reward takes
-> the precision of the numpy beneath that GRF through the option `numpy_legacy`.
+> the precision of the numpy beneath that GRF.
 
 "Every state" means the whole state of the match, as GRF's engine serializes it, with every player,
 the ball, the officials, the animations in progress, the built-in AI's memory and the clocks. Equal
@@ -69,16 +69,15 @@ confirms the claim for itself before training. A GPU outside the wheel runs a so
 `cuju check --long` checks.
 
 The checkpoint reward of `rewards='scoring,checkpoints'` depends on the numpy beneath GRF, since
-GRF adds it with numpy, and numpy 2 changed how a Python float combines with a `float32`. The
-option `numpy_legacy` selects the precision, `True` for a GRF on numpy before 2, the default of a
-batch, and `False` for a GRF on numpy 2 or later. Each setting equals its GRF bit for bit, so the
-claim holds for the reward with the setting that matches the numpy of the GRF under comparison.
-`create_environment` and `examples/compare_with_grf.py` take the setting from the installed numpy.
-The scoring reward, the observations, the states and the done flags are the same under both
-settings, as described in
+GRF adds it with numpy, and numpy 2 changed how a Python float combines with a `float32`. A batch
+adds in the precision of numpy before 2, and the environments of `cuju.env` and
+`examples/compare_with_grf.py` take the precision from the installed numpy. Each precision equals
+its GRF bit for bit, so the claim holds for the reward with the precision that matches the numpy of
+the GRF under comparison. The scoring reward, the observations, the states and the done flags are the
+same under both precisions, as described in
 [Rewards and actions](rewards-and-actions.md#precision-under-numpy-1-and-numpy-2).
 
-Options that only read, such as `with_raw`, leave every result unchanged. Resets of some
+Options that only read, such as `raw` and `frames`, leave every result unchanged. Resets of some
 environments with `reset(mask=...)`, or with chosen seeds, play GRF's episodes, each equal to one
 GRF run.
 
@@ -150,12 +149,12 @@ Linux, WSL2 and Windows. Each of these platforms therefore plays the bits of the
 On Arm, where the conversion of a float to an integer and the floating-point environment differ
 from x86-64, the code follows the behaviour of x86-64 explicitly.
 
-Two properties of the batch matter for mixed batches and for the `difficulty` option, and both hold
-by construction. The first is that an environment plays the same bits whatever else its batch
-holds, whether other bundles, other agent counts, a wider agent axis, another batch size or another
+Two properties of the batch matter for the independence of environments and for the `difficulty`
+option, and both hold by construction. The first is that an environment plays the same bits whatever
+else its batch holds, whether another batch size, other environments in other states or another
 number of threads. Each environment keeps its own world and its own random generator, and its step
 reads only those and the shared tables, which nothing writes, so its match depends on nothing its
-neighbours do. The second is that `difficulty=[(l, r)]` equals a scenario file. It plays exactly the
+neighbours do. The second is that `difficulty=(l, r)` equals a scenario file. It plays exactly the
 matches of GRF's file of that scenario with `left_team_difficulty = l` and
 `right_team_difficulty = r`, as cuju builds it, and that file, as GRF ships it, builds byte for byte
 into the shipped bundle.
@@ -210,27 +209,28 @@ CUJU_LONG=1 pytest tests/test_render_frames.py  # whole episodes, end to end, se
 `sha256sum`'s format, and `sha256sum -c SHA256SUMS` in the installed `cuju/data` directory checks
 them without Python. The bundles are those that GRF's own scenario files build, byte for byte.
 
-### Any configuration
+### Any recorded episode
 
-`cuju.digest(assets, **options)` is the self-check's digest of any configuration.
-`cuju.ActionLog(assets, **options)` creates a batch and journals every call that changes a match,
-with its arguments and a running digest. `save(path)` writes the log, and
-`cuju.replay(path, device=...)` plays it again on either backend and names the first call whose
-outputs differ. A log made on the GPU replays on the CPU, as in the example. The options that change
-no output, `device`, `library`, `threads`, `pin_memory`, `allocator`, `pin_threads`, `numa`, `debug`
-and `check_actions`, stay out of the log, so the machine that replays it passes its own to
-`cuju.replay`, and a log that an earlier version wrote with them replays without them.
+`cuju.dumps.DumpWriter` writes the episodes of chosen environments of a batch as GRF dumps, one
+`record(actions)` call after each `step`. The command `cuju replay FILE` plays a dump again without
+rendering, on the CPU or on a GPU with `--device`, and compares every step with the dump bit for bit.
+It prints the first step that differs and exits with 1, or reports that the replay equals the dump
+and exits with 0, and `--json` prints the result as one document. A dump made on the GPU replays on
+the CPU, as in the example, and the command runs no code from the dump.
 
 ```python
 import cuju
 import torch
+from cuju import dumps
 
-log = cuju.ActionLog('5_vs_5_l4_r0', environment_count=8, device='cuda')
-log.reset()
-for _ in range(1000):
-    log.step(torch.randint(0, 19, (8, 4), dtype=torch.int32, device='cuda'))
-log.save('run.zip')
-assert cuju.replay('run.zip', device='cpu') == log.hexdigest()
+batch = cuju.BatchEnvironment('academy_empty_goal_close', environment_count=8, device='cuda')
+writer = dumps.DumpWriter(batch, 'dumps', environments=[0])
+batch.reset()
+actions = torch.randint(0, 19, (8, 1), dtype=torch.int32, device='cuda')
+for _ in range(400):
+    batch.step(actions)
+    writer.record(actions)
+print(writer.paths[0])  # replay it with `cuju replay dumps/episode_done_environment_0_episode_1.dump`
 ```
 
 ### Comparison with GRF
@@ -263,7 +263,8 @@ most useful with seven items.
 - The whole output of `cuju check`, which names the versions, the device, the libraries
     and their SHA-256, and whether the build reproduces the digests.
 - The library, the wheel's or a source build with its compiler and flags.
-- The call that created the batch, with every option.
+- The call that created the batch, with every argument, and the values that `cuju check` lists as
+    differing from the defaults of the machine config.
 - The batch `seed` and the index of the environment, and any `seeds` passed to `reset`.
 - The state from `get_state` at the last step where the two agree.
 - The actions from there on, the step where the two first differ, and what differs, the
@@ -271,7 +272,7 @@ most useful with seven items.
 - The build of the GRF under comparison, its version, the operating system, glibc and GCC.
 
 A report of a frame that differs from the reference's adds the scenario, the seed and the step of
-the frame, the resolution, the values of `CUJU_RENDER_THREADS` and `CUJU_RENDER_WORKERS`, the
+the frame, the resolution, the keys `render_threads` and `render_workers` of the machine config, the
 processor, and the frame itself or the output of `pytest tests/test_render_frames.py`.
 
 A difference that reproduces is a bug, and its fix brings cuju to GRF's result.

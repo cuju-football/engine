@@ -11,8 +11,8 @@ import warnings
 
 import pytest
 
-import cuju
 from conftest import actions_at, tensor_bytes
+from cuju._batch import Batch
 
 pytestmark = pytest.mark.skipif(not hasattr(os, 'fork'), reason='no os.fork')
 
@@ -58,14 +58,14 @@ def play(batch, steps):
 
 
 def test_child_steps_a_batch_made_before_the_fork():
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=8, device='cpu', threads=4)
+    batch = Batch('5_vs_5_l4_r0', environment_count=8, device='cpu', threads=4)
     batch.reset()
     child = in_child(lambda: play(batch, 20))
     assert child == 'ok ' + play(batch, 20).decode()
 
 
 def test_child_closes_a_batch_made_before_the_fork():
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=8, device='cpu', threads=4)
+    batch = Batch('5_vs_5_l4_r0', environment_count=8, device='cpu', threads=4)
     batch.reset()
 
     def close():
@@ -77,7 +77,7 @@ def test_child_closes_a_batch_made_before_the_fork():
 
 
 def test_fork_during_a_step_of_another_thread():
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=32, device='cpu', threads=4)
+    batch = Batch('5_vs_5_l4_r0', environment_count=32, device='cpu', threads=4)
     batch.reset()
     stop = threading.Event()
 

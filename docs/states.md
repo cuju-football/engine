@@ -21,7 +21,7 @@ the state of environment 0 after 100 steps.
 import cuju
 import torch
 
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4, device='cpu')
+batch = cuju.BatchEnvironment('5_vs_5', environment_count=4, device='cpu', left_agents=4)
 observation = batch.reset()
 actions = torch.zeros((4, 4), dtype=torch.int32)
 for _ in range(100):
@@ -129,11 +129,11 @@ before, that next episode is its first, as defined in [Episodes and
 seeds](episodes-and-seeds.md#seeds), and otherwise it is the next of its sequence.
 
 A state belongs to its scenario, its agent counts, its team difficulties and its end flags.
-`set_state` loads states of the same configuration and raises `cuju.StateError` for any other,
+`set_state` loads states of the same configuration and raises `cuju.errors.StateError` for any other,
 naming up to three fields that differ, such as `right_agents is 0 in the state and 1 in the
 environment`. GRF likewise loads a state only into an environment with the same agent counts. A
-state of another difficulty loads into an environment of a bundle with that difficulty, set with
-`difficulty` at creation.
+state of another difficulty loads into an environment with that difficulty, set with
+`difficulty` at creation or with `set_difficulty` before the next reset.
 
 A batch with `stacked=True`, GRF's stack of four, saves and loads with
 `get_state(index, stacked=True)` and `set_state(index, state, stacked=True)`, which put the stack in
@@ -152,9 +152,9 @@ takes the keeper's place is part of the team data of the environment rather than
 state loaded into another environment therefore takes that environment's hand-over, in GRF and in
 cuju alike. The observation that `set_state` writes already shows the roles through that hand-over,
 as GRF's observation after a load does.
-A batch reports the roles that its players play, the hand-over included, through `roles(index)`,
-described in the [API reference](api.md#roles). A recorder that saves states reads the roles with
-the same call and keeps them beside each state, since the state alone holds the scenario's roles.
+A batch with `raw=True` reports the roles that its players play, the hand-over included, in
+`raw()['left_team_roles']`. A recorder that saves states reads the roles there and keeps them beside
+each state, since the state alone holds the scenario's roles.
 
 ## Safety
 
@@ -190,48 +190,6 @@ GRF](migrating-from-grf.md#dumps-from-a-batch). A state loaded into an engine th
 or in cuju, continues as a rendering match, which parts from the unrendered one once the referee
 acts out a stoppage, as described in [Differences from
 GRF](differences-from-grf.md#grfs-python-package).
-
-## Reading fields
-
-The module `cuju.state` reads single fields of a state without decoding the rest. GRF's state
-format lists every field of the engine one after another, and the position of a field in the bytes
-moves with the lengths of the lists before it. The engine in memory holds every list at its full
-capacity instead, so each field there keeps one offset in every state of every scenario. The
-**layout** names each field by a path, such as `match.ball.positionBuffer` or
-`match.players[3].base.humanoid.nodes[0].rotation`, with its offset, size and type in memory, and
-`gather` loads a state and copies the chosen fields out of the engine.
-
-```python
-import cuju
-import cuju.state
-
-batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=1, device='cpu')
-batch.reset()
-state = batch.get_state(0)
-layout = cuju.state.layout()  # about 38,000 fields, by path
-ball, step = cuju.state.read(state, ['match.ball.positionBuffer', 'environment.step'])
-```
-
-`read` returns each field as a numpy array, a vector as three floats and a quaternion as four, x,
-y, z then w, and `gather` returns the raw bytes of the fields one after another, which suits many
-fields read at once. Both take the `frame` of the result. The **rest frame** keeps the match as the
-engine holds it, where the right team plays mirrored, with its x and y negated, and the **pitch
-frame** turns the right team into the frame of the pitch, so that both teams and the ball share one
-frame with the left goal at negative x. Positions divided by 54.4 for x and by -83.6 for y give the
-coordinates of GRF's raw observation in the pitch frame, bit for bit, when each division runs in
-double precision and rounds to a 32-bit float, as the public tests check.
-
-Paths past the count of a list, such as the eleventh player of `5_vs_5`, exist in the layout and
-hold no value of the match, and two reads of one state may return different bytes there, so a caller
-reads the count of a list, or the team sizes of the scenario, before its entries. The players are
-listed with the team that the engine processes first before the other, which is the left team unless
-GRF's `reverse_team_processing` is set, as `match.firstTeam` and
-`environment.scenario.reverseTeamProcessing` record. The step counter, `environment.step`, reads -1
-right after a reset and counts each step from there. Reading fields costs one load of the state,
-about half a millisecond on a laptop processor for an eleven a side match, and `gather` adds little
-for a few hundred fields. `read` builds one array per field, which costs about 10 microseconds each,
-so a thousand fields take a few milliseconds. The renderer reads 199 fields of every step of an
-eleven a side match this way, with the fourteen joints of each player read as one block.
 
 ## Cost
 

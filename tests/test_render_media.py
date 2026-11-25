@@ -99,19 +99,19 @@ def convert(converter, fake, **options):
 
 def test_missing_media_name_the_extra(monkeypatch):
     monkeypatch.setattr(_media, 'PACKAGE', 'cuju_no_such_media_package')
-    with pytest.raises(cuju.MissingFileError) as caught:
+    with pytest.raises(cuju.errors.MissingFileError) as caught:
         _media.root()
     assert str(caught.value) == _media.MESSAGE
     assert INSTALL in str(caught.value) and 'cuju-grf-media' in str(caught.value)
     assert isinstance(caught.value, FileNotFoundError)
-    with pytest.raises(cuju.MissingFileError, match=re.escape(INSTALL)):
+    with pytest.raises(cuju.errors.MissingFileError, match=re.escape(INSTALL)):
         _media.path('data/media/shaders/noise.bmp')
 
 
 def test_media_of_another_format_are_refused(tmp_path):
     (tmp_path / 'manifest.json').write_text(json.dumps({'format': 2, 'version': '9.0.0'}))
     with pytest.raises(
-        cuju.MissingFileError, match=r'format 2.*reads format 1.*cuju-engine\[pixels\]'
+        cuju.errors.MissingFileError, match=r'format 2.*reads format 1.*cuju-engine\[pixels\]'
     ):
         _media.manifest(tmp_path)
 
@@ -180,7 +180,7 @@ def test_the_converter_copies_every_file_unchanged(converter, fake):
     assert _media.manifest(package) == manifest
     assert _media.problems(package) == []
     assert _media.path('fonts/AlegreyaSansSC-ExtraBold.ttf', package).read_bytes().endswith(b'font')
-    with pytest.raises(cuju.MissingFileError, match='lists no'):
+    with pytest.raises(cuju.errors.MissingFileError, match='lists no'):
         _media.path('data/unlisted.bmp', package)
 
 
@@ -348,7 +348,7 @@ def test_the_extra_takes_the_media_of_this_release():
 def test_the_installed_media_match_their_lists():
     try:
         folder = _media.root()
-    except cuju.MissingFileError:
+    except cuju.errors.MissingFileError:
         pytest.skip('cuju-grf-media is not installed')
     manifest = _media.manifest(folder)
     assert _media.problems(folder) == []

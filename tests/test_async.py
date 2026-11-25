@@ -8,17 +8,15 @@ import os
 import pytest
 import torch
 
-import cuju
 from conftest import CUDA, actions_at, play_digest, tensor_bytes
+from cuju._batch import Batch
 
 ASSETS, STEPS, ENVIRONMENTS = '5_vs_5_l4_r4', 60, 8
 
 
 def play_async(device, **options):
     """`play_digest` through `step_async` and `step_wait`."""
-    batch = cuju.BatchEnvironment(
-        ASSETS, environment_count=ENVIRONMENTS, device=device, seed=7, **options
-    )
+    batch = Batch(ASSETS, environment_count=ENVIRONMENTS, device=device, seed=7, **options)
     digest = hashlib.sha256()
     digest.update(tensor_bytes(batch.reset()))
     for step in range(STEPS):
@@ -41,8 +39,8 @@ def test_an_async_step_equals_a_step(device):
 
 
 def test_a_call_during_an_async_step_waits_for_it():
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=4, device='cpu', threads=2)
-    other = cuju.BatchEnvironment(ASSETS, environment_count=4, device='cpu', threads=2)
+    batch = Batch(ASSETS, environment_count=4, device='cpu', threads=2)
+    other = Batch(ASSETS, environment_count=4, device='cpu', threads=2)
     batch.reset()
     other.reset()
     actions = actions_at(0, 4, batch.agents, batch.action_count)
@@ -56,7 +54,7 @@ def test_a_call_during_an_async_step_waits_for_it():
 
 
 def test_async_steps_pair_with_waits():
-    batch = cuju.BatchEnvironment(ASSETS, environment_count=2, device='cpu')
+    batch = Batch(ASSETS, environment_count=2, device='cpu')
     batch.reset()
     with pytest.raises(RuntimeError, match='step_async first'):
         batch.step_wait()
@@ -85,15 +83,15 @@ def test_placed_threads_give_the_same_outputs(placement):
 
 
 @pytest.mark.skipif(not hasattr(os, 'sched_getaffinity'), reason='no affinity mask')
-def test_numa_groups_give_the_same_outputs(monkeypatch):
+def test_numa_groups_give_the_same_outputs():
     # Three nodes stand in for the machine's, so the groups take ranges of their own.
     processors = sorted(os.sched_getaffinity(0))
     nodes = [0] * (max(processors) + 1)
     for position, processor in enumerate(processors):
         nodes[processor] = position * 3 // len(processors)
-    monkeypatch.setenv('CUJU_NUMA_NODES', ','.join(map(str, nodes)))
+    stand_in = ','.join(map(str, nodes))
     expected = play_digest(ASSETS, 'cpu', STEPS, environments=ENVIRONMENTS, threads=5)
-    for placement in ({'numa': True}, {'numa': True, 'pin_threads': True}):
+    for placement in ({'numa': stand_in}, {'numa': stand_in, 'pin_threads': True}):
         found = play_digest(ASSETS, 'cpu', STEPS, environments=ENVIRONMENTS, threads=5, **placement)
         assert found == expected
         assert play_async('cpu', threads=5, **placement) == expected
@@ -101,9 +99,7 @@ def test_numa_groups_give_the_same_outputs(monkeypatch):
 
 @pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
 def test_page_locked_outputs():
-    batch = cuju.BatchEnvironment(
-        ASSETS, environment_count=4, device='cpu', pin_memory=True, with_raw=True
-    )
+    batch = Batch(ASSETS, environment_count=4, device='cpu', pin_memory=True, with_raw=True)
     observation = batch.reset()
     _, reward, done, information = batch.step(torch.zeros((4, 8), dtype=torch.int32))
     tensors = [observation, reward, done, information['final_observation']]
@@ -123,7 +119,7 @@ def test_pinned_host_inputs_may_change_once_the_call_returns():
     assert not pinned.clone().is_pinned()
 
     def play(changed):
-        batch = cuju.BatchEnvironment(ASSETS, environment_count=4, device='cuda', seed=3)
+        batch = Batch(ASSETS, environment_count=4, device='cuda', seed=3)
         batch.reset()
         actions = torch.zeros((4, 8), dtype=torch.int32).pin_memory()
         kept = []

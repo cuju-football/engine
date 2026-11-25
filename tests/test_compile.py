@@ -7,8 +7,8 @@ import importlib.util
 import pytest
 import torch
 
-import cuju
 from conftest import CUDA, actions_at, tensor_bytes
+from cuju._batch import Batch
 
 STEPS = 40
 
@@ -36,7 +36,7 @@ def reset_done(batch):
 
 def play(device, step, reset_done, **options):
     """Plays `STEPS` steps through `step` and `reset_done`, and returns the bytes of each step."""
-    batch = cuju.BatchEnvironment('5_vs_5_l4_r4', environment_count=3, device=device, **options)
+    batch = Batch('5_vs_5_l4_r4', environment_count=3, device=device, **options)
     batch.reset()
     found = []
     for index in range(STEPS):
@@ -63,9 +63,7 @@ def test_a_squeezed_batch_compiles(device):
     torch._dynamo.reset()
 
     def run(step):
-        batch = cuju.BatchEnvironment(
-            'academy_empty_goal_close', environment_count=2, device=device, squeeze=True
-        )
+        batch = Batch('academy_empty_goal_close', environment_count=2, device=device, squeeze=True)
         batch.reset()
         found = [
             outputs_bytes(*step(batch, torch.full((2,), index % 19, device=device)))
@@ -89,7 +87,7 @@ def test_inductor_captures_the_step_and_a_policy_in_a_cuda_graph():
         return observation, reward, done, information, (actions + 1) % batch.action_count
 
     def run(function):
-        batch = cuju.BatchEnvironment('5_vs_5_l4_r0', environment_count=4, device='cuda', seed=3)
+        batch = Batch('5_vs_5_l4_r0', environment_count=4, device='cuda', seed=3)
         batch.reset()
         actions = torch.zeros((4, 4), dtype=torch.int32, device='cuda')
         found = []
