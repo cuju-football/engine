@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The ball's flight in 10 ms prediction steps, then the next tick's momentum and spin.
-// Exact: squares are x * x, other powers `libm::powf`. Only `GetLength` uses double.
 #pragma once
 
 #include "profiling.h"
@@ -17,15 +15,11 @@
 #include "vector3.h"
 
 namespace cuju {
-
 struct BallSpatialInformation {
     Vector3 momentum;
     Quaternion rotationPerMillisecond;
 };
 
-// Entry `k` of `predictions` is the position after `10 k` ms. GRF: when the first step lands
-// where the last tick predicted, the predictions shift down one entry instead, at most
-// `validPredictions` ticks in a row.
 template <class BallLayout>
 CUJU_HOST_DEVICE_NO_INLINE BallSpatialInformation BallCalculatePrediction(BallLayout &ball,
                                                                           bool ballIsInGoal) {
@@ -51,7 +45,6 @@ CUJU_HOST_DEVICE_NO_INLINE BallSpatialInformation BallCalculatePrediction(BallLa
 
     bool firstTime = true;
     bool useCache = false;
-    // `GetAngles` is pure, so its result is cached until the rotation changes.
     Vector3 rotationAngles;
     bool rotationAnglesValid = false;
     auto currentRotationAngles = [&]() {
@@ -69,8 +62,7 @@ CUJU_HOST_DEVICE_NO_INLINE BallSpatialInformation BallCalculatePrediction(BallLa
          predictTimeMilliseconds < BALL_PREDICTION_SPAN_MILLISECONDS + CACHED_PREDICTIONS * 10;
          predictTimeMilliseconds += int(timeStep * 1000.0f)) {
         if (useCache) {
-            // GRF: the last shift reads `predictions[400]`, which no tick writes. The state keeps
-            // it.
+            // GRF: the last shift reads `predictions[400]`, which no tick writes.
             ball.predictions[predictTimeMilliseconds / 10] =
                 ball.predictions[predictTimeMilliseconds / 10 + 1];
             continue;
@@ -276,7 +268,6 @@ CUJU_HOST_DEVICE_NO_INLINE BallSpatialInformation BallCalculatePrediction(BallLa
             Quaternion newRotationPredictPerMillisecond =
                 oldToNewRotation * rotationPredictPerMillisecond;
 
-            // The angles of the rotation before this step.
             const Vector3 angles = currentRotationAngles();
             float x = angles.coordinates[0], y = angles.coordinates[1];
             x = -x;
@@ -313,7 +304,6 @@ CUJU_HOST_DEVICE_NO_INLINE BallSpatialInformation BallCalculatePrediction(BallLa
 
         nextPosition += momentumPredict * timeStep;
 
-        // Only the first step's orientation is read, so the later steps skip its update.
         if (predictTimeMilliseconds == 10) {
             Vector3 rotationVector = currentRotationAngles();
             rotationVector *= timeStep / 0.001f;
@@ -345,4 +335,4 @@ CUJU_HOST_DEVICE_NO_INLINE BallSpatialInformation BallCalculatePrediction(BallLa
     return information;
 }
 
-}  // namespace cuju
+}

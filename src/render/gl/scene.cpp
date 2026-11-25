@@ -16,9 +16,6 @@
 #include "pipeline.h"
 
 namespace cuju::render::gl {
-
-/// ThreadPool.
-
 ThreadPool::ThreadPool(int threads) {
     for (int i = 1; i < threads; ++i) {
         workers_.emplace_back([this] { Worker(); });
@@ -117,8 +114,6 @@ void ThreadPool::Run(int n, const std::function<void(int)> &fn) {
     Wait(Submit(n, [&fn](int i) { fn(i); }));
 }
 
-// Scene.
-
 void Scene::Begin(const TargetInfo &target) {
     target_ = target;
     tiles_x_ = (target.width + kTileSize - 1) / kTileSize;
@@ -181,12 +176,10 @@ void Scene::ClearDepth(std::uint16_t value) {
 }
 
 namespace {
-
-// A tile being rasterized, lp_rasterizer_task.
 struct Task {
     const TargetInfo *target;
-    int x, y;           // tile origin
-    int width, height;  // inside the framebuffer
+    int x, y;
+    int width, height;
     std::uint64_t blocks = 0;
 };
 
@@ -203,8 +196,6 @@ inline std::int32_t Shl32(std::int32_t a, int s) {
     return static_cast<std::int32_t>(static_cast<std::uint32_t>(a) << s);
 }
 
-// build_mask_linear_sse: bit 4 * row + col set when c + col * dcdx + row * dcdy is negative in
-// 32-bit arithmetic.
 inline unsigned MaskLinear(std::int32_t c, std::int32_t dcdx, std::int32_t dcdy) {
     unsigned mask = 0;
     for (int row = 0; row < 4; ++row) {
@@ -265,7 +256,6 @@ void ShadeBlock(Task &task, const SceneTriangle &tri, const float *coefs, int x,
     ++task.blocks;
 }
 
-// lp_rast_tri_tmp.h with RASTER_64, do_block_4.
 void Block4_64(Task &task, const SceneTriangle &tri, const float *coefs, const Plane *plane, int n,
                int x, int y, const std::int64_t *c) {
     unsigned mask = 0xFFFF;
@@ -278,7 +268,6 @@ void Block4_64(Task &task, const SceneTriangle &tri, const float *coefs, const P
     }
 }
 
-// lp_rast_tri_tmp.h without RASTER_64, do_block_4.
 void Block4_32(Task &task, const SceneTriangle &tri, const float *coefs, const Plane *plane, int n,
                int x, int y, const std::int64_t *c) {
     unsigned mask = 0xFFFF;
@@ -360,7 +349,6 @@ void Block16(Task &task, const SceneTriangle &tri, const float *coefs, const Pla
     }
 }
 
-// lp_rast_triangle_N and lp_rast_triangle_32_N of lp_rast_tri_tmp.h.
 void TriangleTile(Task &task, const SceneTriangle &tri, const float *coefs, unsigned plane_mask,
                   bool raster64) {
     Plane plane[kMaxPlanes];
@@ -427,8 +415,6 @@ void TriangleTile(Task &task, const SceneTriangle &tri, const float *coefs, unsi
     }
 }
 
-// The per-pixel values of lp_rast_triangle_32_3_16 and _32_3_4 for one plane at block (x, y):
-// low 32 bits of c, plus (-dcdx) * x + dcdy * y, minus 1, in 32-bit arithmetic.
 inline std::int32_t Origin32(const Plane &p, int x, int y) {
     std::int32_t c = W32(p.c);
     const std::int32_t ndcdx = static_cast<std::int32_t>(0u - static_cast<std::uint32_t>(p.dcdx));
@@ -437,8 +423,6 @@ inline std::int32_t Origin32(const Plane &p, int x, int y) {
     return Add32(c, -1);
 }
 
-// The covered pixels of a 4x4 block at (bx, by) from per-plane origins at the block: a pixel is
-// out when any plane's value is negative.
 inline unsigned Outside4(const std::int32_t *c, const Plane *plane, int n) {
     unsigned out = 0;
     for (int j = 0; j < n; ++j) {
@@ -449,7 +433,6 @@ inline unsigned Outside4(const std::int32_t *c, const Plane *plane, int n) {
     return out;
 }
 
-// lp_rast_triangle_32_3_16 (SSE).
 void Triangle32_3_16(Task &task, const SceneTriangle &tri, const float *coefs, unsigned arg) {
     const int x = static_cast<int>(arg & 0xFF) + task.x;
     const int y = static_cast<int>(arg >> 8) + task.y;
@@ -502,7 +485,6 @@ void Triangle32_3_16(Task &task, const SceneTriangle &tri, const float *coefs, u
     }
 }
 
-// lp_rast_triangle_32_3_4 (SSE).
 void Triangle32_3_4(Task &task, const SceneTriangle &tri, const float *coefs, unsigned arg) {
     const int x = static_cast<int>(arg & 0xFF) + task.x;
     const int y = static_cast<int>(arg >> 8) + task.y;
@@ -516,7 +498,6 @@ void Triangle32_3_4(Task &task, const SceneTriangle &tri, const float *coefs, un
     }
 }
 
-// lp_rast_triangle_32_4_16, the TRI_16 of lp_rast_tri_tmp.h: values scaled by 4 in 32 bits.
 void Triangle32_4_16(Task &task, const SceneTriangle &tri, const float *coefs, unsigned arg) {
     const Plane *plane = tri.plane;
     int x = static_cast<int>(arg & 0xFF);
@@ -541,7 +522,6 @@ void Triangle32_4_16(Task &task, const SceneTriangle &tri, const float *coefs, u
         dcdx4[j] =
             Mul32(static_cast<std::int32_t>(0u - static_cast<std::uint32_t>(plane[j].dcdx)), 4);
         dcdy4[j] = Mul32(plane[j].dcdy, 4);
-        // const int c = plane.c + plane.dcdy * y - plane.dcdx * x, with int products.
         const std::int32_t c = W32(plane[j].c + Mul32(plane[j].dcdy, y) -
                                    static_cast<std::int64_t>(Mul32(plane[j].dcdx, x)));
         const std::int32_t cox = Mul32(static_cast<std::int32_t>(plane[j].eo), 4);
@@ -580,12 +560,9 @@ void ShadeTile(Task &task, const SceneTriangle &tri, const float *coefs) {
     }
 }
 
-}  // namespace
+}
 
 namespace {
-
-// Writes the texel value v of bpp bytes to every texel of the task's tile: one row built once,
-// then copied to each row.
 void FillTile(const Task &task, std::uint8_t *data, std::size_t stride, int bpp,
               const std::uint8_t *v) {
     std::uint8_t row[kTileSize * 8];
@@ -600,7 +577,7 @@ void FillTile(const Task &task, std::uint8_t *data, std::size_t stride, int bpp,
     }
 }
 
-}  // namespace
+}
 
 void Scene::RasterizeTile(int tile, std::uint64_t *blocks) {
     Task task;
@@ -654,9 +631,6 @@ void Scene::RasterizeTile(int tile, std::uint64_t *blocks) {
 }
 
 namespace {
-
-// Rasterizes tiles inside the FTZ and DAZ environment of llvmpipe's rasterizer threads. The scope
-// is opened here and the work happens in a function that reads everything from memory.
 CUJU_GL_NOINLINE void RunTile(Scene *scene, int tile, std::atomic<std::uint64_t> *blocks,
                               void (Scene::*fn)(int, std::uint64_t *)) {
     std::uint64_t n = 0;
@@ -664,7 +638,7 @@ CUJU_GL_NOINLINE void RunTile(Scene *scene, int tile, std::atomic<std::uint64_t>
     blocks->fetch_add(n, std::memory_order_relaxed);
 }
 
-}  // namespace
+}
 
 void Scene::Rasterize(ThreadPool *pool, std::uint64_t *blocks_shaded) {
     if (empty_) {
@@ -715,8 +689,6 @@ void Scene::FinishRasterize(ThreadPool *pool, std::uint64_t *blocks_shaded) {
     clear_values_.clear();
     empty_ = true;
 }
-
-// SceneList.
 
 void SceneList::Begin(const TargetInfo &target) {
     Reset();
@@ -773,7 +745,6 @@ void SceneList::RasterizeTile(int tile, std::uint64_t *blocks) {
 }
 
 namespace {
-
 CUJU_GL_NOINLINE void RunListTile(SceneList *list, int tile, std::atomic<std::uint64_t> *blocks,
                                   void (SceneList::*fn)(int, std::uint64_t *)) {
     std::uint64_t n = 0;
@@ -781,7 +752,7 @@ CUJU_GL_NOINLINE void RunListTile(SceneList *list, int tile, std::atomic<std::ui
     blocks->fetch_add(n, std::memory_order_relaxed);
 }
 
-}  // namespace
+}
 
 void SceneList::Rasterize(ThreadPool *pool, std::uint64_t *blocks_shaded) {
     if (Empty()) {
@@ -811,7 +782,6 @@ void SceneList::StartRasterize(ThreadPool *pool) {
 }
 
 namespace {
-
 void Writes(const TargetInfo &t, std::vector<MemorySpan> *out) {
     const auto add = [out](const Surface &s) {
         if (s.data)
@@ -828,7 +798,7 @@ bool Overlap(const std::vector<MemorySpan> &a, const std::vector<MemorySpan> &b)
     return false;
 }
 
-}  // namespace
+}
 
 void SceneList::Reads(std::vector<MemorySpan> *out) const {
     const Texture *last = nullptr;
@@ -865,4 +835,4 @@ void SceneList::FinishRasterize(ThreadPool *pool, std::uint64_t *blocks_shaded) 
     Reset();
 }
 
-}  // namespace cuju::render::gl
+}

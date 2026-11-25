@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The reset of the world for a set piece and the placement of the players for it.
-// Exact: the placement keeps every conversion between double and float of GRF's arithmetic.
 #pragma once
 
 #include <vector>
@@ -13,7 +11,6 @@
 
 namespace cuju {
 namespace simulation {
-
 constexpr int e_Foot_Right = 1;
 
 CUJU_FUNCTION inline bool LeftTeamOwnsBall(const World &world) {
@@ -30,7 +27,6 @@ CUJU_FUNCTION inline bool LeftTeamOwnsBall(const World &world) {
     return leftDistance < rightDistance;
 }
 
-// A humanoid index counts the players first, then the officials.
 CUJU_FUNCTION inline HumanoidState &AnyHumanoid(World &world, int humanoidIndex) {
     const int playerCount = world.serialized.match.playerCount;
     return humanoidIndex < playerCount
@@ -108,7 +104,6 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidResetPosition(World &world,
     humanoid.animationApplyBuffer.smoothFactor = 0.0f;
     humanoid.animationApplyBuffer.position = humanoid.startPosition;
     humanoid.animationApplyBuffer.orientation = humanoid.startAngle;
-    // The offsets of the apply buffer keep their values.
     humanoid.interruptAnimation = e_InterruptAnimation_None;
     humanoid.tripType = 0;
     humanoid.decayingPositionOffset = Vector3(0);
@@ -124,8 +119,6 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidResetPosition(World &world,
     return true;
 }
 
-// The throw-in taker's animation that holds the ball. It runs right after a reset of the
-// position, so the movement similarity uses the idle predicates.
 CUJU_FUNCTION_NO_INLINE inline bool HumanoidSelectRetainAnimation(World &world,
                                                                   const SimulationContext &context,
                                                                   int humanoidIndex) {
@@ -138,7 +131,6 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidSelectRetainAnimation(World &world,
     query.incomingVelocity = e_Velocity_Idle;
     query.byOutgoingVelocity = true;
     query.outgoingVelocity = e_Velocity_Idle;
-    // The crude selection filters by the incoming retain state only.
     query.incomingRetainState = animation::STRING_RIGHT_ELBOW;
     WarpLocal<AnimationList> candidatesLocal;
     AnimationList &candidates = *candidatesLocal;
@@ -207,7 +199,6 @@ CUJU_FUNCTION_NO_INLINE inline bool PlayerBaseResetSituation(World &world,
             if (!HumanoidResetPosition(world, context, humanoidIndex, position, focusPosition))
                 return false;
         }
-        // The controller of an official has no state to reset.
     }
     return true;
 }
@@ -280,7 +271,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamResetSituation(World &world,
 
 CUJU_FUNCTION inline void BallResetSituation(state::BallSerialized &ball,
                                              const Vector3 &focusPosition) {
-    // Materializing the ball keeps the prediction at 400 milliseconds.
     BallMaterialize(ball);
     ball.momentum = Vector3(0);
     ball.rotationPerMillisecond = Quaternion();
@@ -316,7 +306,6 @@ CUJU_FUNCTION_NO_INLINE inline bool MatchResetSituation(World &world,
     const int firstTeamID = world.FirstTeamID();
     if (!TeamResetSituation(world, context, firstTeamID, focusPosition)) return false;
     if (!TeamResetSituation(world, context, 1 - firstTeamID, focusPosition)) return false;
-    // The referee is the first official.
     return PlayerBaseResetSituation(world, context, match.playerCount + 0, focusPosition);
 }
 
@@ -352,7 +341,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamAIPrepareSetPiece(World &world,
         }
     }
     const bool isTakerTeam = takerTeamID == teamID;
-    // Exact: GRF passes a double here, which rounds to float.
     team.fadingTeamPossessionAmount = isTakerTeam ? 1.5f : 0.5f;
     const double doubleSide = side, halfWidth = PITCH_HALF_LENGTH, halfHeight = PITCH_HALF_WIDTH;
     auto toFloat = [](double value) { return (float)value; };
@@ -620,7 +608,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamAIPrepareSetPiece(World &world,
         if (closest.empty()) return Unsupported("the set piece has no taker");
         teamAI.taker = closest[0];
         if (setPiece == e_GameMode_KickOff) {
-            // The taker of a kickoff keeps its formation position.
         } else if (setPiece == e_GameMode_ThrowIn) {
             if (!resetPosition(
                     closest[0],
@@ -714,7 +701,6 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereePrepareSetPiece(World &world,
                                  : buffer.restartPosition))
         return false;
     const int firstTeamID = world.FirstTeamID(), secondTeamID = 1 - firstTeamID;
-    // The buffer stores the team of the set piece as its slot in the processing order.
     const int setPieceTeamID = buffer.setPieceTeam == 0 ? firstTeamID : secondTeamID;
     if (!TeamAIPrepareSetPiece(world, context, firstTeamID, setPiece, secondTeamID, setPieceTeamID,
                                buffer.teamID))
@@ -727,5 +713,5 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereePrepareSetPiece(World &world,
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

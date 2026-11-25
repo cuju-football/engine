@@ -7,7 +7,6 @@
 #include <cmath>
 
 namespace cuju::render::pitch {
-
 GlibcRand::GlibcRand(std::uint32_t seed) {
     if (seed == 0) seed = 1;
     std::int32_t word = (std::int32_t)seed;
@@ -34,7 +33,6 @@ Perlin::Perlin(int octaves, float frequency, float amplitude)
 
 void Perlin::Init(GlibcRand &random) {
     constexpr int B = kSampleSize;
-    // g1 and g3 are drawn and dropped, as GRF draws them for its 1D and 3D noise.
     int i, j, k;
     for (i = 0; i < B; i++) {
         p_[i] = i;
@@ -106,4 +104,4 @@ float Perlin::Get(float x, float y) const {
     return result;
 }
 
-}  // namespace cuju::render::pitch
+}

@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The referee and the two linesmen, and the force fields and offside lines that the AI also uses.
 #pragma once
 
 #include "../profiling.h"
@@ -16,10 +15,7 @@
 
 namespace cuju {
 namespace simulation {
-
-// Turns a distance in meters into a desired velocity in meters per second.
 constexpr float DISTANCE_TO_VELOCITY_MULTIPLIER = 2.6f;
-// Beyond this distance from the ball, a player skips the options that need the ball close.
 constexpr float BALL_DISTANCE_OPTIMIZE_THRESHOLD = 10.0f;
 enum e_MagnetType { e_MagnetType_Attract, e_MagnetType_Repel };
 enum e_DecayType { e_DecayType_Constant, e_DecayType_Variable };
@@ -39,8 +35,6 @@ CUJU_FUNCTION_NO_INLINE inline Vector3 GetForceFieldMovement(const ForceField &f
                                                              float attractorDampingDistance = 10) {
     Vector3 cumulativeVector;
     float cumulativeForce = 0.0f;
-    // Exact: the lanes compute the terms of the spots, and the sums run in spot order as in the
-    // sequential loop.
     struct Term {
         Vector3 contribution;
         float force;
@@ -88,13 +82,10 @@ struct PlayerImagePosition {
 };
 using ImageList = InlineVector<PlayerImagePosition, state::MAXIMUM_PLAYERS>;
 
-// `result` keeps the order of the mental image. It is an out parameter because a returned list
-// would be copied at the call.
 CUJU_FUNCTION_NO_INLINE inline void MentalTeamPlayerImages(const World &world, int mentalImageIndex,
                                                            int teamID, ImageList &result) {
     const state::MentalImageState &mentalImage =
         world.serialized.match.mentalImages[mentalImageIndex];
-    // Exact: the age is the 64-bit difference of the clocks truncated to `int`.
     const int imageAge = (int)(world.serialized.match.actualTimeMilliseconds -
                                (uint64_t)mentalImage.timeStampMilliseconds);
     result.clear();
@@ -125,7 +116,6 @@ CUJU_FUNCTION_NO_INLINE inline void MentalTeamPlayerImages(const World &world, i
     });
 }
 
-// Moves each image of `images` ahead along x by `futureSimulationMilliseconds`, in place.
 CUJU_FUNCTION_NO_INLINE inline float OffsideLineFromImages(
     ImageList &images, const Vector3 &ballPosition, int side,
     unsigned int futureSimulationMilliseconds) {
@@ -178,7 +168,6 @@ CUJU_FUNCTION_NO_INLINE inline Vector3 BallAveragePosition(const World &world,
     return average;
 }
 
-// Official 0 is the referee, officials 1 and 2 the linesmen.
 CUJU_FUNCTION_NO_INLINE inline void RefereeRequestCommand(World &world, int official,
                                                           CommandQueue &queue) {
     CUJU_PROFILE_SCOPE(REFEREE_REQUEST_COMMAND);
@@ -205,7 +194,6 @@ CUJU_FUNCTION_NO_INLINE inline void RefereeRequestCommand(World &world, int offi
                 command.desiredLookAt = offenderPosition;
                 queue.push_back(command);
             } else {
-                // The special animation with variable 3 shows the card.
                 state::PlayerCommand command = DefaultPlayerCommand();
                 command.desiredFunctionType = e_FunctionType_Special;
                 command.useDesiredMovement = false;
@@ -396,5 +384,5 @@ CUJU_FUNCTION inline bool OfficialsProcess(World &world, const SimulationContext
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

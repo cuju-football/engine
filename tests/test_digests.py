@@ -10,13 +10,10 @@ import pytest
 import cuju
 from conftest import CUDA, play_digest
 
-# The package ships the digests, for `cuju check` as well.
 DIGESTS = os.path.join(os.path.dirname(os.path.abspath(cuju.__file__)), 'data', 'digests.json')
 with open(DIGESTS, encoding='utf-8') as handle:
     EXPECTED = json.load(handle)
 
-# A small batch steps slowly on a GPU, so the GPU plays a few representative cases; the backends
-# give the same bits, which `test_backends.py` checks as well.
 GPU_CASES = ['5_vs_5/simple115v2', '5_vs_5/raw', '5_vs_5/stacked', 'mixed']
 
 

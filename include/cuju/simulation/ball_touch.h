@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Touches of the ball and the touch and possession records of the teams.
 #pragma once
 
 #include "../profiling.h"
@@ -13,7 +12,6 @@
 
 namespace cuju {
 namespace simulation {
-
 CUJU_FUNCTION inline void BallRecalculatePrediction(World &world) {
     BallMaterialize(world.serialized.match.ball);
     BallCalculatePrediction(world.serialized.match.ball, world.serialized.match.ballIsInGoal);
@@ -32,8 +30,6 @@ CUJU_FUNCTION_NO_INLINE inline void BallProcessSerialized(state::BallSerialized 
     if (history.count < (int)BALL_HISTORY_SIZE) {
         history.push_back(ball.positionBuffer);
     } else {
-        // The lanes split the shift. Each reads its entries before the barrier and writes them
-        // after it, so no lane reads an entry that another lane wrote.
         const int count = history.count;
         if (WARP_LANES == 1) {
             for (int entry = 1; entry < count; entry++) history[entry - 1] = history[entry];
@@ -55,8 +51,6 @@ CUJU_FUNCTION_NO_INLINE inline void BallProcessSerialized(state::BallSerialized 
 CUJU_FUNCTION_NO_INLINE inline void TeamUpdatePossessionStatistics(World &world,
                                                                    const SimulationContext &context,
                                                                    int teamID) {
-    // Each player writes only its own fields and reads no team field that this function writes, so
-    // the lanes split the players.
     WarpFor(world.serialized.match.playerCount, [&](int player) {
         if (world.playerTeamID[player] == teamID &&
             world.serialized.match.players[player].base.isActive)
@@ -85,8 +79,7 @@ CUJU_FUNCTION_NO_INLINE inline void BallTouch(World &world, const SimulationCont
     ball.validPredictions = 0;
     if (ball.positionBuffer.coordinates[2] < 0.11f) ball.positionBuffer.coordinates[2] = 0.11f;
     ball.momentum = target;
-    // GRF: the predictions run once for the momentum and once for the touch. Each run changes the
-    // count of valid cached predictions, so the results depend on both.
+    // GRF: the predictions run once for the momentum and once for the touch.
     BallRecalculatePrediction(world);
     BallRecalculatePrediction(world);
     if (world.serialized.match.mentalImages.count > 0) {
@@ -124,7 +117,6 @@ CUJU_FUNCTION inline void BallSetPosition(World &world, const Vector3 &target) {
     ball.ballPositionHistory.count = 0;
 }
 
-// The offside records of a touch, defined in `referee.h`.
 CUJU_FUNCTION inline bool RefereeBallTouched(World &world, const SimulationContext &context);
 
 CUJU_FUNCTION inline bool TeamSetLastTouchPlayer(World &world, const SimulationContext &context,
@@ -139,5 +131,5 @@ CUJU_FUNCTION inline bool TeamSetLastTouchPlayer(World &world, const SimulationC
     return RefereeBallTouched(world, context);
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

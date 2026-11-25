@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // GRF's float vector of three components.
-// Exact: only `GetLength` uses double. `Normalize` multiplies by `1.0f / sqrtf(dot)`.
 #pragma once
 
 #include <cmath>
@@ -11,9 +10,6 @@
 #include "host_device.h"
 
 namespace cuju {
-
-// The float after the double 1e-6, so `value < ABOVE_ONE_MILLIONTH` exactly when
-// `(double)value < 0.000001`.
 constexpr float ABOVE_ONE_MILLIONTH = 0x1.0c6f7cp-20f;
 static_assert((double)0x1.0c6f7ap-20f < 0.000001 && 0.000001 < (double)ABOVE_ONE_MILLIONTH,
               "the double 1e-6 lies between two neighboring floats");
@@ -135,7 +131,6 @@ struct Vector3 {
             coordinates[2] *= inverseLength;
         }
     }
-    // A zero vector becomes NaN.
     CUJU_HOST_DEVICE void Normalize() {
         float inverseLength = 1.0f / sqrtf(GetDotProduct(*this));
         coordinates[0] *= inverseLength;
@@ -184,16 +179,13 @@ struct Vector3 {
     }
 };
 
-}  // namespace cuju
+}
 
 #include "libm/inverse_trigonometric_float.h"
 #include "libm/sincosf.h"
 #include "math_utilities.h"
 
 namespace cuju {
-
-// `GetRotated2D(angle)` for `libm::cosf(angle)` and `libm::sinf(angle)`, which `libm::sincosf`
-// gives too, so several vectors can share one angle's sine and cosine.
 CUJU_HOST_DEVICE Vector3 RotatedByCosineSine(const Vector3 &vector, float cosine, float sine) {
     Vector3 result;
     result.coordinates[0] = (vector.coordinates[0] * cosine) - (vector.coordinates[1] * sine);
@@ -229,4 +221,4 @@ CUJU_HOST_DEVICE float Vector3::GetAngle2D(const Vector3 &test) const {
     return ModulateIntoRange(-PI, PI, angle);
 }
 
-}  // namespace cuju
+}

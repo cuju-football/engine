@@ -17,7 +17,6 @@
 #include "cuju/vector3.h"
 
 namespace cuju::render::scene {
-
 class GrfRng {
 public:
     explicit GrfRng(std::uint32_t seed = 0) { Seed(seed); }
@@ -28,7 +27,6 @@ public:
         std::memcpy(bytes_ + 2508, &maximum, 4);
         RNGView{bytes_}.Seed(seed);
     }
-    // random_non_determ(min, max).
     float Range(float min, float max) { return RandomInRange(bytes_, min, max); }
 
 private:
@@ -38,7 +36,6 @@ private:
 inline float SinFloat(float x) { return libm::sinf(x); }
 inline float CosFloat(float x) { return libm::cosf(x); }
 
-// Vector3::GetDistance.
 inline float GetDistance(const Vector3 &a, const Vector3 &b) {
     float v0 = a.coordinates[0] - b.coordinates[0];
     float v1 = a.coordinates[1] - b.coordinates[1];
@@ -51,6 +48,6 @@ inline float GetDistance(const Vector3 &a, const Vector3 &b) {
     return length;
 }
 
-}  // namespace cuju::render::scene
+}
 
-#endif  // CUJU_RENDER_SCENE_RANDOM_H
+#endif

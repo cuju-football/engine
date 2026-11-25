@@ -351,10 +351,7 @@ def raw_digest(observation):
 def test_a_state_of_the_other_parity_plays_as_in_grf(
     skip, seed, saved_at, loaded_at, steps, expected
 ):
-    # GRF: `11_vs_11_stochastic` swaps the teams' formations and their order with the parity of
-    # the episode. A load takes the state's order, while the players keep the formation entries
-    # of the reset, so the kickoff after a goal places the teams by the reset's formations. The
-    # digests are of the clean GRF build's raw observations, after a goal in each direction.
+    # GRF: `11_vs_11_stochastic` swaps the teams' formations with the parity of the episode.
     from cuju.gfootball.env import config, football_env
 
     values = {'level': '11_vs_11_stochastic', 'players': [], 'game_engine_random_seed': seed}
@@ -433,14 +430,12 @@ def test_rendering_names_the_renderer(monkeypatch):
     with pytest.raises(RendererMissingError, match=r'cuju-engine\[pixels\]'):
         env.start_game()
     plain = started()
-    # An engine started without rendering names the missing session.
     with pytest.raises(RuntimeError):
         plain.render(True)
 
 
 def test_animations_reach_the_referee():
     # GRF: with animations every stoppage plays out in full, which moves the clock of the match.
-    # GRF's Python builds the scenario, as `football_env_core` does.
     pytest.importorskip('cuju.gfootball.env.football_env_core')
     from cuju.gfootball.env import config as grf_config
 

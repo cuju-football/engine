@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The pose offsets that the animation of a player applies on top of its frames.
 #pragma once
 
 #include "../profiling.h"
@@ -12,8 +11,6 @@
 
 namespace cuju {
 namespace simulation {
-
-// The offset blends the body part toward `orientation`, with `bias` from 0 to 1 as its weight.
 CUJU_FUNCTION inline void SetOffset(HumanoidState &humanoid, int bodyPart, float bias,
                                     const Quaternion &orientation) {
     humanoid.offsets.elements[bodyPart].bias = bias;
@@ -43,7 +40,6 @@ CUJU_FUNCTION inline Quaternion AngleAxis(float angle, const Vector3 &axis) {
     return quaternion;
 }
 
-// Runs on one lane.
 CUJU_FUNCTION_NO_INLINE inline void CalculateGeometryOffsets(World &world,
                                                              const SimulationContext &context,
                                                              int player) {
@@ -109,7 +105,6 @@ CUJU_FUNCTION_NO_INLINE inline void CalculateGeometryOffsets(World &world,
                 NormalizedClamp(ballDistance, ballProximityFalloff * 0.4f, ballProximityFalloff);
         float velocityFraction =
             NormalizedClamp(spatialState.floatVelocity, IDLE_VELOCITY, SPRINT_VELOCITY - 0.5f);
-        // Exact: the square is one multiplication.
         lookAtBallBias *= 1.0f - velocityFraction * velocityFraction * 0.3f;
         Quaternion middleOrientation = AngleAxis(angle, Vector3(0, 0, 1));
         middleOrientation.Normalize();
@@ -134,7 +129,6 @@ CUJU_FUNCTION_NO_INLINE inline void CalculateGeometryOffsets(World &world,
             Vector3 opponentVector = opponentSpatialState.position - spatialState.position;
             float angle =
                 baseRotationVector.GetAngle2D(opponentVector.GetNormalized(baseRotationVector));
-            // Exact: the angle bounds compare in double.
             const double absoluteAngle = fabsf(angle);
             const double doublePi = (double)PI;
             if (absoluteAngle > 0.6 * doublePi && absoluteAngle < 0.85 * doublePi) {
@@ -196,5 +190,5 @@ CUJU_FUNCTION_NO_INLINE inline void CalculateGeometryOffsets(World &world,
     }
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

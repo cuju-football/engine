@@ -16,7 +16,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def test_version():
     assert re.fullmatch(r'\d+\.\d+\.\d+([a-z]+\d+)?', cuju.__version__)
-    # An installed package reports the same version in its metadata.
     if not os.path.abspath(cuju.__file__).startswith(ROOT):
         try:
             assert importlib.metadata.version('cuju-engine') == cuju.__version__

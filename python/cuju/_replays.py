@@ -1,14 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Plays the steps of an episode again in a new batch, for GRF's `write_dump` and its replays.
-
-A batch of one environment plays an episode from GRF's configuration of it, the start of the episode
-or a state, and the actions of its steps. Each step reads as `cuju.dumps` writes it, so an
-environment can write the last steps of its episode on demand, and a dump can be checked against
-the match that its actions play.
-"""
-
 from __future__ import annotations
 
 import datetime
@@ -27,22 +19,17 @@ from ._batch import Batch
 _TRACE_SIZE = 100
 # GRF: the dumps that the options of an environment write, which `write_dump` does not start.
 _OPTION_DUMPS = frozenset({'episode_done', 'score', 'lost_score'})
-# The name that `DumpWriter` gives a scenario with team difficulties of its own.
 _DIFFICULTY_LEVEL = re.compile(r'(.+)_difficulty_([0-9a-z]+)_([0-9a-z]+)')
 # GRF: the values that its replay sets over `config_update`.
 _REPLAY_VALUES = frozenset({'physics_steps_per_frame', 'real_time', 'tracesdir', 'write_video'})
-# The keys that differ between two plays of one match, the wall-clock time, the configuration that
-# a dump adds to some steps, and a rendered frame.
 _UNCOMPARED = frozenset({'time', 'config', 'frame'})
 
 
 def _difficulty(text):
-    """Returns the difficulty that `dumps._difficulty_text` wrote as `text`."""
     return None if text == 'none' else float(text.replace('p', '.').replace('m', '-'))
 
 
 def agent_counts(players: list[str]) -> tuple[int, int]:
-    """Returns the left and right players of GRF's player definitions, as its replay counts them."""
     from ._grf_config import count_left_players, count_right_players
 
     return (
@@ -54,14 +41,6 @@ def agent_counts(players: list[str]) -> tuple[int, int]:
 def batch_for(
     config: dict[str, Any], level: str | None = None, device: Any = 'cpu', threads: int = 1
 ) -> Batch:
-    """Returns a batch of one environment that plays the episode of a GRF configuration.
-
-    Args:
-        config: GRF's configuration of the episode, as the first step of a dump holds it.
-        level: The scenario to play, or `None` for the configuration's `level`.
-        device: The device of the batch.
-        threads: The CPU threads of the batch.
-    """
     level = config['level'] if level is None else level
     difficulty = None
     match = _DIFFICULTY_LEVEL.fullmatch(level)
@@ -84,52 +63,30 @@ def batch_for(
         game_engine_random_seed=config['game_engine_random_seed'],
         agent_counts=[(left, right)],
         difficulty=difficulty,
-        # The first reset of a batch plays the episode after the one after `episode_number`, and
-        # only its parity reaches the bundle.
         episode_number=(config['episode_number'] - 2) % 2,
     )
 
 
 def start(batch: Batch, config: dict[str, Any]) -> None:
-    """Resets a batch from `batch_for` to the start of the configuration's episode."""
     reverse = config.get('reverse_team_processing')
     batch.reset(reverse=None if reverse is None else int(bool(reverse)))
 
 
 class Player:
-    """Steps a batch of one environment and reads each step as a dump step."""
-
     def __init__(self, batch: Batch) -> None:
         self.batch = batch
-        # Created before the batch's reset, the writer follows no episode and writes nothing.
         self.writer = dumps.DumpWriter(
             batch, tempfile.gettempdir(), environments=[0], write_full_episode_dumps=False
         )
         self.episode = None
 
     def begin(self, frame: int | None = None, cumulative: int = 0) -> None:
-        """Starts counting the steps of the episode that the batch now holds.
-
-        Args:
-            frame: The frame count of the next step, or `None` for the one after the batch's step.
-            cumulative: The scoring reward that the episode has collected so far.
-        """
         values, _ = self.writer._episode_values(0)
         self.episode = dumps._Episode(0, values, None, False, False)
-        # The batch's step count is the frame count of the step that it last played.
         self.episode.frame = values[5] + 1 if frame is None else frame
         self.episode.cumulative = cumulative
 
     def step(self, row: Any, entry: bool = True) -> tuple[dict[str, Any] | None, int, bool]:
-        """Plays one step.
-
-        Args:
-            row: The actions of the batch's agents.
-            entry: Whether to return the step as a dump step.
-
-        Returns:
-            The dump step or `None`, the scoring reward, and whether the episode ended.
-        """
         batch = self.batch
         actions = torch.as_tensor(row, dtype=torch.int32).reshape(1, batch.agents).cpu()
         _, _, done, information = batch.step(actions.to(batch.torch_device))
@@ -151,17 +108,10 @@ class Player:
 
 
 class EpisodeSteps:
-    """The batch actions of each step of an environment's episode, and GRF's dumps on demand.
-
-    GRF's environment keeps the last 100 steps of the episode for its dumps. This keeps only the
-    actions, from the reset or each loaded state, and plays them again when a dump is written.
-    """
-
     def __init__(self) -> None:
         self.reset()
 
     def reset(self) -> list[Any]:
-        """Starts a new episode, and returns the list that takes the actions of its steps."""
         self.segments: list[tuple[bytes | None, list[Any]]] = [(None, [])]
         # GRF: the trace of the dumps starts again with each episode.
         self.first = 0
@@ -170,7 +120,6 @@ class EpisodeSteps:
         return self.segments[-1][1]
 
     def set_state(self, state: bytes, ended: bool) -> list[Any]:
-        """Continues from a loaded state, and returns the list that takes its steps' actions."""
         self.segments.append((state, []))
         if ended:
             # GRF: an ended episode has no trace, and loading a state starts a new one.
@@ -180,7 +129,6 @@ class EpisodeSteps:
         return self.segments[-1][1]
 
     def _play(self, environment, config):
-        """Replays the episode, returning the trace's last 100 dump steps and goals by position."""
         level = environment._settings['level']
         batch = batch_for(config, level, environment.batch.torch_device, 1)
         try:
@@ -212,12 +160,6 @@ class EpisodeSteps:
         return entries, goals
 
     def write_dump(self, environment: Any, name: str) -> str | None:
-        """Writes the last steps of the environment's episode as GRF's `write_dump(name)` does.
-
-        Returns:
-            The path without `.dump`, or `None` where GRF writes none.
-        """
-
         if environment._done:
             raise RuntimeError(
                 "the episode ended, and GRF's environment keeps no steps to dump until reset()"
@@ -244,7 +186,6 @@ class EpisodeSteps:
             }
         )
         entries, goals = self._play(environment, played)
-        # The steps that hold the configuration, by their positions in the trace.
         configs = self.configs
         if entries:
             configs[entries[0][0]] = config
@@ -260,8 +201,7 @@ class EpisodeSteps:
         for position, entry in entries:
             if position in configs:
                 entry['debug']['config'] = configs[position]
-        # GRF writes into `tracesdir`, the `logdir` of `create_environment`. An empty one is the
-        # working directory, as for cuju's other dumps.
+        # GRF writes into `tracesdir`, the `logdir` of `create_environment`.
         directory = config['tracesdir'] or os.curdir
         os.makedirs(directory, exist_ok=True)
         stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S%f')
@@ -271,14 +211,6 @@ class EpisodeSteps:
 
 
 class ReplayResult(NamedTuple):
-    """What a replay of a dump found.
-
-    Attributes:
-        steps: The steps of the dump that the replay played and found equal.
-        ended: Whether the replay's episode ended at the dump's last step.
-        difference: The first difference, or `None` if the replay equals the dump.
-    """
-
     steps: int
     ended: bool
     difference: str | None
@@ -289,7 +221,6 @@ def _bits(tensor):
 
 
 def _shown(value):
-    """Returns a short text of a value of a dump step."""
     if isinstance(value, torch.Tensor):
         if value.numel() <= 6:
             return f'{value.tolist()}'
@@ -298,11 +229,6 @@ def _shown(value):
 
 
 def difference(replayed: Any, stored: Any, where: str) -> str | None:
-    """Returns where a replayed dump step differs from the stored one, bit for bit, or `None`.
-
-    Only the stored step's keys count, apart from the wall-clock time, the configuration and a
-    rendered frame.
-    """
     if isinstance(stored, torch.Tensor):
         if (
             not isinstance(replayed, torch.Tensor)
@@ -338,7 +264,6 @@ def difference(replayed: Any, stored: Any, where: str) -> str | None:
 
 
 def loaded(entry: dict[str, Any]) -> dict[str, Any]:
-    """Returns a dump step as `read_dump` reads it back."""
     return dumps._converted(dumps._DumpUnpickler(io.BytesIO(dumps._pickle(entry))).load())
 
 
@@ -348,23 +273,6 @@ def replay(
     threads: int = 1,
     overrides: dict[str, Any] | None = None,
 ) -> ReplayResult:
-    """Plays a dump's actions again from its configuration and compares every step with the dump.
-
-    Args:
-        path: A dump that starts at the start of its episode, of cuju or of GRF.
-        device: The device of the batch that plays it.
-        threads: The CPU threads of that batch.
-        overrides: Values that replace those of the dump's configuration, as GRF's
-            `config_update`, apart from the ones that GRF's replay sets itself.
-
-    Returns:
-        The steps found equal, whether the replay's episode ended with the dump, and the first
-        difference, if any.
-
-    Raises:
-        ValueError: If the dump holds no configuration, does not start at the start of its
-            episode, or holds an action outside its action set.
-    """
     return _replay_steps(dumps.read_dump(path), path, device, threads, overrides)
 
 

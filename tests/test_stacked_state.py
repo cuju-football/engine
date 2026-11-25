@@ -25,7 +25,6 @@ def grf_classes(monkeypatch):
     class EnvState:
         pass
 
-    # `pickle` finds a class by its module and qualified name.
     EnvState.__module__, EnvState.__qualname__ = names[-1], 'EnvState'
     modules[names[-1]].EnvState = EnvState
     for name, module in modules.items():
@@ -102,7 +101,6 @@ def test_a_stack_from_elsewhere_sets_the_observation(grf_classes):
     batch.reset()
     steps(batch, 0, 3)
     unpickled, match = split(batch.get_state(0, stacked=True))
-    # A deque as GRF's reset leaves it, the same observation four times.
     frame = np.arange(115, dtype=np.float32)
     unpickled['FrameStack'] = collections.deque([frame] * 4, maxlen=4)
     batch.set_state(0, join(unpickled, match), stacked=True)
@@ -147,7 +145,6 @@ def test_the_stack_option_must_match():
 
 
 def test_an_unstacked_state_is_unchanged():
-    # The pickle without a stack keeps its bytes, as the digests read them.
     batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu')
     batch.reset()
     state = batch.get_state(0)

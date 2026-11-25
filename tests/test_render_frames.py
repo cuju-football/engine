@@ -1,15 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks cuju's software renderer against the frames of an unmodified GRF, byte for byte.
-
-The expected digests in `cuju/data/render_digests.json.z` come from GRF 3d9e754 rendering on Mesa's
-llvmpipe at 1280 by 720, or at the resolution that a scenario names. A stored episode, the
-RenderStates of every render of 5_vs_5 with seed 0 in `tests/data`, drives the renderer through its
-C API without the engine, and each frame read back, each observation's frame, pixels and
-pixels_gray, and the fixed data must equal GRF's. The
-checks need libcuju_render and GRF's media, from cuju-grf-media or from the folder that
-`CUJU_GRF_MEDIA` names, and skip without them. The longer ones run with `CUJU_LONG=1`.
-"""
+"""Checks cuju's software renderer against the frames of an unmodified GRF, byte for byte."""
 
 import hashlib
 import json
@@ -34,7 +25,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DIGESTS = os.path.join(
     os.path.dirname(os.path.abspath(cuju.__file__)), 'data', 'render_digests.json.z'
 )
-# The SHA-256 of the decompressed digests, so that no change to them goes unnoticed.
 DIGESTS_SHA256 = '5d935941e7b70de7d3da82efea45f0e6c33ecb3b57c368cad10364333edf167e'
 with open(DIGESTS, 'rb') as handle:
     DIGESTS_TEXT = zlib.decompress(handle.read())
@@ -42,11 +32,8 @@ EXPECTED = json.loads(DIGESTS_TEXT)
 STORED = EXPECTED['stored_episode']
 # GRF's episodes of the paths beyond the six episodes, each observation with a frame.
 SCENARIOS = EXPECTED.get('scenarios', {})
-# GRF's episodes of scripts of calls, `disable_render` and `render` among them, each observation
-# with the digest of the raw observation and, where it has one, of its frame. Those of kind
-# `batch` play in batches too.
+# GRF's episodes of scripts of calls, each observation with the digest of its raw output and frame.
 OPS = EXPECTED.get('ops', {})
-# The renders of the stored episode that the short check draws: the reset's and two steps'.
 SHORT_READBACKS = 26
 MAGIC = b'CUJRSE1\0'
 STATE_KINDS = (5, 6)
@@ -106,9 +93,7 @@ def events():
 
 
 def replay(renderer, readbacks, unread=None):
-    """Draws the stored episode up to `readbacks` frames; returns the frames' and observations'
-    digests and the observations' indices. A render whose frame number `unread` picks is drawn
-    as one nobody reads, and its digest is None."""
+    """Draws the stored episode up to `readbacks` frames and returns their digests."""
     frames, observations = [], {}
     expected = {o['readbacks']: o for o in EXPECTED['episodes']['5_vs_5_0']['observations']}
     for kind, swap, seed, state, _ in events():
@@ -229,9 +214,7 @@ def check_unread(pixels, media, readbacks, unread):
 
 
 def test_a_match_built_without_rendering_raises_where_grf_crashes(pixels, media):
-    # GRF: a reset while game_config.render is off builds the match without drawing its captions,
-    # and its first render redraws a name tag that never took text, on which GRF's process
-    # crashes.
+    # GRF: a reset while render is off builds the match without captions,, and the render crashes.
     start = next(state for kind, _, _, state, _ in events() if kind == 5)
     render = [state for kind, swap, _, state, _ in events() if kind == 6 and swap][4]
     with pixels.Renderer(threads=2, media=media) as renderer:
@@ -286,7 +269,6 @@ def test_a_batch_draws_at_grf_resolutions(pixels, media, monkeypatch):
 
 
 def test_renders_nobody_reads_leave_the_frames_read_as_they_are(pixels, media):
-    # Such a render rasterizes nothing when the next render of the match draws every pixel again.
     check_unread(pixels, media, SHORT_READBACKS, lambda index: index > 3 and index % 3 != 0)
 
 
@@ -329,7 +311,6 @@ def test_renderers_of_one_process_share_the_media(pixels, media):
 
 
 def test_a_caller_that_flushes_subnormals_changes_no_frame(pixels, media):
-    # The renderer sets its own floating-point modes in every call and in its threads.
     torch = pytest.importorskip('torch')
     if not torch.set_flush_denormal(True):
         pytest.skip('PyTorch cannot flush subnormals on this processor')
@@ -340,8 +321,6 @@ def test_a_caller_that_flushes_subnormals_changes_no_frame(pixels, media):
 
 
 def test_windows_exports_every_function_that_the_loader_calls():
-    # src/render/CMakeLists.txt writes the DLL's exports from the declarations that start a line of
-    # render_api.h, as this pattern finds them.
     header = os.path.join(os.path.dirname(HERE), 'src', 'render', 'render_api.h')
     loader = os.path.join(os.path.dirname(os.path.abspath(cuju.__file__)), '_pixels.py')
     if not os.path.isfile(header):
@@ -389,16 +368,13 @@ def test_renders_nobody_reads_change_no_frame_of_the_episode(pixels, media, ever
 
 @opted_in
 def test_renderers_that_share_a_process_draw_grf_frames(pixels, media):
-    # The second renderer takes the first one's decoded media and mipmap chains.
     with pixels.Renderer(threads=2, media=media):
         check_replay(pixels, media, threads=2, readbacks=SHORT_READBACKS)
         check_replay(pixels, media, threads=1, readbacks=SHORT_READBACKS)
 
 
 def scripted_actions(kind, observation, rng, agents):
-    """The actions of a scenario's agents from GRF's raw observation. `random` draws them, `slide`
-    chases the right team's ball carrier and slides in from close by, and `slideb` slides in from
-    behind, which draws fouls, cards and players sent off."""
+    """The actions of a scenario's agents from GRF's raw observation."""
     if agents == 0:
         return []
     if kind.startswith('random'):
@@ -448,7 +424,6 @@ def patched_state(state, field, old, new):
     import cuju.state
 
     assert int(cuju.state.read(state, [field])[0]) == old
-    # The field lies about as far into the state as into the engine's layout.
     layout = cuju.state.layout()
     end = max(f.offset + f.size for f in layout.values())
     guess = len(state) * layout[field].offset // end
@@ -465,8 +440,7 @@ def patched_state(state, field, old, new):
 
 
 def play_scenario(name):
-    """The digests of every observation with a frame of the scenario `name`, played through
-    `cuju.gfootball` as GRF's was."""
+    """The digests of every observation with a frame of the scenario `name`."""
     import cv2
     import numpy as np
 
@@ -506,9 +480,7 @@ def play_scenario(name):
             )
 
     class Ceremony:
-        """GRF's engine as GRF's core steps it through a stoppage. The frames of the internal
-        steps from `after` on are kept, and a field edit, if any, loads into the engine at that
-        step, in the middle of the stoppage, as no call between steps can."""
+        """GRF's engine as GRF's core steps it through a stoppage."""
 
         def __init__(self, real, spec, frames):
             self.real, self.spec, self.frames, self.count = real, spec, frames, 0
@@ -565,11 +537,6 @@ def play_scenario(name):
 @opted_in
 @pytest.mark.parametrize('name', sorted(SCENARIOS))
 def test_cuju_renders_grf_scenarios(pixels, media, name):
-    # The paths that the six episodes leave out: other resolutions, the render switch in play and
-    # at a stoppage, agents' coloured name tags, loads of earlier or edited states, goals after a
-    # switch, cards, players sent off and the referee's captions. Each plays in a process of its
-    # own, as GRF's did, since a process hands its first rendering engine, with its resolution
-    # and its history of matches, to every later rendering environment, in GRF as in cuju.
     pytest.importorskip('numpy')
     pytest.importorskip('cv2')
     run = subprocess.run(
@@ -592,7 +559,6 @@ def test_cuju_renders_grf_scenarios(pixels, media, name):
 @opted_in
 @pytest.mark.parametrize('episode', sorted(EXPECTED['episodes']))
 def test_cuju_matches_render_as_grf_does(pixels, media, episode, monkeypatch):
-    # The whole path: cuju's simulation in GRF's Python package, rendered through its engine.
     from cuju.gfootball.env import config, football_env
 
     monkeypatch.setenv('CUJU_GRF_MEDIA', media)
@@ -690,7 +656,6 @@ def test_rendering_batches_draw_alike_on_both_backends(pixels, media, monkeypatc
 
 @opted_in
 def test_a_batch_draws_the_same_frames_for_every_split(pixels, media, monkeypatch):
-    # The environments draw side by side, each renderer with threads of its own.
     torch = pytest.importorskip('torch')
     monkeypatch.setenv('CUJU_GRF_MEDIA', media)
     entry = EXPECTED['episodes']['5_vs_5_0']
@@ -729,7 +694,6 @@ def test_a_batch_draws_the_same_frames_for_every_split(pixels, media, monkeypatc
 @opted_in
 @pytest.mark.parametrize('episode', sorted(EXPECTED['episodes']))
 def test_a_rendering_batch_draws_grf_frames(pixels, media, episode, monkeypatch):
-    # Each environment's renderer draws its renders in GRF's order, so its frames are GRF's.
     torch = pytest.importorskip('torch')
     monkeypatch.setenv('CUJU_GRF_MEDIA', media)
     entry = EXPECTED['episodes'][episode]
@@ -773,8 +737,7 @@ def raw_digest(observation):
 
 
 def play_ops(name):
-    """The digests of every observation of the script `name`, played through `cuju.gfootball`
-    as GRF's was. A render at which GRF's process crashed ends the list with `crash`."""
+    """The digests of every observation of the script `name`."""
     import cv2
 
     from cuju.gfootball.env import config, football_env
@@ -840,10 +803,6 @@ def play_ops(name):
 @opted_in
 @pytest.mark.parametrize('name', sorted(OPS))
 def test_cuju_plays_grf_scripts_of_calls(pixels, media, name):
-    # `disable_render` in play and before resets, `render` that turns the rendering on again,
-    # saves and loads with the rendering off, goals and messages while it is off, the match that a
-    # reset builds without rendering, at whose render GRF's process crashes where cuju raises, and
-    # other resolutions. Each plays in a process of its own, as GRF's did.
     pytest.importorskip('numpy')
     pytest.importorskip('cv2')
     run = subprocess.run(
@@ -867,8 +826,7 @@ def test_cuju_plays_grf_scripts_of_calls(pixels, media, name):
 
 
 def play_batch_ops(name, device, kind):
-    """The frame and pixel digests of the script `name` in a batch of one environment, which
-    renders from its reset on, so the script's first op, GRF's render switch, has no counterpart."""
+    """The frame and pixel digests of the script `name` in a batch of one environment."""
     torch = pytest.importorskip('torch')
     entry = OPS[name]
     width, height = entry.get('resolution', (1280, 720))
@@ -921,8 +879,6 @@ def play_batch_ops(name, device, kind):
 @pytest.mark.parametrize('device', ['cpu', 'cuda'])
 @pytest.mark.parametrize('name', sorted(n for n, e in OPS.items() if e.get('kind') == 'batch'))
 def test_a_rendering_batch_plays_grf_scripts(pixels, media, name, device, kind, monkeypatch):
-    # Other resolutions, with GRF's height of 720 when only the width is given, and saves and
-    # loads, against GRF's frames and its pixels of the whole frame, on both backends.
     from conftest import CUDA
 
     if device == 'cuda' and not CUDA:

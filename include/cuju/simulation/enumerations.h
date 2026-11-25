@@ -2,12 +2,10 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The enumerations of the simulation. A state stores them as integers, so no enumerator moves.
 #pragma once
 
 namespace cuju {
 namespace simulation {
-
 enum e_Velocity { e_Velocity_Idle, e_Velocity_Dribble, e_Velocity_Walk, e_Velocity_Sprint };
 enum e_FunctionType {
     e_FunctionType_None,
@@ -60,5 +58,5 @@ enum e_PlayerCommandModifier {
     e_PlayerCommandModifier_KnockOn = 1
 };
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

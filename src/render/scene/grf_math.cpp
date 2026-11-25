@@ -5,7 +5,6 @@
 #include "grf_math.h"
 
 namespace cuju::render::scene {
-
 Matrix4 Matrix4::GetInverse() const {
     float tmp[12];
     float src[16];
@@ -134,4 +133,4 @@ bool Aabb::Intersects(const std::vector<Plane> &planes) const {
     return inside;
 }
 
-}  // namespace cuju::render::scene
+}

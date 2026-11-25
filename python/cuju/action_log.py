@@ -1,12 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Digests of a batch's outputs, and logs of a run's actions that replay it bit for bit.
-
-`Digest` hashes outputs as the package's self-check does, and `digest` plays the self-check's
-run of a scenario and returns its SHA-256, the same on every backend and machine. An `ActionLog`
-creates a batch, takes its calls in place of the batch's and logs them with their actions, and
-`replay` plays a saved log again, on either backend, and checks every digest.
-"""
+"""Digests of a batch's outputs, and logs of a run's actions that replay it bit for bit."""
 
 from __future__ import annotations
 
@@ -23,9 +17,7 @@ from ._batch import Batch
 
 __all__ = ['ActionLog', 'Digest', 'digest', 'replay']
 
-# The version of the log's format.
 _FORMAT = 1
-# The options that change no output, which a log leaves to the machine that replays it.
 _MACHINE_OPTIONS = (
     'device',
     'library',
@@ -37,26 +29,17 @@ _MACHINE_OPTIONS = (
     'debug',
     'check_actions',
 )
-# The machine options that a replay takes, the device being an argument of its own.
 _REPLAY_OPTIONS = _MACHINE_OPTIONS[1:]
 
 
 class Digest:
-    """The SHA-256 of a sequence of outputs.
-
-    Tensors hash as the bytes of their elements in order, on any device. A dictionary hashes its
-    values in the order of its sorted keys, and bytes hash as they are.
-    """
+    """The SHA-256 of a sequence of outputs."""
 
     def __init__(self) -> None:
         self._hash = hashlib.sha256()
 
     def update(self, value: Any) -> None:
-        """Adds a tensor, a dictionary or sequence of them, or bytes.
-
-        Raises:
-            TypeError: If `value` is none of these.
-        """
+        """Adds a tensor, a dictionary or sequence of them, or bytes."""
         if isinstance(value, torch.Tensor):
             tensor = value.detach().to('cpu').contiguous()
             self._hash.update(
@@ -85,7 +68,6 @@ class Digest:
 
 
 def _states(batch, value):
-    """Adds the state of every environment of a batch without a stack to the digest `value`."""
     if not batch.stacked:
         for index in range(batch.environment_count):
             value.update(batch.get_state(index))
@@ -93,7 +75,6 @@ def _states(batch, value):
 
 
 def _digest_actions(step: int, environment_count: int, agents: int, action_count: int) -> Any:
-    """Returns the actions of a step of `digest`, `[environment_count, agents]` `int32`."""
     values = [
         [(step * 7 + environment * 3 + agent * 5) % action_count for agent in range(agents)]
         for environment in range(environment_count)
@@ -109,25 +90,7 @@ def digest(
     environment_count: int = 4,
     **options: Any,
 ) -> str:
-    """Plays a batch with fixed actions and returns the SHA-256 of its outputs.
-
-    Agent `a` of environment `e` takes action `(7 * step + 3 * e + 5 * a) % action_count` at each
-    step, the same on every machine. The digest covers the observation of the reset, the
-    observation, reward and done flags of every step, then the state of every environment unless
-    the batch stacks its observations. The package's self-check compares such digests, 100 steps
-    of 4 environments with seed 7, with those in its `digests.json`.
-
-    Args:
-        assets: The assets of the batch, as `Batch` takes them.
-        device: `cpu` or `cuda`, which give the same digest.
-        steps: The steps after the reset.
-        seed: The seed of the batch.
-        environment_count: The number of environments.
-        **options: Other keyword arguments of `Batch`.
-
-    Returns:
-        The SHA-256 in hexadecimal.
-    """
+    """Plays a batch with fixed actions and returns the SHA-256 of its outputs."""
     batch = Batch(assets, environment_count=environment_count, device=device, seed=seed, **options)
     try:
         value = Digest()
@@ -144,7 +107,6 @@ def digest(
 
 
 def _plain(value):
-    """Returns an option as a value of JSON, with tensors and tuples as lists."""
     if isinstance(value, torch.Tensor):
         return value.tolist()
     if isinstance(value, (list, tuple)):
@@ -155,47 +117,14 @@ def _plain(value):
 
 
 def _host_values(values):
-    """Returns per-environment arguments of `reset` as values of JSON, or `None`."""
     return None if values is None else _plain(torch.as_tensor(values))
 
 
 class ActionLog:
-    """A batch whose calls, actions and outputs are logged for `replay`.
-
-    Call the log's `reset`, `step`, `reset_done` and `set_state` in place of the batch's, and they
-    return what the batch's return. `save` writes the options of the batch, every call with its
-    arguments, and the digest of the outputs after each call. The digest after the last call adds
-    the state of every environment, as `digest` does.
-
-    Attributes:
-        batch: The `Batch` that the log created.
-        calls: The calls so far, each a dictionary with its name and arguments.
-
-    Examples:
-        >>> import torch
-        >>> import cuju
-        >>> log = cuju.ActionLog('5_vs_5_l4_r0', environment_count=8, device='cpu')
-        >>> _ = log.reset()
-        >>> for _ in range(100):
-        ...     _ = log.step(torch.randint(0, 19, (8, 4), dtype=torch.int32))
-        >>> log.save('run.zip')
-        >>> cuju.replay('run.zip') == log.hexdigest()
-        True
-    """
+    """A batch whose calls, actions and outputs are logged for `replay`."""
 
     def __init__(self, assets: Any, **options: Any) -> None:
-        """Creates the batch.
-
-        Args:
-            assets: The assets of the batch, as `Batch` takes them.
-            **options: The keyword arguments of `Batch`. `device`, `library`,
-                `threads`, `pin_memory`, `allocator`, `pin_threads`, `numa`, `debug` and
-                `check_actions` change no output, so the log leaves them out and a replay chooses
-                its own.
-
-        Raises:
-            TypeError: If an option is no value of JSON, a tensor, or a sequence of them.
-        """
+        """Creates the batch."""
         self._assets = _plain(assets)
         self._options = {
             key: _plain(value) for key, value in options.items() if key not in _MACHINE_OPTIONS
@@ -209,7 +138,6 @@ class ActionLog:
         self._digests: list[bytes] = []
 
     def _logged(self, call, *outputs):
-        """Logs a call with the digest of its outputs."""
         for output in outputs:
             self._digest.update(output)
         self.calls.append(call)
@@ -279,22 +207,7 @@ class ActionLog:
 
 
 def replay(path: str, device: str | None = None, **options: Any) -> str:
-    """Plays a saved `ActionLog` again and checks the digest after every call.
-
-    Args:
-        path: The file that `ActionLog.save` wrote.
-        device: `cpu` or `cuda`, or `None` for the device of the log, which give the same outputs.
-        **options: `library`, `threads`, `pin_memory`, `allocator`, `pin_threads`, `numa`,
-            `debug` or `check_actions` for the batch, which change no output. A log that an
-            earlier version wrote with any of them replays without them unless given here.
-
-    Returns:
-        The digest of the replay, equal to the log's.
-
-    Raises:
-        ValueError: If the file holds no log of this format, an option changes outputs, or the
-            outputs of a call differ from the log's, naming the first such call.
-    """
+    """Plays a saved `ActionLog` again and checks the digest after every call."""
     unknown = sorted(set(options) - set(_REPLAY_OPTIONS))
     if unknown:
         raise ValueError(
@@ -312,7 +225,6 @@ def replay(path: str, device: str | None = None, **options: Any) -> str:
             archive.read(f'states/{number}.bin')
             for number in range(sum(call['call'] == 'set_state' for call in header['calls']))
         ]
-    # An earlier version logged the machine options, which the replaying machine chooses instead.
     batch_options = {
         key: value for key, value in header['options'].items() if key not in _MACHINE_OPTIONS
     }

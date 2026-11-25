@@ -1,15 +1,12 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Lightweight argument parsers for the engine commands."""
-
 from __future__ import annotations
 
 from typing import Any
 
 from ._cli_contract import Parser, add_globals, add_json, examples
 
-# The summary that `cuju help` and the root parser give each command of the engine.
 SUMMARIES = {
     'check': 'check the engine against known match outputs',
     'replay': 'check a GRF dump bit for bit, without rendering',
@@ -21,7 +18,6 @@ SHELLS = ('bash', 'zsh', 'fish', 'powershell')
 
 
 def _make(group: Any, name: str, description: str, epilog: str) -> Parser:
-    """Returns the parser of the command `name`, a subparser of `group` or a stand-alone one."""
     if group is None:
         parser = Parser(prog=f'cuju {name}', description=description, epilog=epilog)
     else:
@@ -33,7 +29,6 @@ def _make(group: Any, name: str, description: str, epilog: str) -> Parser:
 
 
 def check(group: Any = None) -> Parser:
-    """Returns the parser of `cuju check`, as a subparser of `group` if given."""
     parser = _make(
         group,
         'check',
@@ -73,7 +68,6 @@ def _check_case_names() -> tuple[str, ...]:
 
 
 def replay(group: Any = None) -> Parser:
-    """Returns the parser of `cuju replay`."""
     parser = _make(
         group,
         'replay',
@@ -99,7 +93,6 @@ def replay(group: Any = None) -> Parser:
 
 
 def dump(group: Any = None) -> Parser:
-    """Returns the parser of `cuju dump`."""
     parser = _make(
         group,
         'dump',
@@ -123,7 +116,6 @@ def dump(group: Any = None) -> Parser:
 
 
 def help_command(group: Any = None) -> Parser:
-    """Returns the parser of `cuju help`."""
     parser = _make(
         group,
         'help',
@@ -144,7 +136,6 @@ def help_command(group: Any = None) -> Parser:
 
 
 def completion(group: Any = None) -> Parser:
-    """Returns the parser of `cuju completion`."""
     parser = _make(
         group,
         'completion',

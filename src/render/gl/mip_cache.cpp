@@ -8,9 +8,7 @@
 #include "../mipmap.h"
 
 namespace cuju::render::gl {
-
 namespace {
-
 std::uint64_t Hash(const TextureLevel &level, Format format) {
     std::uint64_t h = 0x9E3779B97F4A7C15ull ^ (static_cast<std::uint64_t>(format) << 48) ^
                       (static_cast<std::uint64_t>(level.width) << 24) ^
@@ -41,7 +39,7 @@ std::size_t Bytes(const std::vector<TextureLevel> &levels) {
     return n;
 }
 
-}  // namespace
+}
 
 MipCache::MipCache(std::size_t budget) : budget_(budget) {}
 
@@ -59,7 +57,6 @@ void MipCache::Generate(Texture &texture) {
     {
         std::lock_guard<std::mutex> lock(mutex_);
         if (const Entry *e = Find(hash, texture)) {
-            // Speed: level 0 and the chain share the kept bytes, equal to what filtering gives.
             texture.levels = e->levels;
             ++hits_;
             return;
@@ -92,4 +89,4 @@ std::size_t MipCache::bytes() const {
     return bytes_;
 }
 
-}  // namespace cuju::render::gl
+}

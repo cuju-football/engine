@@ -2,14 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""The configuration of `cuju.env`, GRF's `Config` and `Scenario` for levels that are bundles.
-
-`Config` holds GRF's values with the current episode's on top, and builds each episode's scenario
-as GRF does, which draws its seed from Python's `random`. `Scenario(config)` builds the scenario of
-a configuration's current episode. Unlike GRF's `Config`, which `cuju.gfootball` holds, a level may
-name a bundle or a scenario file by its path.
-"""
-
 from __future__ import annotations
 
 import copy
@@ -36,11 +28,6 @@ __all__ = [
 
 
 def parse_player_definition(definition: str) -> tuple[str, dict[str, Any]]:
-    """Returns the name of a player definition, such as `agent:left_players=2`, and its parameters.
-
-    GRF: a definition that names no count gets one left player, and the counts that it names stay
-    strings.
-    """
     name = definition
     parameters = {'left_players': 0, 'right_players': 0}
     if ':' in definition:
@@ -62,35 +49,28 @@ def parse_player_definition(definition: str) -> tuple[str, dict[str, Any]]:
 
 
 def count_players(definition: str) -> int:
-    """Returns the players of a player definition, on both sides."""
     _, parameters = parse_player_definition(definition)
     return int(parameters['left_players']) + int(parameters['right_players'])
 
 
 def count_left_players(definition: str) -> int:
-    """Returns the left players of a player definition."""
     return int(parse_player_definition(definition)[1]['left_players'])
 
 
 def count_right_players(definition: str) -> int:
-    """Returns the right players of a player definition."""
     return int(parse_player_definition(definition)[1]['right_players'])
 
 
 def get_agent_number_of_players(players: list[str]) -> int:
-    """Returns the players of the `agent` definitions among `players`."""
     return sum([count_players(player) for player in players if player.startswith('agent')])
 
 
 # GRF's scenario files of the shipped scenarios, from which cuju's bundles were built.
 _SCENARIO_FILES = os.path.join(os.path.dirname(scenarios.__file__), 'data', 'scenarios')
-# The `build_scenario` of each scenario file loaded, by absolute path. GRF imports a scenario
-# module once per process, so a module keeps its globals from one episode to the next.
 _LOADED: dict[str, Callable[[Any], Any]] = {}
 
 
 def _scenario_function(level: Any) -> Callable[[Any], Any]:
-    """Returns the `build_scenario` of a level, a shipped scenario or a scenario file."""
     path = None
     if isinstance(level, str):
         if level.endswith('.py') and os.path.isfile(level):
@@ -110,11 +90,6 @@ def _scenario_function(level: Any) -> Callable[[Any], Any]:
 
 
 def _run_scenario(config: Config, builder: scenarios.Builder) -> scenarios.ScenarioConfig:
-    """Runs the level's `build_scenario` on `builder` and sets the agents, as GRF's `Scenario`.
-
-    It leaves out the seed and the team order, which `_build_scenario` and the `Scenario` of
-    `scenario_builder` set each in its own way.
-    """
     _scenario_function(config['level'])(builder)
     # GRF: `_FakePlayersForEmptyTeam` gives an empty team a lazy goalkeeper.
     for team in (scenarios.Team.e_Left, scenarios.Team.e_Right):
@@ -131,7 +106,6 @@ def _run_scenario(config: Config, builder: scenarios.Builder) -> scenarios.Scena
 
 
 def _build_scenario(config: Config) -> scenarios.ScenarioConfig:
-    """Returns the episode's scenario as GRF's `Scenario` builds it, after the seed is drawn."""
     built = _run_scenario(config, scenarios.Builder(config['episode_number']))
     if not built.deterministic and 'game_engine_random_seed' in config:
         built.game_engine_random_seed = config['game_engine_random_seed']
@@ -141,7 +115,6 @@ def _build_scenario(config: Config) -> scenarios.ScenarioConfig:
 
 
 def _defaults() -> dict[str, Any]:
-    """Returns GRF's default values of a `Config`, in GRF's order."""
     values = {
         'action_set': 'default',
         'custom_display_stats': None,
@@ -163,7 +136,6 @@ def _defaults() -> dict[str, Any]:
 
 
 def _deterministic(level: Any, episode_number: int) -> bool | None:
-    """Returns whether an episode's scenario is deterministic, `None` if only its bundle knows."""
     if isinstance(level, str) and level.endswith('.py') and os.path.isfile(level):
         from . import scenarios
 
@@ -173,18 +145,9 @@ def _deterministic(level: Any, episode_number: int) -> bool | None:
 
 
 class Config:
-    """GRF's `Config`, the values of an environment with the values of the current episode on top.
-
-    `config[key]` reads the episode's value first, `config[key] = value` and `update` set the
-    environment's, and `get_dictionary` returns both merged, as the configuration of GRF's dumps.
-    """
+    """GRF's `Config`, with the values of the current episode on top."""
 
     def __init__(self, values: dict[str, Any] | None = None) -> None:
-        """Holds GRF's defaults updated with `values`, and builds the first episode's scenario.
-
-        The scenario draws its seed from Python's `random` unless `values` holds
-        `game_engine_random_seed`.
-        """
         self._values = _defaults()
         if values:
             self._values.update(values)
@@ -218,43 +181,25 @@ class Config:
         return key in self._scenario_values or key in self._values
 
     def get_dictionary(self) -> dict[str, Any]:
-        """Returns a copy of the values, with the episode's on top."""
         merged = copy.deepcopy(self._values)
         merged.update(self._scenario_values)
         return merged
 
     def set_scenario_value(self, key: str, value: Any) -> None:
-        """Sets a value for the current episode only."""
         self._scenario_values[key] = value
 
     def serialize(self) -> dict[str, Any]:
-        """Returns the values of the environment, without the episode's."""
         return self._values
 
     def update(self, config: dict[str, Any]) -> None:
         self._values.update(config)
 
     def ScenarioConfig(self) -> scenarios.ScenarioConfig:
-        """Returns the current episode's scenario as GRF's `scenario_builder` builds it.
-
-        The result is a `cuju.scenarios.ScenarioConfig` with GRF's fields, built at the first call
-        of each episode from the values of that moment. Its floats
-        keep the double values of the scenario, which GRF's engine rounds to `float32`.
-
-        Raises:
-            NotImplementedError: If the level is a bundle, which holds no scenario file.
-        """
         if getattr(self, '_scenario_cfg', None) is None:
             self._scenario_cfg = _build_scenario(self)
         return self._scenario_cfg
 
     def NewScenario(self, inc: int = 1) -> None:
-        """Builds the scenario of the episode number `inc` ahead, as GRF's method.
-
-        GRF: the scenario draws the seed of the episode unless the values hold one, and a scenario
-        that is not deterministic takes the team order from the parity of that seed unless the
-        values hold an order.
-        """
         seed = None
         if 'game_engine_random_seed' not in self._values:
             seed = random.randint(0, _SEED_LIMIT)
@@ -264,7 +209,6 @@ class Config:
             self['reverse_team_processing'] = bool(self['game_engine_random_seed'] % 2)
 
     def _new_scenario(self, inc: int, seed: int | None) -> None:
-        """Moves the episode number `inc` ahead with `seed` or no seed, as `NewScenario` does."""
         if 'episode_number' not in self._values:
             self._values['episode_number'] = 0
         self._values['episode_number'] += inc
@@ -275,10 +219,6 @@ class Config:
 
 
 def _without_draw(values: dict[str, Any]) -> Config:
-    """Returns a `Config` of `values` without building a scenario, so nothing is drawn.
-
-    The values already hold the episode number and the team order that the scenario set.
-    """
     config = Config.__new__(Config)
     config._values = _defaults()
     config._values.update(values)
@@ -287,27 +227,9 @@ def _without_draw(values: dict[str, Any]) -> Config:
 
 
 class Scenario(scenarios.Builder):
-    """GRF's `Scenario(config)`, which builds the scenario of a configuration's current episode.
-
-    It runs the `build_scenario` of the configuration's level, a shipped scenario or a scenario
-    file, with itself as the builder, gives an empty team a lazy goalkeeper and sets the agents
-    from the players, as GRF's does. Then, as GRF's `_BuildScenarioConfig`, it draws the seed of
-    the episode from Python's `random` into the configuration's values of the episode unless the
-    configuration holds one of its own, and a scenario that is not deterministic takes that seed,
-    and the team order from its parity unless the configuration holds an order.
-    `ScenarioConfig()` and `config()` return the scenario.
-    """
+    """GRF's `Scenario(config)`, which builds the scenario of a configuration's current episode."""
 
     def __init__(self, config: Config) -> None:
-        """Builds the scenario of `config`.
-
-        Args:
-            config: A `Config`, as GRF's `Scenario` takes.
-
-        Raises:
-            TypeError: If `config` is not a `Config`.
-            NotImplementedError: If the level is a bundle, which holds no scenario file.
-        """
         if not isinstance(config, Config):
             raise TypeError(
                 f"expected a Config of cuju.env, as GRF's Scenario takes, found "
@@ -327,5 +249,4 @@ class Scenario(scenarios.Builder):
             built.reverse_team_processing = config['reverse_team_processing']
 
     def EpisodeNumber(self) -> Any:
-        """Returns the configuration's episode number, as GRF's method reads it."""
         return self._environment_config['episode_number']

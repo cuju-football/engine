@@ -73,6 +73,6 @@ cuju as it was. The next start of Python imports `cuju.gfootball` under its own 
 
 [Migrating from GRF](https://github.com/cuju-football/engine/blob/main/docs/migrating-from-grf.md)
 describes the port, the alias and what changes for code written for GRF, and
-[Differences from GRF](https://github.com/cuju-football/engine/blob/main/docs/differences-from-grf.md)
+[Differences from GRF](https://github.com/cuju-football/engine/blob/main/docs/exactness.md)
 lists every behaviour of cuju that departs from GRF. cuju-gfootball is cuju's own code, under the
 Apache License 2.0, and holds none of GRF's files.

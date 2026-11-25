@@ -14,14 +14,9 @@
 #include <vector>
 
 namespace cuju::render {
-
-// cv2.cvtColor(src, cv2.COLOR_RGB2GRAY) of a packed RGB image. Steps are in bytes.
 void RgbToGray(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
                std::ptrdiff_t dst_step, int width, int height);
 
-// cv2.resize(src, (dst_width, dst_height), interpolation=cv2.INTER_AREA) for 1 or 3 interleaved
-// channels and any sizes of at least one pixel. The tables depend only on the sizes, so one
-// object serves every frame of a size. Run is not reentrant, one object per thread.
 class AreaResize {
 public:
     static constexpr int kLanes = 8;
@@ -31,7 +26,6 @@ public:
     void Run(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
              std::ptrdiff_t dst_step);
 
-    // Run on RgbToGray of a packed RGB image, for one channel: GRF's pixels_gray.
     void RunGray(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
                  std::ptrdiff_t dst_step);
 
@@ -56,8 +50,6 @@ private:
     int block_x_ = 0, block_y_ = 0;
     std::vector<std::int32_t> block_sum_;
 
-    // Area: per destination column its terms, a source offset into the lane buffer and a weight;
-    // per destination row its source rows and their weights.
     std::vector<int> column_first_, column_source_;
     std::vector<float> column_weight_;
     std::vector<int> row_first_, row_source_;
@@ -66,13 +58,12 @@ private:
     std::vector<std::uint8_t> lanes_, gray_;
     std::vector<float> group_, ring_, sum_;
 
-    // Linear: OpenCV's fixed-point offsets and coefficients.
     std::vector<int> x_offset_, y_offset_;
     std::vector<std::int16_t> x_alpha_, y_beta_;
     int x_max_ = 0;
     std::vector<std::int32_t> line0_, line1_;
 };
 
-}  // namespace cuju::render
+}
 
-#endif  // CUJU_RENDER_PIXELS_H
+#endif

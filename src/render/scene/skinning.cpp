@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Ported from GRF's humanoidbase.cpp and vector3.cpp, Apache-2.0.
-
 #include "scene/skinning.h"
 
 #include <cmath>
@@ -12,9 +10,7 @@
 namespace cuju {
 namespace render {
 namespace scene {
-
 namespace {
-
 struct Vec {
     float x, y, z;
 };
@@ -75,7 +71,6 @@ struct Joint {
     Vector3 position;
 };
 
-// UpdateFullbodyModel of one submesh. `out` holds the submesh's elements at `element * stride`.
 void SkinSubmeshInto(const SkinSubmesh &submesh, const Joint *joints, const Vector3 *origin,
                      float zMultiplier, const float *source, float *out, size_t stride) {
     const int vertexCount = (int)submesh.weights.size();
@@ -138,11 +133,8 @@ void SkinSubmeshInto(const SkinSubmesh &submesh, const Joint *joints, const Vect
     }
 }
 
-}  // namespace
+}
 
-// The joints in GRF's order: body, middle, neck, left shoulder, left elbow, right shoulder, right
-// elbow, left thigh, left knee, left ankle, right thigh, right knee, right ankle. Exact: the
-// values GRF derives in PrepareFullbodyModel, read from its memory, the same for every humanoid.
 const BindPose &FullbodyBindPose() {
     static const BindPose pose = {
         {Quaternion(0x1.0c6f7ap-20f, -0.0f, -0.0f, 0x1.0p+0f),
@@ -206,7 +198,7 @@ bool PrepareFullbodyModel(const std::vector<PlanarMesh> &meshes, const VertexCol
     for (const PlanarMesh &mesh : meshes) {
         const int elementOffset = (int)(mesh.vertices.size() / MESH_ELEMENTS);
         const float *data = mesh.vertices.data();
-        std::vector<int> uniqueOf;  // first original vertex of each unique vertex
+        std::vector<int> uniqueOf;
         std::vector<uint32_t> indices;
         indices.reserve(elementOffset / 3);
         for (int v = 0; v < elementOffset; v += 3) {
@@ -269,7 +261,6 @@ bool PrepareFullbodyModel(const std::vector<PlanarMesh> &meshes, const VertexCol
         }
         model.submeshes.push_back(std::move(submesh));
     }
-    // The bake, UpdateFullbodyModel(true) with the base pose as the origin.
     Joint joints[RENDER_JOINTS];
     for (int j = 0; j < RENDER_JOINTS; j++) {
         joints[j].orientation = pose.inverseRotation[j];
@@ -317,6 +308,6 @@ void FullbodyRestBuffer(const SkinnedModel &model, float *buffer) {
     }
 }
 
-}  // namespace scene
-}  // namespace render
-}  // namespace cuju
+}
+}
+}

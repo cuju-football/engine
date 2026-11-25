@@ -2,16 +2,7 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Builds the asset bundle of a GRF scenario file, without GRF.
-
-`build_bundle` runs the file's `build_scenario(builder)` with a builder that behaves as GRF's, for
-episodes of both parities, and writes the bundle without agents (`l0_r0`) through the C API. It
-raises `ScenarioError` for a scenario that GRF refuses or that a bundle cannot hold; the
-repository's `docs/custom-scenarios.md` lists the cases.
-
-    from cuju import scenarios
-    scenarios.build_bundle('my_scenario.py', 'my_scenario_l0_r0.cjb')
-"""
+"""Builds the asset bundle of a GRF scenario file, without GRF."""
 
 from __future__ import annotations
 
@@ -49,9 +40,7 @@ __all__ = [
 _ANIMATIONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'animations.bin')
 # GRF: a team holds at most 11 players, for 11 formation slots and 11 persons.
 _MAXIMUM_TEAM_PLAYERS = 11
-# GRF: creating an environment builds episode 1 twice, and the first episode played is 2. Pairs of
-# distant episode numbers, up to 10**9, also catch a scenario that keys on more than the parity,
-# such as one that changes every 1,000 episodes.
+# GRF: creating an environment builds episode 1 twice, and the first episode played is 2.
 _EPISODES = tuple(range(1, 9)) + tuple(
     10**power + parity for power in range(2, 10) for parity in (0, 1)
 )
@@ -80,19 +69,17 @@ class Team(enum.IntEnum):
 
 
 class ScenarioError(ConfigurationError):
-    """A scenario that GRF refuses or that a bundle cannot hold. It is a `ValueError`."""
+    """A scenario that GRF refuses or that a bundle cannot hold."""
 
 
 # GRF: boost.python converts the values of a scenario to C++ as these helpers check.
 def _to_float(name, value):
-    # A Python float or int, a bool included, converts to a float or a double.
     if not isinstance(value, (int, float)):
         raise ScenarioError(f'expected a number for {name}, found {value!r}')
     return float(value)
 
 
 def _to_integer(name, value, low=-(2**31), high=2**31 - 1):
-    # Only a Python int, a bool included, converts to an int, and a value out of range overflows.
     if not isinstance(value, int):
         raise ScenarioError(f'expected an integer for {name}, found {value!r}')
     if not low <= value <= high:
@@ -105,13 +92,11 @@ def _to_unsigned(name, value):
 
 
 def _to_bool(name, value):
-    # None and any Python int, a bool included, convert to a bool.
     if value is not None and not isinstance(value, int):
         raise ScenarioError(f'expected True or False for {name}, found {value!r}')
     return bool(value)
 
 
-# The fields of GRF's `ScenarioConfig` that a scenario sets, with their defaults (`main.hpp`).
 _FIELDS = {
     'use_magnet': (True, _to_bool),
     'offsides': (True, _to_bool),
@@ -130,10 +115,8 @@ _FIELDS = {
     'left_agents': (1, _to_integer),
     'right_agents': (0, _to_integer),
 }
-# GRF: after `build_scenario`, the configuration of the environment replaces these, and the seed
-# and the order of the teams unless the scenario is deterministic.
+# GRF: after `build_scenario`, the configuration replaces these, and the seed and team order.
 _REPLACED = ('left_agents', 'right_agents', 'real_time')
-# The fields that GRF computes and a scenario only reads.
 _READ_ONLY = ('dynamic_player_selection', 'controllable_left_players', 'controllable_right_players')
 
 
@@ -144,7 +127,6 @@ class FormationEntry:
         self.x = _to_float('x', x)
         self.y = _to_float('y', y)
         engine = sys.modules.get('cuju.gfootball_engine._gameplayfootball')
-        # The roles of `cuju.gfootball.scenarios` are those of cuju's `gfootball_engine`.
         if engine is not None and isinstance(role, engine.e_PlayerRole) and 0 <= role <= 9:
             role = PlayerRole(int(role))
         if not isinstance(role, PlayerRole):
@@ -158,11 +140,7 @@ class FormationEntry:
 
 
 class ScenarioConfig:
-    """The configuration that `builder.config()` returns, with the fields of GRF.
-
-    An attribute that GRF does not know is kept and ignored, as an instance of
-    boost.python keeps it.
-    """
+    """The configuration that `builder.config()` returns, with the fields of GRF."""
 
     def __init__(self):
         object.__setattr__(self, '_values', {name: value for name, (value, _) in _FIELDS.items()})
@@ -241,7 +219,6 @@ class Builder:
         return self._episode_number
 
 
-# The package that a scenario file imports its names from with `from . import *`.
 _PACKAGE = 'cuju._scenario_files'
 
 
@@ -259,16 +236,7 @@ def _scenario_package():
 
 
 def load_scenario(path):
-    """Imports a scenario file and returns its `build_scenario` function.
-
-    Args:
-        path: The path of a scenario file of GRF.
-
-    Raises:
-        ScenarioError: If Python cannot load the file as a module or it defines no
-            `build_scenario`. An error that the file itself raises while it runs, such as an
-            `ImportError`, passes through unchanged.
-    """
+    """Imports a scenario file and returns its `build_scenario` function."""
     _scenario_package()
     name = os.path.splitext(os.path.basename(path))[0]
     spec = importlib.util.spec_from_file_location(f'{_PACKAGE}.{name}', path)
@@ -295,7 +263,6 @@ def _numpy_state():
 
 
 def _build(build_scenario: Callable[[Builder], Any], episode_number):
-    """Runs `build_scenario` for one episode number and returns its description."""
     python_state = random.getstate()
     numpy_state = _numpy_state()
     builder = Builder(episode_number)
@@ -321,8 +288,7 @@ def _build(build_scenario: Callable[[Builder], Any], episode_number):
             team.append(FormationEntry(-1.0, 0.42, PlayerRole.e_PlayerRole_GK, True, True))
         if len(team) > _MAXIMUM_TEAM_PLAYERS:
             raise ScenarioError(f'a team has {len(team)} players, more than the 11 that GRF holds')
-        # GRF: `TeamAIController::CalculateDynamicRoles` seeks the goalkeeper without advancing its
-        # iterator, so it loops forever in open play unless each team's first player is one.
+        # GRF: `CalculateDynamicRoles` loops forever in open play without a goalkeeper first.
         if team[0].role != PlayerRole.e_PlayerRole_GK:
             raise ScenarioError(
                 f'the first player of the {side} team is not a goalkeeper, which hangs GRF once '
@@ -345,19 +311,7 @@ def _build(build_scenario: Callable[[Builder], Any], episode_number):
 
 
 def describe(scenario, episodes=_EPISODES):
-    """Runs a scenario for several episode numbers and returns its even and odd descriptions.
-
-    Args:
-        scenario: The path of a scenario file, or a `build_scenario` function.
-        episodes: The episode numbers to run, which hold both parities. The descriptions of the
-            episode numbers of one parity must be equal.
-
-    Returns:
-        The pair of the descriptions of the even and of the odd episodes.
-
-    Raises:
-        ScenarioError: If GRF refuses the scenario or a bundle cannot hold it.
-    """
+    """Runs a scenario for several episode numbers and returns its even and odd descriptions."""
     build = load_scenario(scenario) if isinstance(scenario, (str, os.PathLike)) else scenario
     by_parity = {}
     for episode in episodes:
@@ -377,8 +331,6 @@ def describe(scenario, episodes=_EPISODES):
 
 
 class _Player(ctypes.Structure):
-    """`cuju_scenario_player` of the C API."""
-
     _fields_ = [
         ('x', ctypes.c_double),
         ('y', ctypes.c_double),
@@ -389,8 +341,6 @@ class _Player(ctypes.Structure):
 
 
 class _Description(ctypes.Structure):
-    """`cuju_scenario_description` of the C API."""
-
     _fields_ = [
         ('version', ctypes.c_int),
         ('ball_x', ctypes.c_double),
@@ -415,12 +365,10 @@ class _Description(ctypes.Structure):
     ]
 
 
-# `CUJU_SCENARIO_VERSION` of the C API.
 _DESCRIPTION_VERSION = 1
 
 
 def _c_description(description, keep):
-    """Returns the C layout of a description. `keep` holds the arrays that it points into."""
     teams = []
     for side in ('left', 'right'):
         players = (_Player * len(description[side]))(
@@ -439,7 +387,6 @@ def _c_description(description, keep):
         right_size=len(description['right']),
         use_magnet=values['use_magnet'],
         offsides=values['offsides'],
-        # The configuration of the environment sets it, and the simulation does not read it.
         real_time=False,
         left_team_difficulty=values['left_team_difficulty'],
         right_team_difficulty=values['right_team_difficulty'],
@@ -455,29 +402,7 @@ def _c_description(description, keep):
 
 
 def build_bundle(scenario, out, name=None, device='cpu', library=None, animations=None):
-    """Writes the asset bundle without agents of a scenario file.
-
-    Args:
-        scenario: The path of a GRF scenario file, or a `build_scenario` function.
-        out: The path of the bundle to write.
-        name: The name of the scenario that the bundle records. `None` takes the name of the file or
-            of the module of the function.
-        device: The library that builds the bundle, `cpu`, `cuda`, `cuda:N` or `auto`. All give the
-            same bytes.
-        library: The path of that library, or `None` for `library_path(device)`.
-        animations: The path of `animations.bin`, or `None` for the tables that the package ships.
-
-    Returns:
-        `out`.
-
-    Warns:
-        UserWarning: If the scenario lasts longer than a batch holds at GRF's default of 10 ticks a
-            step. The warning names the `physics_steps_per_frame` that plays it.
-
-    Raises:
-        ScenarioError: If GRF refuses the scenario or a bundle cannot hold it.
-        LibraryError: If the library fails to build the bundle. It is a `RuntimeError`.
-    """
+    """Writes the asset bundle without agents of a scenario file."""
     even, odd = describe(scenario)
     _warn_if_too_long([even, odd])
     if name is None:
@@ -514,9 +439,6 @@ def build_bundle(scenario, out, name=None, device='cpu', library=None, animation
     return out
 
 
-# A batch keeps 512 seconds of each player's position history, where GRF keeps all of it. So it
-# refuses a match of `game_duration * physics_steps_per_frame // 100 + 1` seconds beyond that,
-# so a match lasts at most 51,199 ticks.
 _HISTORY_SECONDS = 512
 _LONGEST_TICKS = _HISTORY_SECONDS * 100 - 1
 # GRF's default `physics_steps_per_frame`.
@@ -524,7 +446,6 @@ _DEFAULT_TICKS = 10
 
 
 def _warn_if_too_long(descriptions):
-    """Warns if a batch at GRF's default of 10 ticks a step refuses a form of the scenario."""
     duration = max(description['values']['game_duration'] for description in descriptions)
     if duration * _DEFAULT_TICKS <= _LONGEST_TICKS:
         return
@@ -539,14 +460,11 @@ def _warn_if_too_long(descriptions):
     )
 
 
-# Part of every key, so that a change to the key's layout builds anew.
 _CACHE_FORMAT = b'cuju bundle cache 1'
-# The SHA-256 of a file, by its real path, size and modification time.
 _file_digests = {}
 
 
 def _file_digest(path):
-    """Returns the SHA-256 of a file, which a process reads only once while the file stays."""
     status = os.stat(path)
     key = (os.path.realpath(path), status.st_size, status.st_mtime_ns)
     if key not in _file_digests:
@@ -555,13 +473,7 @@ def _file_digest(path):
 
 
 def cache_directory() -> str:
-    """Returns the directory of the bundle cache, in the user's cache folder.
-
-    It is `$XDG_CACHE_HOME/cuju/bundles`, which is `~/.cache/cuju/bundles` without
-    `XDG_CACHE_HOME`, on Linux, `~/Library/Caches/cuju/bundles` on macOS and
-    `%LOCALAPPDATA%` followed by `cuju` and `bundles` on Windows. A batch builds each scenario
-    file once and later batches load the bundle from here.
-    """
+    """Returns the directory of the bundle cache, in the user's cache folder."""
     if os.name == 'nt':
         base = os.environ.get('LOCALAPPDATA') or os.path.join(
             os.path.expanduser('~'), 'AppData', 'Local'
@@ -574,33 +486,7 @@ def cache_directory() -> str:
 
 
 def cached_bundle(scenario, directory=None, device='cpu', library=None, animations=None):
-    """Returns the bundle of a scenario file in a cache directory, which builds it only once.
-
-    The bundle is the one that `build_bundle` writes with the name of the file. Its key is the
-    SHA-256 of the file's bytes, its name, the animation tables, the library that builds it and this
-    builder, so a change to any of them builds anew. Every batch takes its scenario files from the
-    cache through this function.
-
-    The file runs only when its key is new. A file that reads anything besides its own bytes, such
-    as another file or `os.environ`, keeps the bundle of its first build until the file changes or
-    the cache is cleared. The cache is safe to delete at any time.
-
-    Args:
-        scenario: The path of a GRF scenario file.
-        directory: The cache directory, created if missing. `None` takes `cache_directory()`.
-        device: The library that builds the bundle on a miss, `cpu` or `cuda`. Both give the same
-            bytes, under keys of their own.
-        library: The path of that library, or `None` for `library_path(device)`.
-        animations: The path of `animations.bin`, or `None` for the tables that the package ships.
-
-    Returns:
-        The path of the bundle in the cache.
-
-    Raises:
-        ScenarioError: If GRF refuses the scenario or a bundle cannot hold it.
-        LibraryError: If the library fails to build the bundle. It is a `RuntimeError`.
-        OSError: If the file cannot be read, or the cache directory cannot be created or written.
-    """
+    """Returns the bundle of a scenario file in a cache directory, which builds it only once."""
     if directory is None:
         directory = cache_directory()
     name = os.path.splitext(os.path.basename(scenario))[0]
@@ -620,8 +506,6 @@ def cached_bundle(scenario, directory=None, device='cpu', library=None, animatio
     if os.path.isfile(path):
         return path
     os.makedirs(directory, exist_ok=True)
-    # Another process may build the same key at once, so each writes a file of its own and the
-    # rename puts one whole bundle in place.
     descriptor, partial = tempfile.mkstemp(prefix=f'.{name}-', suffix='.partial', dir=directory)
     os.close(descriptor)
     try:
@@ -636,10 +520,6 @@ def cached_bundle(scenario, directory=None, device='cpu', library=None, animatio
 
 
 def _batch_bundle(scenario, device, library, animations=None):
-    """Returns the cached bundle of a scenario file, or `None` if the cache is unwritable.
-
-    The bundle and its key take the animation tables at `animations`, the batch's.
-    """
     directory = cache_directory()
     try:
         path = cached_bundle(

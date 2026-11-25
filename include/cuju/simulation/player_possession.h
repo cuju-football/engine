@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// How long a player needs to reach the ball, and whether the player has the ball.
 #pragma once
 
 #include "../game_definitions.h"
@@ -14,7 +13,6 @@
 
 namespace cuju {
 namespace simulation {
-
 CUJU_FUNCTION inline float GetMaximumVelocity(const StaticData &staticData, int player) {
     return SPRINT_VELOCITY * (0.9f + staticData.data[player].velocityStatistic * 0.1f);
 }
@@ -41,7 +39,6 @@ CUJU_FUNCTION inline bool IsPassOrShot(int functionType) {
            functionType == e_FunctionType_HighPass || functionType == e_FunctionType_Shot;
 }
 
-// Runs on one lane.
 CUJU_FUNCTION_NO_INLINE inline void PlayerUpdatePossessionStatistics(World &world,
                                                                      const StaticData &staticData,
                                                                      int player) {
@@ -83,8 +80,6 @@ CUJU_FUNCTION_NO_INLINE inline void PlayerUpdatePossessionStatistics(World &worl
     }
 
     if (playerState.timeNeededToGetToBallMilliseconds < DEFAULT_TOUCH_OFFSET_MILLISECONDS) {
-        // Exact: `DEFAULT_TOUCH_OFFSET_MILLISECONDS * 0.001` is a double that rounds to float
-        // before it scales the movement.
         playerState.timeNeededToGetToBallMilliseconds = FloatToUnsigned32(
             NormalizedClamp(
                 ((position + movement * (float)(DEFAULT_TOUCH_OFFSET_MILLISECONDS * 0.001)) -
@@ -122,5 +117,5 @@ CUJU_FUNCTION_NO_INLINE inline void PlayerUpdatePossessionStatistics(World &worl
     }
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

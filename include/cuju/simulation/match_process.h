@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// One tick of a match. Each step runs in the frame it expects, between two `MirrorMatch` calls.
 #pragma once
 
 #include "../profiling.h"
@@ -21,13 +20,9 @@
 
 namespace cuju {
 namespace simulation {
-
-// Slot 0 holds the newest of at most three mental images.
 CUJU_FUNCTION_NO_INLINE inline void PushMentalImage(World &world) {
     CUJU_PROFILE_SCOPE(PUSH_MENTAL_IMAGE);
     state::MatchState &match = world.serialized.match;
-    // Speed: word copies across the lanes. A struct assignment unrolls into thousands of
-    // instructions.
     int imageCount = match.mentalImages.count < 3 ? match.mentalImages.count + 1 : 3;
     for (int image = imageCount - 1; image > 0; image--) {
         WarpCopy(match.mentalImages[image], match.mentalImages[image - 1]);
@@ -79,7 +74,6 @@ CUJU_FUNCTION_NO_INLINE inline void CalculateBestPossessionTeamID(World &world) 
         match.bestPossessionTeam = -1;
 }
 
-// Exact: the bounds of the parameters compare in double.
 CUJU_FUNCTION_NO_INLINE inline bool TriangleIntersectsLine(const Vector3 vertices[3],
                                                            const Vector3 &normal,
                                                            const Vector3 &lineStart,
@@ -129,8 +123,6 @@ CUJU_FUNCTION_NO_INLINE inline bool CheckForGoal(const World &world, int side,
     return intersectsLower || intersectsUpper;
 }
 
-// Returns `false` when the tick ends early, while play waits for a restart, which only advances
-// the clock, or on an unsupported path, which also sets `ok` to `false`.
 CUJU_FUNCTION_NO_INLINE inline bool MatchProcess(World &world, const SimulationContext &context,
                                                  bool &ok) {
     CUJU_PROFILE_SCOPE(MATCH_PROCESS);
@@ -211,8 +203,6 @@ CUJU_FUNCTION_NO_INLINE inline bool MatchProcess(World &world, const SimulationC
     MirrorMatch(world, reverse, !reverse, reverse);
     if (match.inPlay) {
         if (goal) {
-            // The ball entered one team's goal, so the other scores. `goalCount` is in processing
-            // order.
             const int scoringTeam = firstTeamGoal ? second : first;
             match.goalCount[scoringTeam == first ? 0 : 1] += 1;
             // GRF: `SetGoalCount`'s caption changes only while rendering.
@@ -293,7 +283,6 @@ CUJU_FUNCTION_NO_INLINE inline bool MatchProcess(World &world, const SimulationC
     return true;
 }
 
-// Runs on one lane.
 CUJU_FUNCTION_NO_INLINE inline void PlayerPreparePutBuffers(World &world,
                                                             const SimulationContext &context,
                                                             int player) {
@@ -330,8 +319,6 @@ CUJU_FUNCTION_NO_INLINE inline void PlayerPreparePutBuffers(World &world,
 CUJU_FUNCTION inline void MatchPreparePutBuffers(World &world, const SimulationContext &context) {
     CUJU_PROFILE_SCOPE(PUT_BUFFERS);
     const int first = world.FirstTeamID(), second = 1 - first;
-    // The lanes split a team. Each player writes only its own offsets and buffers, and reads only
-    // the ball and the spatial state of the other team.
     MirrorMatch(world, false, false, first == 1);
     {
         PlayerList players = TeamActivePlayers(world, first);
@@ -347,7 +334,6 @@ CUJU_FUNCTION inline void MatchPreparePutBuffers(World &world, const SimulationC
     MirrorMatch(world, false, false, first == 0);
 }
 
-// The humanoids are independent, so one batch spreads every node across the lanes.
 CUJU_FUNCTION inline bool MatchFetchPutBuffers(World &world, const SimulationContext &context) {
     const int first = world.FirstTeamID(), second = 1 - first;
     const animation::Skeleton *skeletons[animation::MAXIMUM_PUT_HUMANOIDS];
@@ -388,5 +374,5 @@ CUJU_FUNCTION inline bool GameTaskProcessPhase(World &world, const SimulationCon
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

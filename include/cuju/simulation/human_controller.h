@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The keyboard input of the gamers. Every `player` passed here must be under external control.
 #pragma once
 
 #include "../libm/powf.h"
@@ -10,7 +9,6 @@
 
 namespace cuju {
 namespace simulation {
-
 enum e_ButtonFunction {
     e_ButtonFunction_LongPass,
     e_ButtonFunction_HighPass,
@@ -64,7 +62,7 @@ CUJU_FUNCTION_NO_INLINE inline void HumanGetKeyboardInput(World &world, int play
           &directionY = rawInputDirection.coordinates[1];
     // Exact: each clamp equals `std::min(0.0f, x)` or `std::max(0.0f, x)`, signed zero included.
     // nvcc turns `(x < 0.0f) ? x : 0.0f` into a min that keeps an input -0, where the expression
-    // gives +0. The expression never gives -0, so `+ 0.0f` matches it on host and device.
+    // gives +0.
     if (position.coordinates[0] > PITCH_HALF_LENGTH)
         directionX = ((directionX < 0.0f) ? directionX : 0.0f) + 0.0f;
     if (position.coordinates[0] < -PITCH_HALF_LENGTH)
@@ -113,5 +111,5 @@ CUJU_FUNCTION inline Vector3 HumanGetDirection(World &world, int player) {
         .GetNormalized(Humanoid(world, player).spatialState.directionVector);
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

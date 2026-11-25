@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The earliest times at which a player can reach the predicted path of the ball.
 #pragma once
 
 #include "profiling.h"
@@ -14,7 +13,6 @@
 #include "x86.h"
 
 namespace cuju {
-
 // GRF: the time compares as unsigned, so a negative time reads the last entry, at 2990 ms, as a
 // time past the span does.
 CUJU_HOST_DEVICE Vector3 BallPredict(const Vector3 *predictions, int predictTimeMilliseconds) {
@@ -65,7 +63,6 @@ CUJU_HOST_DEVICE_NO_INLINE PossessionScanResult PossessionScan(const Vector3 *st
     uint32_t timeStepMilliseconds = 10;
     uint32_t previousMilliseconds = 0;
 #if !defined(__CUDA_ARCH__)
-    // Speed: on the host, the targets of the scan share the walk of a moving player.
     TimeNeededWalk walk(position, movement, maximumVelocity);
 #endif
     for (uint32_t milliseconds = startTimeMilliseconds;
@@ -108,7 +105,6 @@ CUJU_HOST_DEVICE_NO_INLINE PossessionScanResult PossessionScan(const Vector3 *st
             float maximumBallVelocity = 50;
             uint32_t timeToGoMilliseconds =
                 (uint32_t)FloatToInt32(roundf((ballDistance / maximumBallVelocity) * 1000.0f));
-            // Exact: the clamp runs in float, and the result converts back as x86-64 converts it.
             timeStepMilliseconds = FloatToUnsigned32(clamp((float)timeToGoMilliseconds, 10, 500));
             timeStepMilliseconds = (timeStepMilliseconds / 10) * 10;
         } else {
@@ -120,4 +116,4 @@ CUJU_HOST_DEVICE_NO_INLINE PossessionScanResult PossessionScan(const Vector3 *st
     return scan;
 }
 
-}  // namespace cuju
+}

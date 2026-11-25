@@ -1,15 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Translates the module names inside the pickle of a state between cuju and GRF, unpickling none.
-
-A state of `cuju.gfootball` pickles GRF's classes under `cuju.gfootball`, and a state of GRF under
-`gfootball`. The engine stores GRF's names, so states move between GRF and cuju either way. The
-rewrite walks the opcodes, replaces the module names of `GLOBAL` and `INST` and every string that
-is exactly such a name, and keeps the frames, whose lengths it updates. A name that is no module of
-the port stays as it is.
-"""
-
 from __future__ import annotations
 
 import functools
@@ -25,7 +16,6 @@ _STRINGS = ('SHORT_BINUNICODE', 'BINUNICODE', 'BINUNICODE8', 'UNICODE')
 
 @functools.lru_cache(maxsize=1)
 def _names():
-    """Returns the module names of the port and of the engine, cuju's mapped to GRF's."""
     names = dict((_ENGINE, _ENGINE_PACKAGE))
     root = os.path.join(_PACKAGE, 'gfootball')
     for folder, directories, files in os.walk(root):
@@ -45,17 +35,14 @@ def _reverse():
 
 
 def to_grf(data: bytes) -> bytes:
-    """Returns the pickle `data` with cuju's module names of the port turned into GRF's."""
     return _translate(data, _names())
 
 
 def from_grf(data: bytes) -> bytes:
-    """Returns the pickle `data` with GRF's module names turned into cuju's."""
     return _translate(data, _reverse())
 
 
 def _string(kind: str, value: str) -> bytes:
-    """Encodes `value` with the operation `kind` that held the name, as the pickler would."""
     if kind == 'UNICODE':
         return b'V' + value.encode('raw-unicode-escape') + b'\n'
     encoded = value.encode('utf-8', 'surrogatepass')
@@ -72,11 +59,9 @@ def _translate(data: bytes, mapping: dict) -> bytes:
     try:
         operations = list(pickletools.genops(data))
     except Exception:
-        # Bytes that hold no pickle reach the engine as they are, as GRF's do.
         return data
     if not any(_rewrites(opcode.name, argument, mapping) for opcode, argument, _ in operations):
         return data
-    # Each piece is the bytes of one operation, and each frame holds the pieces up to its end.
     pieces = []
     frames = []
     frame_end = None
@@ -102,7 +87,6 @@ def _translate(data: bytes, mapping: dict) -> bytes:
 
 
 def _rewrites(name, argument, mapping):
-    """Returns the new bytes of an operation that names a mapped module, or `None`."""
     if name in ('GLOBAL', 'INST'):
         module, _, attribute = argument.partition(' ')
         if module in mapping:

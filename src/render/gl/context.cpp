@@ -18,7 +18,6 @@
 #include "pipeline.h"
 
 namespace cuju::render::gl {
-
 struct Context::TextureObject {
     Texture texture;
     std::uint32_t internal_format = 0;
@@ -51,8 +50,6 @@ struct Context::FramebufferObject {
     std::vector<std::uint32_t> draw_buffers = {GL_COLOR_ATTACHMENT0};
 };
 
-// Draws gathered for one worker: each keeps its state, and the buffers it reads stay as they are
-// until DrainDraws.
 struct DrawChunk {
     struct Item {
         std::shared_ptr<const DrawState> state;
@@ -64,11 +61,9 @@ struct DrawChunk {
 };
 
 namespace {
-
-// Speed: the indices of the draws one worker sets up at a time.
 constexpr long kChunkIndices = 4096;
 
-}  // namespace
+}
 
 struct Context::ProgramObject {
     std::unique_ptr<Program> program;
@@ -76,7 +71,6 @@ struct Context::ProgramObject {
 };
 
 namespace {
-
 bool FormatOf(std::uint32_t internal, Format *f) {
     switch (internal) {
         case GL_RGB8:
@@ -105,7 +99,6 @@ bool FormatOf(std::uint32_t internal, Format *f) {
     }
 }
 
-// _mesa_float_to_half, round to nearest even, for clear colors.
 std::uint16_t HalfRne(float x) {
     const std::uint32_t b = Bits(x);
     const std::uint32_t sign = (b >> 16) & 0x8000u;
@@ -136,14 +129,12 @@ std::uint32_t UnormRound(float v, float scale) {
     return static_cast<std::uint32_t>(std::lrint(c * scale));
 }
 
-}  // namespace
+}
 
 Context::Context(const ContextOptions &options) : options_(options) {
     pool_ = std::make_unique<ThreadPool>(std::max(1, options.threads));
     scene_ = std::make_unique<SceneList>();
     chunk_ = std::make_unique<DrawChunk>();
-    // Whole 4x4 blocks are shaded at the bottom edge, so the rows up to a multiple of 4 are kept,
-    // as llvmpipe's own surfaces are padded.
     window_.assign(static_cast<std::size_t>(options.width) * ((options.height + 3) & ~3), 0u);
     default_vao_ = std::make_unique<VertexArrayObject>();
     viewport_[2] = options.width;
@@ -154,8 +145,6 @@ Context::~Context() {
     DrainDraws();
     WaitRaster();
 }
-
-// Textures.
 
 std::uint32_t Context::GenTexture() {
     const std::uint32_t n = next_texture_++;
@@ -219,9 +208,6 @@ void Context::TexParameterf(std::uint32_t target, std::uint32_t pname, float val
 }
 
 namespace {
-
-// Copies GL_RGB or GL_RGBA unsigned bytes at unpack alignment 4 into a level, as st/mesa's
-// texstore does for GRF's formats: raw bytes, alpha 0xFF from RGB into RGBA8.
 void Unpack(TextureLevel &level, Format format, int x, int y, int w, int h,
             std::uint32_t src_format, const std::uint8_t *src) {
     const int bpp = BytesPerTexel(format);
@@ -245,7 +231,7 @@ void Unpack(TextureLevel &level, Format format, int x, int y, int w, int h,
     }
 }
 
-}  // namespace
+}
 
 void Context::TexImage2D(std::uint32_t, int level, std::uint32_t internalformat, int width,
                          int height, std::uint32_t format, std::uint32_t, const void *data) {
@@ -264,7 +250,6 @@ void Context::TexImage2D(std::uint32_t, int level, std::uint32_t internalformat,
     TextureLevel &lv = t->texture.levels[level];
     lv.width = width;
     lv.height = height;
-    // A texture without data may become a render target, whose rows run to a multiple of 4.
     const int rows = data ? height : (height + 3) & ~3;
     lv.texels.assign(static_cast<std::size_t>(width) * rows * BytesPerTexel(f), 0);
     if (data) {
@@ -301,8 +286,6 @@ const Texture *Context::GetTexture(std::uint32_t name) {
     auto it = textures_.find(name);
     return it == textures_.end() ? nullptr : &it->second->texture;
 }
-
-// Buffers and vertex arrays.
 
 std::uint32_t Context::GenBuffer() {
     const std::uint32_t n = next_buffer_++;
@@ -409,8 +392,6 @@ void Context::VertexAttribPointer(std::uint32_t index, int size, std::uint32_t t
     a.offset = offset;
 }
 
-// Framebuffers.
-
 std::uint32_t Context::GenFramebuffer() {
     const std::uint32_t n = next_fbo_++;
     fbos_[n] = std::make_unique<FramebufferObject>();
@@ -499,8 +480,6 @@ TargetInfo Context::CurrentTarget() {
     return t;
 }
 
-// Programs.
-
 std::uint32_t Context::CreateProgram(std::unique_ptr<Program> program) {
     const std::uint32_t n = next_program_++;
     auto po = std::make_unique<ProgramObject>();
@@ -575,8 +554,6 @@ void Context::UniformMatrix4fv(int loc, int count, bool transpose, const float *
     UniformBits(loc, static_cast<int>(b.size()), b.data());
 }
 
-// Fixed-function state.
-
 void Context::Enable(std::uint32_t cap) {
     if (cap == GL_CULL_FACE) cull_ = true;
     if (cap == GL_DEPTH_TEST) depth_test_ = true;
@@ -611,7 +588,6 @@ void Context::ClearDepth(double depth) { clear_depth_ = std::min(1.0, std::max(0
 
 void Context::Clear(std::uint32_t mask) {
     if (discard_) return;
-    // glClear honours the depth mask.
     if (!depth_mask_) {
         mask &= ~GL_DEPTH_BUFFER_BIT;
     }
@@ -645,15 +621,12 @@ void Context::Clear(std::uint32_t mask) {
         }
     }
     if ((mask & GL_DEPTH_BUFFER_BIT) && target.depth.data) {
-        // util_pack_z for Z16_UNORM.
         const std::uint16_t z =
             clear_depth_ >= 1.0 ? 0xFFFF
                                 : static_cast<std::uint16_t>(std::lrint(clear_depth_ * 65535.0));
         scene.ClearDepth(z);
     }
 }
-
-// Drawing.
 
 std::shared_ptr<const DrawState> Context::SnapshotState() {
     auto it = programs_.find(program_);
@@ -727,8 +700,6 @@ void Context::Draw(DrawInput &in) {
     if (!scene_->Begun()) {
         scene_->Begin(target);
     }
-    // st_atom_rasterizer.c and st_atom_viewport.c: the window is Y_0_TOP with a negated y scale and
-    // the bottom edge rule, framebuffer objects flip the notion of front.
     RasterState rs;
     rs.fb_width = target.width;
     rs.fb_height = target.height;
@@ -757,8 +728,6 @@ void Context::Draw(DrawInput &in) {
         RunDraw(*kept, rs, in, scene);
         return;
     }
-    // Speed: the draw's vertex processing, setup and binning run on a worker, into a part of the
-    // scene of its own, while this thread goes on to the next draws.
     chunk_->items.push_back({SnapshotState(), rs, in});
     chunk_->indices += in.count;
     if (chunk_->indices >= kChunkIndices) {
@@ -805,9 +774,6 @@ void Context::FlushScene() {
         scene_->Rasterize(pool_.get(), &stats_.blocks_shaded);
         return;
     }
-    // Speed: a scene starts while older ones still run, at most one, when it neither reads nor
-    // writes what they write, nor writes what they read, as the shadow map and the G-buffer.
-    // Each scene in flight that this one conflicts with ends first, with the ones before it.
     std::size_t wait = rastering_.size() >= 2 ? rastering_.size() - 1 : 0;
     for (std::size_t i = 0; i < rastering_.size(); ++i) {
         if (SceneList::Conflict(*rastering_[i], *scene_)) wait = std::max(wait, i + 1);
@@ -850,11 +816,7 @@ void Context::SetDiscard(bool discard) {
     discard_ = discard;
 }
 
-// Readback.
-
 namespace {
-
-// The 10-bit to 8-bit conversion of the readback, (v * 255 + 511) / 1023, as a table.
 struct Unorm10To8 {
     std::uint8_t v[1024];
     Unorm10To8() {
@@ -866,7 +828,7 @@ struct Unorm10To8 {
 
 const Unorm10To8 kUnorm10To8;
 
-}  // namespace
+}
 
 void Context::ReadPixels(int x, int y, int width, int height, std::uint32_t format,
                          std::uint32_t type, void *out) {
@@ -876,7 +838,6 @@ void Context::ReadPixels(int x, int y, int width, int height, std::uint32_t form
     const std::size_t stride =
         (static_cast<std::size_t>(width) * 3 + 3) & ~static_cast<std::size_t>(3);
     const std::uint8_t *lut = kUnorm10To8.v;
-    // Bands of rows on the rasterizer's threads; every byte depends on its own word only.
     constexpr int kBand = 32;
     const int bands = (height + kBand - 1) / kBand;
     const std::function<void(int)> band = [&](int k) {
@@ -908,4 +869,4 @@ std::vector<std::uint32_t> Context::ReadDefaultFramebufferWords() {
     return out;
 }
 
-}  // namespace cuju::render::gl
+}

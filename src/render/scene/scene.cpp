@@ -11,9 +11,7 @@
 #include "../assets/text.h"
 
 namespace cuju::render::scene {
-
 namespace {
-
 using namespace gl;
 
 float Clamp(float v, float lo, float hi) {
@@ -27,7 +25,6 @@ float NormalizedClamp(float value, float min, float max) {
     return (b - min) / (max - min);
 }
 
-// GetTriangleMeshAABB, with GRF's unscaled indexing of indexed meshes.
 Aabb MeshAabb(const Mesh &mesh) {
     Aabb a;
     a.Reset();
@@ -53,7 +50,7 @@ Aabb MeshAabb(const Mesh &mesh) {
 
 constexpr int kElements = 5;
 
-}  // namespace
+}
 
 GeometryData GeometryData::Copy() {
     GeometryData c;
@@ -647,7 +644,6 @@ void Scene::LightEnqueueShadowMap(Object &light, Object &camera,
     proj.e[11] = -((far_cap + near_cap) / (far_cap - near_cap));
     proj.e[15] = 1;
     map.projection = Matrix4::Identity() * proj;
-    // GraphicsLight's position, normalized with (0, 0, -1) for a zero vector.
     Vector3 lp = light.light_gfx_position;
     Vector3 dir = lp.GetNormalized(Vector3(0, 0, -1));
     Vector3 pos = dir + camera.shadow_camera_position.Get2D() + Vector3(0, 70, 0);
@@ -829,4 +825,4 @@ void Scene::CameraPoke(Object &camera) {
     buffer.lights.clear();
 }
 
-}  // namespace cuju::render::scene
+}

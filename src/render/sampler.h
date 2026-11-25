@@ -19,51 +19,32 @@
 #include "texture.h"
 
 namespace cuju::render {
-
 enum class SamplerKind : std::uint8_t {
-    // LINEAR_MIPMAP_LINEAR, anisotropy 16, REPEAT on power-of-two sizes, every level: albedo,
-    // normal, specular and illumination maps. A texfunc.
     kAnisoTrilinearRepeat,
-    // LINEAR, anisotropy 16, REPEAT, level 0 only: the ambient pass's noise. Inline code.
     kAnisoLinearRepeat,
-    // LINEAR, anisotropy 16, CLAMP_TO_EDGE, level 0 only: the overlay. Inline code.
     kAnisoLinearClamp,
-    // NEAREST, CLAMP_TO_EDGE, level 0: G-buffer, accumulation and depth reads. A texfunc.
     kNearestClamp,
-    // NEAREST, REPEAT, level 0: units without a texfunc. Inline code.
     kNearestRepeat,
-    // LINEAR, CLAMP_TO_EDGE, explicit level 0 of a one-level view: the mipmap blit. A texfunc.
     kLinearClampLod0,
 };
 
-// Formats without alpha return alpha exactly 1, through the swizzle of their GL_RGB view, even
-// where the filtered alpha would be NaN.
 inline bool ForcesAlphaOne(Format format) {
     return format != Format::R8G8B8A8_SRGB && format != Format::R8G8B8A8_UNORM &&
            format != Format::R16G16B16A16_FLOAT;
 }
 
-// Samples `quads` quads. s and t hold 4 * quads coordinates in lane order. The result is SoA:
-// out[c * 4 * quads + lane] for channel c = r, g, b, a. A Z16 texture reads as (d, d, d, 1).
 void SampleQuads(SamplerKind kind, const Texture &texture, int quads, const float *s,
                  const float *t, float *out);
 
-// SampleQuads with kAnisoTrilinearRepeat for the channels in `channels` only, bit c for channel c.
-// Channels outside the mask may be left unwritten; the others hold the bits SampleQuads gives.
 void SampleAnisoTrilinearQuads(const Texture &texture, int quads, const float *s, const float *t,
                                unsigned channels, float *out);
 
-// The same for the kinds that read one level, on a level given apart from its texture, as the
-// mipmap blit's one-level view does. kAnisoTrilinearRepeat needs SampleQuads.
 void SampleLevelQuads(SamplerKind kind, Format format, const TextureLevel &level, int quads,
                       const float *s, const float *t, float *out);
 
-// The shadow map lookup of textureProj with LEQUAL compare: LINEAR, anisotropy 16, CLAMP_TO_EDGE
-// on level 0 of a Z16 texture. `ref` is the projected r, clamped inside. The result is per lane,
-// returned by llvmpipe in r, g and b with alpha 1.
 void SampleShadowQuads(const Texture &texture, int quads, const float *s, const float *t,
                        const float *ref, float *out);
 
-}  // namespace cuju::render
+}
 
-#endif  // CUJU_RENDER_SAMPLER_H
+#endif

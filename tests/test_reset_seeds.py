@@ -9,7 +9,6 @@ import cuju
 from conftest import actions_at, tensor_bytes
 from cuju._batch import Batch
 
-# Short episodes, so that the later resets draw from each environment's generator.
 ASSETS = 'academy_empty_goal_close_l1_r0'
 
 

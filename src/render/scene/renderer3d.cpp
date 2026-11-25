@@ -9,9 +9,7 @@
 #include "random.h"
 
 namespace cuju::render::scene {
-
 namespace {
-
 using namespace gl;
 
 constexpr std::uint32_t kStaticDraw = 0x88E4;
@@ -75,7 +73,6 @@ std::uint32_t AttachmentEnum(Attachment a) {
     return GL_NONE;
 }
 
-// GeneratePoissonKernel with usePrecalculatedSet false, from rng_non_deterministic.
 void GeneratePoissonKernel(GrfRng &rng, float *kernel, unsigned kernel_size) {
     const unsigned candidate_size = 32;
     std::vector<Vector3> samples(kernel_size), candidates(candidate_size);
@@ -119,7 +116,7 @@ ProgramKind KindOf(const std::string &name) {
     return ProgramKind::kOverlay;
 }
 
-}  // namespace
+}
 
 Texture::~Texture() { DeleteTexture(); }
 
@@ -302,7 +299,7 @@ void Renderer3D::LoadShader(const std::string &name, const std::string &file) {
         SetUniformFloat("ambient", "contextWidth", static_cast<float>(width_));
         SetUniformFloat("ambient", "contextHeight", static_cast<float>(height_));
         float kernel[32 * 3];
-        GrfRng rng(0);  // run_game seeds both generators with 0 before the shaders load
+        GrfRng rng(0);
         GeneratePoissonKernel(rng, kernel, 32);
         ssao_kernel_.assign(kernel, kernel + 32 * 3);
         SetUniformFloat3Array("ambient", "SSAO_kernel", 32, kernel);
@@ -865,4 +862,4 @@ void Renderer3D::SetFramebufferGammaCorrection(bool on) {
         gl_.Disable(kFramebufferSrgb);
 }
 
-}  // namespace cuju::render::scene
+}

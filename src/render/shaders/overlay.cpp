@@ -14,16 +14,14 @@
 #include "quad_vs.h"
 
 namespace cuju::render::shaders {
-
 namespace {
-
 constexpr int kLanes = 16;
 
 inline std::uint32_t StoreUnorm16(float c) {
     return gl::Unorm16Ftz(ftz::MinPs(ftz::MaxPs(c, 0.0f), 1.0f));
 }
 
-}  // namespace
+}
 
 OverlayProgram::OverlayProgram()
     : gl::Program({{"model", gl::kMat4, 1},
@@ -31,7 +29,6 @@ OverlayProgram::OverlayProgram()
                    {"ourTexture", gl::kSampler2D, 1}},
                   {{"vertex", 0}}, {gl::Interp::kPerspective}) {}
 
-// gl_Position = projection * (model * vertex) and TexCoords = vertex.xy, as the JIT evaluates it.
 void OverlayProgram::RunVertices(const gl::DrawState &state, int count, const float *const *attribs,
                                  float *clip, float *inputs) const {
     const float *v = attribs[0];
@@ -44,9 +41,6 @@ void OverlayProgram::RunVertices(const gl::DrawState &state, int count, const fl
     }
 }
 
-// fs162: the texture at the perspective-interpolated coordinates, then the blend of the 16-bit
-// values: out = sat(mul(src, a) + mul(dst, 65535 - a)) for B, G, R and A alike, with the stored
-// 10-bit channels expanded by (v << 6) | (v >> 4) and the 2-bit alpha by replication.
 void OverlayProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     const Texture *tex = b.state->SamplerTexture(kOurTexture);
     if (tex == nullptr || tex->levels.empty()) {
@@ -93,4 +87,4 @@ void OverlayProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kOverlay, OverlayProgram);
 
-}  // namespace cuju::render::shaders
+}

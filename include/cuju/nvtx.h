@@ -1,16 +1,12 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// NVTX ranges around the calls of the C API, in the domain `cuju` of Nsight Systems, in a build
-// with `CUJU_NVTX`. Speed: without an attached tool, NVTX's calls return at once. A build without
-// `CUJU_NVTX` has no ranges.
 #pragma once
 
 #if defined(CUJU_NVTX)
 #include <nvtx3/nvToolsExt.h>
 
 namespace cuju {
-
 inline nvtxDomainHandle_t NvtxDomain() {
     static const nvtxDomainHandle_t domain = nvtxDomainCreateA("cuju");
     return domain;
@@ -31,10 +27,8 @@ public:
     NvtxRange &operator=(const NvtxRange &) = delete;
 };
 
-}  // namespace cuju
+}
 
-// A range named by the string literal `name` until the end of the scope. Speed: the name is
-// registered once, so a range costs a push and a pop.
 #define CUJU_NVTX_RANGE(name)                                  \
     static const nvtxStringHandle_t cujuNvtxName =             \
         nvtxDomainRegisterStringA(::cuju::NvtxDomain(), name); \

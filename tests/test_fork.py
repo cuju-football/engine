@@ -21,7 +21,6 @@ def in_child(function, timeout=60):
     """Runs `function` in a forked child and returns the bytes it returns, failing on a hang."""
     read, write = os.pipe()
     with warnings.catch_warnings():
-        # Python warns that a fork of a process with threads may deadlock, which is the point here.
         warnings.simplefilter('ignore', DeprecationWarning)
         pid = os.fork()
     if pid == 0:
@@ -95,7 +94,6 @@ def test_fork_during_a_step_of_another_thread():
     finally:
         stop.set()
         worker.join()
-    # A fork in the middle of a step leaves the child an incomplete batch, which it refuses.
     assert child.startswith('ok ') or (
         child.startswith('error LibraryError') and 'forked while another thread' in child
     )

@@ -23,7 +23,6 @@
 
 namespace cuju::render::pitch {
 namespace {
-
 constexpr float kPitchHalfW = 55;
 constexpr float kPitchHalfH = 36;
 constexpr float kPitchFullHalfW = 60;
@@ -37,7 +36,6 @@ constexpr int kSeamlessTexH = 1200;
 constexpr int kOverlayTexW = 4096;
 constexpr int kOverlayTexH = 2048;
 
-// blunted::clamp and NormalizedClamp.
 float Clamp(const float value, const float min, const float max) {
     if (min > value) return min;
     if (max < value) return max;
@@ -54,7 +52,6 @@ float Curve(float source, float bias) {
     return (libm::sinf((source - 0.5f) * kPi) * 0.5f + 0.5f) * bias + source * (1.0f - bias);
 }
 
-// The Uint8 arguments of SDL_MapRGB, x86's truncating conversion to int32 and then the low byte.
 std::uint8_t ToByte(float value) {
     if (!(value >= -2147483648.0f && value < 2147483648.0f)) return 0;
     return (std::uint8_t)(std::int32_t)value;
@@ -71,7 +68,6 @@ struct Rgb {
     float x, y, z;
 };
 
-// BilinearSample over 8-bit texels, which GRF holds as the same values in floats.
 Rgb BilinearRgb(const std::uint8_t *tex, float x, float y, int w, int h) {
     const int intX1 = int(std::floor(x));
     const int intY1 = int(std::floor(y));
@@ -94,7 +90,6 @@ Rgb BilinearRgb(const std::uint8_t *tex, float x, float y, int w, int h) {
     return result;
 }
 
-// The overlay's alpha, a / 256.0f per texel.
 float BilinearAlpha(const std::uint8_t *tex, float x, float y, int w, int h) {
     const int intX1 = int(std::floor(x));
     const int intY1 = int(std::floor(y));
@@ -136,8 +131,6 @@ float GetSmoothGrassDirection(float coord, float repeat, int transitionSharpness
 }
 
 // GRF's random_non_determ, boost::uniform_real<float> over mt19937 and then min + u * (max - min).
-// The words sit in a plain array, which the compiler keeps out of aliasing. Seeding and the draws
-// before the pitch go through cuju's RNGView, whose words and index this copies.
 class Stream {
 public:
     static Stream FromView(RNGView view) {
@@ -151,7 +144,6 @@ public:
     void SetIndex(int index) { index_ = index; }
     std::uint32_t Word(int i) const { return words_[i]; }
 
-    // RNGView::Twist.
     void Twist() {
         const int stateSize = 624, shiftSize = 397;
         const std::uint32_t upperMask = ~0u << 31, lowerMask = ~upperMask, twistMask = 0x9908b0dfu;
@@ -169,7 +161,6 @@ public:
         index_ = 0;
     }
 
-    // RNGView::Next and Uniform with minimum 0 and maximum 1, then RandomInRange.
     std::uint32_t Next() {
         if (index_ == 624) Twist();
         return Temper(words_[index_++]);
@@ -201,7 +192,6 @@ private:
     int index_ = 624;
 };
 
-// Whether a raw tempered word makes uniform_real<float>(0, 1) draw again.
 bool Rejected(std::uint32_t word) {
     const float numerator = (float)(word - 0u);
     const float divisor = (float)(0xffffffffu - 0u) + 1;
@@ -223,9 +213,6 @@ void RunParallel(int threads, int tasks, const std::function<void(int)> &task) {
     for (std::thread &thread : pool) thread.join();
 }
 
-// The pitch's random stream. Word 0 is the first word after the adboard draws. Snapshots of the
-// generator every kBlocksPerSnapshot twists let a column start at any word. Extend is the one
-// sequential step, and FindRejections and At run on any thread.
 class Plan {
 public:
     static constexpr int kBlocksPerSnapshot = 8;
@@ -233,7 +220,6 @@ public:
     Plan(const Stream &start, std::uint64_t draws)
         : start_(start), startIndex_(start.Index()), draws_(draws) {}
 
-    // Twists far enough for every draw and a margin of rejected words.
     void Extend() { ExtendTo(draws_ + 4096); }
 
     void FindRejections(int threads) {
@@ -244,7 +230,6 @@ public:
         }
     }
 
-    // The generator positioned at the word of draw `draw`.
     Stream At(std::uint64_t draw) const {
         std::uint64_t word = draw;
         for (std::uint64_t r : rejected_) {
@@ -271,18 +256,15 @@ private:
             done += kBlocksPerSnapshot;
             snapshots_.push_back(current);
         }
-        // The blocks before `done` hold every word up to here.
         words_ = done * 624 - startIndex_;
     }
 
-    // The words from word 0 on that uniform_real rejects, in order.
     void Scan(int threads) {
         const int segments = (int)(snapshots_.size() - 1);
         std::vector<std::vector<std::uint64_t>> found(segments);
         RunParallel(threads, segments, [&](int s) {
             Stream stream = snapshots_[s];
             for (int b = 0; b < kBlocksPerSnapshot; b++) {
-                // Block `block` holds the words after `block` twists, block 0 the start state.
                 const std::uint64_t block = (std::uint64_t)s * kBlocksPerSnapshot + b;
                 if (b > 0) stream.Twist();
                 for (int i = 0; i < 624; i++) {
@@ -317,8 +299,6 @@ struct Shared {
 
 enum Stage { kDiffuse, kSpecular, kNormal };
 
-// A pixel's world coordinate, CreateChunk's
-// `x / (res * 1.0) * pitchFullHalfW + pitchFullHalfW * offset`.
 float Coordinate(int index, int resolution, float halfSize, int offset) {
     return (float)(index / (resolution * 1.0) * halfSize + halfSize * offset);
 }
@@ -335,7 +315,6 @@ ChunkGeometry Geometry(int chunk) {
     return g;
 }
 
-// GetPitchDiffuseColor for the columns from x0 up to x1 of one chunk.
 void DiffuseColumns(const Shared &s, int chunk, int x0, int x1, std::uint64_t firstDraw) {
     const PitchSizes &z = s.options->sizes;
     const int resX = z.diffuseWidth, resY = z.diffuseHeight;
@@ -348,7 +327,6 @@ void DiffuseColumns(const Shared &s, int chunk, int x0, int x1, std::uint64_t fi
     const float perlinNoiseMultiplier = 0.4f;
     const float randomSpread = 2.5f;
 
-    // Row terms, pure functions of yCoord.
     std::vector<float> seamlessYs(resY), perlYs(resY), overlayYs(resY), lightYs(resY);
     for (int y = 0; y < resY; y++) {
         const float yCoord = Coordinate(y, resY, kPitchFullHalfH, geometry.offsetH);
@@ -384,7 +362,6 @@ void DiffuseColumns(const Shared &s, int chunk, int x0, int x1, std::uint64_t fi
             const float perlinNoise =
                 BilinearFloat(s.perlinTex, perlX, perlY, kPerlinTexW, kPerlinTexH) - 0.5f;
 
-            // The random noise multiplier is 0, so GRF draws no third number.
             const float randomNoise = 0.0f, randomNoiseMultiplier = 0.0f;
             r += ((perlinNoise * perlinNoiseMultiplier) + (randomNoise * randomNoiseMultiplier)) *
                  40.0f;
@@ -393,7 +370,6 @@ void DiffuseColumns(const Shared &s, int chunk, int x0, int x1, std::uint64_t fi
             b += ((perlinNoise * perlinNoiseMultiplier) + (randomNoise * randomNoiseMultiplier)) *
                  40.0f;
 
-            // Fake ambient occlusion. Vector3::GetLength squares in double.
             const double lx = lightX, ly = lightYs[y], lz = 0.0f - 0.0f;
             float length = (float)std::sqrt(lx * lx + ly * ly + lz * lz);
             if (length < 0.000001) length = 0;
@@ -415,7 +391,6 @@ void DiffuseColumns(const Shared &s, int chunk, int x0, int x1, std::uint64_t fi
     }
 }
 
-// GetPitchSpecularColor for the columns from x0 up to x1 of one chunk.
 void SpecularColumns(const Shared &s, int chunk, int x0, int x1, std::uint64_t firstDraw) {
     const PitchSizes &z = s.options->sizes;
     const int resX = z.specularWidth, resY = z.specularHeight;
@@ -446,7 +421,6 @@ void SpecularColumns(const Shared &s, int chunk, int x0, int x1, std::uint64_t f
     }
 }
 
-// The mowing pattern of GetPitchNormalColor, a pure function of one coordinate.
 struct NormalTables {
     std::vector<float> rowTerm;
     std::vector<std::uint8_t> rowInside;
@@ -492,7 +466,6 @@ void NormalColumns(const Shared &s, const NormalTables &tables, int chunk, int x
             }
             n0 += stream.Range(-1, 1) * noisefac;
             n1 += stream.Range(-1, 1) * noisefac;
-            // Vector3::Normalize, with GetDotProduct in float.
             const float f = 1.0f / std::sqrt(n0 * n0 + n1 * n1 + n2 * n2);
             n0 *= f;
             n1 *= f;
@@ -505,7 +478,6 @@ void NormalColumns(const Shared &s, const NormalTables &tables, int chunk, int x
     }
 }
 
-// The 1600x1000 noise texture of GeneratePitch for the columns from x0 up to x1.
 void PerlinColumns(const Perlin &perlin1, const Perlin &perlin2, const float *ynoise,
                    float *perlinTex, int x0, int x1) {
     const float noiseFactor = (float)0.15;
@@ -543,8 +515,6 @@ void Generate(const PitchMedia &media, const PitchOptions &options, PitchTexture
     const PitchSizes &z = options.sizes;
     const int threads = std::max(1, options.threads);
 
-    // libc `rand`, with `srand(seed)` and one dropped value in randomize, then both Perlin tables
-    // at their first Get, perlin1 before perlin2.
     const float scale = 0.06f;
     Perlin perlin1(4, (float)(0.06 * scale), 0.5f);
     Perlin perlin2(4, (float)(0.14 * scale), 0.5f);
@@ -570,7 +540,6 @@ void Generate(const PitchMedia &media, const PitchOptions &options, PitchTexture
     };
     const int perlinTasks = (kPerlinTexW + kColumnsPerTask - 1) / kColumnsPerTask;
 
-    // rng_non_deterministic after randomize(seed) and the adboards.
     std::uint8_t bytes[RNG_BYTES] = {};
     const float minimum = 0.0f, maximum = 1.0f;
     std::memcpy(bytes + 2504, &minimum, 4);
@@ -584,7 +553,6 @@ void Generate(const PitchMedia &media, const PitchOptions &options, PitchTexture
     const std::uint64_t chunkDraws = diffuseDraws + specularDraws + normalDraws;
     Plan plan(Stream::FromView(view), 4 * chunkDraws);
 
-    // The twists run beside the noise texture.
     if (threads > 1) {
         std::thread twister([&plan] { plan.Extend(); });
         RunParallel(threads - 1, perlinTasks, perlinTask);
@@ -657,7 +625,7 @@ void Generate(const PitchMedia &media, const PitchOptions &options, PitchTexture
     });
 }
 
-}  // namespace
+}
 
 bool LoadPitchMedia(const std::string &mediaDirectory, PitchMedia *media, std::string *error) {
     const std::string pitch = mediaDirectory + "/textures/pitch/";
@@ -683,4 +651,4 @@ bool GeneratePitch(const PitchMedia &media, const PitchOptions &options, PitchTe
     return true;
 }
 
-}  // namespace cuju::render::pitch
+}

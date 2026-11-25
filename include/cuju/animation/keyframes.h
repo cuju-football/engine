@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The pose of an animation node at a frame, interpolated from its keys or read from the table.
-// Exact: the same function fills the table at load, so a read equals a computation bit for bit.
 #pragma once
 
 #include "../quaternion.h"
@@ -12,7 +10,6 @@
 
 namespace cuju {
 namespace animation {
-
 CUJU_FUNCTION_NO_INLINE inline void ComputeInterpolatedValues(const Animation &animationData,
                                                               const Span<KeyFrame> &keys, int frame,
                                                               Quaternion &orientation,
@@ -34,7 +31,6 @@ CUJU_FUNCTION_NO_INLINE inline void ComputeInterpolatedValues(const Animation &a
             weighedKeys[weighedKeysSize++].frame = keys[key].frame;
             if (keys[key].frame >= frame) break;
         }
-        // Exact: the ratios and the bias divide in double and round to float once.
         float bias = 0;
         if (weighedKeysSize == 1) {
             weighedKeys[0].influence = 1;
@@ -121,8 +117,6 @@ CUJU_FUNCTION inline void GetInterpolatedValuesZ(const Animation &animationData,
     orientation.GetAngles(x, y, z);
 }
 
-// Covers frames 0 to `frameCount + 1`, the frames that the simulation reads. The halfway poses use
-// `BlendFrames`, as an application does.
 inline void BuildInterpolationTable(AnimationStore &store) {
     size_t total = 0;
     for (const Animation &animationData : store.animations)
@@ -133,7 +127,6 @@ inline void BuildInterpolationTable(AnimationStore &store) {
     for (const Animation &animationData : store.animations) {
         const int frames = animationData.frameCount + 2;
         for (const NodeAnimation &constantNode : animationData.nodes) {
-            // The store owns the nodes, so the write is safe.
             NodeAnimation &node = const_cast<NodeAnimation &>(constantNode);
             for (int frame = 0; frame < frames; frame++) {
                 InterpolationEntry &entry = store.interpolation[offset + frame];
@@ -190,5 +183,5 @@ CUJU_FUNCTION inline bool GetKeyFrame(const Animation &animationData, int bodyPa
     return false;
 }
 
-}  // namespace animation
-}  // namespace cuju
+}
+}

@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Applies one frame of an animation to the nodes of a humanoid, with GRF's simple smoothing.
 #pragma once
 
 #include <cstdint>
@@ -20,7 +19,6 @@
 
 namespace cuju {
 namespace animation {
-
 CUJU_FUNCTION inline float Curve(float source, float bias) {
     return (libm::sinf((source - 0.5f) * PI) * 0.5f + 0.5f) * bias + source * (1.0f - bias);
 }
@@ -46,7 +44,6 @@ CUJU_FUNCTION inline float SmoothBeginBias(int frame) {
     return libm::powf(Curve(1.0f - NormalizedClamp((float)frame, 0, 8), 1.0f), 0.5f);
 }
 
-// `SmoothBeginBias(0..8)`. The frame clamps, so 9 entries cover every input.
 CUJU_TABLE_DEFINITION(float, SMOOTH_BEGIN_BIAS,
                       {0x1p+0f, 0x1.f6297cp-1f, 0x1.d906bep-1f, 0x1.a9b664p-1f, 0x1.6a09e6p-1f,
                        0x1.1c73b4p-1f, 0x1.87de2ap-2f, 0x1.8f8b88p-3f, 0x0p+0f});
@@ -78,8 +75,6 @@ CUJU_FUNCTION inline float JointSpeed(float dot, int timeDifferenceMilliseconds)
 }
 
 #if !defined(__CUDA_ARCH__)
-// The smallest dot within the speed limit over a 10 ms tick, per speed class and frame 0..8.
-// Exact: `acosf` never rises on [0, 1], so at or above it the limit holds without `acosf`.
 struct JointSpeedThresholds {
     float dot[3][9];
     JointSpeedThresholds() {
@@ -106,16 +101,10 @@ inline const JointSpeedThresholds &GetJointSpeedThresholds() {
     return thresholds;
 }
 
-// `middle.orientation.GetSphericallyInterpolated(bias, to).GetNormalized()` from the normalized
-// copy, for a zero `bias` and `normalizedKeepsZeros`. False for a NaN dot, left to the full path.
-// Exact: at |dot| >= 1 the slerp returns its own orientation. Below, the half-angle sine is at
-// least 3.4e-4, so its zero-bias path keeps each nonzero element and gives each zero the sign of
-// a sum of two zeros, which `Normalize`, a positive factor, and `normalizedKeepsZeros` preserve.
 inline bool SteadySlerp(const MiddleEntry &middle, float bias, const Quaternion &to,
                         Quaternion &result) {
     const Quaternion &from = middle.orientation;
     Quaternion target = to;
-    // Exact: the dot of `GetSphericallyInterpolated`, in float, in the order w, x, y, z.
     float cosHalfTheta =
         from.elements[3] * target.elements[3] + from.elements[0] * target.elements[0] +
         from.elements[1] * target.elements[1] + from.elements[2] * target.elements[2];
@@ -140,8 +129,6 @@ inline bool SteadySlerp(const MiddleEntry &middle, float bias, const Quaternion 
 }
 #endif
 
-// Each node takes the last history entry of its body part or appends one, in node order.
-// `ParseAnimations` rejects repeated body parts, so one pass before the appends suffices.
 CUJU_FUNCTION inline void AnimationApplyPrepare(const Animation &animationData,
                                                 state::HumanoidState &humanoid, bool smooth,
                                                 int frame, AnimationApplyPlan &plan) {
@@ -167,7 +154,6 @@ CUJU_FUNCTION inline void AnimationApplyPrepare(const Animation &animationData,
             if (found < 0) {
                 state::MovementHistoryEntry newEntry{};
                 newEntry.nodeName = bodyPart;
-                // `AnimationApplyNode` fills in the pose.
                 newEntry.timeDifferenceMilliseconds = 10;
                 movementHistory.push_back(newEntry);
                 found = movementHistory.count - 1;
@@ -177,7 +163,6 @@ CUJU_FUNCTION inline void AnimationApplyPrepare(const Animation &animationData,
     }
 }
 
-// Runs on one lane, inside a region.
 CUJU_FUNCTION_NO_INLINE inline void AnimationApplyNode(
     const Animation &animationData, const Skeleton &skeleton, state::HumanoidState &humanoid,
     int nodeIndex, int frame, int timeOffsetMilliseconds, bool smooth, float smoothFactor,
@@ -192,8 +177,6 @@ CUJU_FUNCTION_NO_INLINE inline void AnimationApplyNode(
     Quaternion orientation;
     Vector3 position;
 #if !defined(__CUDA_ARCH__)
-    // The middle entry while `orientation` still equals it, else null. The table holds the middle
-    // of every frame whose two poses it holds.
     const MiddleEntry *middlePose = nullptr;
     if (nodeAnimation.middle && timeOffsetMilliseconds == -1 && frame >= 0 &&
         frame + 1 < nodeAnimation.interpolationFrames) {
@@ -329,10 +312,7 @@ CUJU_FUNCTION_NO_INLINE inline void AnimationApplyNode(
     }
 }
 
-// Every player and the three officials.
 constexpr int MAXIMUM_PUT_HUMANOIDS = 2 * state::MAXIMUM_TEAM_PLAYERS + 3;
-// The humanoids are independent, so their nodes split over the lanes together and the result
-// equals applying each humanoid on its own.
 CUJU_FUNCTION_NO_INLINE inline void FetchPutBuffersBatch(const AnimationCollection &collection,
                                                          const Skeleton *const *skeletons,
                                                          state::HumanoidState *const *humanoids,
@@ -363,5 +343,5 @@ CUJU_FUNCTION_NO_INLINE inline void FetchPutBuffersBatch(const AnimationCollecti
     });
 }
 
-}  // namespace animation
-}  // namespace cuju
+}
+}

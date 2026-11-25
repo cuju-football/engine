@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Builds static shell completions from the installed parsers."""
-
 from __future__ import annotations
 
 import argparse
@@ -283,7 +281,6 @@ def _powershell(nodes):
 
 
 def script(shell, root, packages, versions):
-    """Returns the completion script for one shell."""
     nodes = _tree(root, {name: tree for name, _, tree in packages})
     if shell in ('bash', 'zsh'):
         body = _bourne(nodes, shell)

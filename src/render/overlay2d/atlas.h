@@ -32,26 +32,18 @@
 #include "surface.h"
 
 namespace cuju::render::overlay2d {
-
 class GlyphAtlas {
 public:
     static constexpr int kFill = 0;
     static constexpr int kOutline = 1;
 
-    // Parses a file's bytes. Returns false with a message when they are not an atlas.
     bool Load(const std::uint8_t *data, std::size_t size, std::string *error);
     bool LoadFile(const std::string &path, std::string *error);
 
-    // Whether every character of the UTF-8 text is in the atlas, so that the composition equals
-    // SDL_ttf's. Invalid UTF-8 and other characters give false.
     bool Covers(std::string_view utf8) const;
 
-    // TTF_SizeUTF8 for the plain font (kFill) or the outlined font (kOutline).
     void Size(int font, std::string_view utf8, int &w, int &h) const;
 
-    // TTF_RenderUTF8_Blended: an SDL_PIXELFORMAT_ARGB8888 surface whose pixels all have the
-    // colour, with the glyph coverage as alpha. GRF passes colours with alpha 0, which SDL_ttf
-    // draws opaque.
     Surface RenderBlended(int font, std::string_view utf8, std::uint8_t r, std::uint8_t g,
                           std::uint8_t b) const;
 
@@ -96,6 +88,6 @@ private:
     std::vector<std::uint8_t> pixels_;
 };
 
-}  // namespace cuju::render::overlay2d
+}
 
-#endif  // CUJU_RENDER_OVERLAY2D_ATLAS_H
+#endif

@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The CPU quota of the process's cgroup, which containers and cluster jobs set.
 #pragma once
 
 #include <cstdint>
@@ -13,8 +12,6 @@
 
 namespace cuju {
 namespace cpu {
-
-// The fields of a line split at `separator`, empty ones included.
 inline std::vector<std::string> SplitFields(const std::string &line, char separator) {
     std::vector<std::string> fields;
     std::string field;
@@ -30,7 +27,6 @@ inline bool HasItem(const std::string &list, const std::string &item) {
     return false;
 }
 
-// The first one or two words of a file, or false if it does not open.
 inline bool ReadWords(const std::string &path, std::string &first, std::string &second) {
     std::ifstream file(path);
     if (!file) return false;
@@ -51,15 +47,12 @@ inline bool ParseInteger(const std::string &text, int64_t &value) {
     return used == text.size();
 }
 
-// The processors that `quota` microseconds in each `period` allow, rounded up, or 0 for none.
 inline int QuotaToProcessors(int64_t quota, int64_t period) {
     if (quota <= 0 || period <= 0) return 0;
     const int64_t processors = (quota + period - 1) / period;
     return processors > (1 << 20) ? 1 << 20 : (int)processors;
 }
 
-// The limit of one cgroup directory, from v2 `cpu.max`, `max <period>` or `<quota> <period>`, or
-// from v1 `cpu.cfs_quota_us`, -1 without a limit, and `cpu.cfs_period_us`.
 inline int DirectoryQuota(const std::string &directory, bool version2) {
     std::string first, second;
     int64_t quota = 0, period = 0;
@@ -79,11 +72,7 @@ inline int DirectoryQuota(const std::string &directory, bool version2) {
     return QuotaToProcessors(quota, period);
 }
 
-// The processors that the CPU quota of the process's cgroup allows, rounded up, or 0 without a
-// quota. Every level from the process's cgroup up to the root of its mount limits it, so the
-// smallest wins. `root` prefixes every path read, for a copy of `/proc` and `/sys`.
 inline int QuotaProcessors(const std::string &root = "") {
-    // `<hierarchy>:<controllers>:<path>`, where v2 has the hierarchy 0 and no controllers.
     std::string version2Path, version1Path;
     bool haveVersion2 = false, haveVersion1 = false;
     {
@@ -105,8 +94,6 @@ inline int QuotaProcessors(const std::string &root = "") {
         }
     }
     int smallest = 0;
-    // Each line is `<id> <parent> <device> <root> <mount point> <options> [<optional>...] -
-    // <type> <source> <super options>`.
     std::ifstream file(root + "/proc/self/mountinfo");
     std::string line;
     while (std::getline(file, line)) {
@@ -126,7 +113,6 @@ inline int QuotaProcessors(const std::string &root = "") {
         const std::string &mountRoot = before[3];
         const std::string mountPoint = root + before[4];
         std::string path = version2 ? version2Path : version1Path;
-        // A mount of a cgroup below the root, as a container sees its own, starts at that cgroup.
         if (mountRoot != "/") {
             if (path.compare(0, mountRoot.size(), mountRoot) == 0 &&
                 (path.size() == mountRoot.size() || path[mountRoot.size()] == '/'))
@@ -134,7 +120,6 @@ inline int QuotaProcessors(const std::string &root = "") {
             else
                 path.clear();
         }
-        // A path out of the mount, such as `/..` from another namespace, reads the mount's root.
         if (path.find("/..") != std::string::npos) path.clear();
         while (!path.empty() && path.back() == '/') path.pop_back();
         for (;;) {
@@ -148,5 +133,5 @@ inline int QuotaProcessors(const std::string &root = "") {
     return smallest;
 }
 
-}  // namespace cpu
-}  // namespace cuju
+}
+}

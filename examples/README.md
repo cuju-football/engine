@@ -57,9 +57,9 @@ GRF's checkpoint rewards, which reward progress toward the goal.
 
 ## See also
 
-- [Recipes](../docs/recipes.md), for the patterns behind these programs, from rollout buffers to
+- [Getting started](../docs/getting-started.md), for the patterns behind these programs, from rollout buffers to
     evaluation
 - [API reference](../docs/api.md), for every name that the examples use
-- [States](../docs/states.md), for the format and the cost of `get_state` and `set_state`
+- [Getting started](../docs/getting-started.md), for the format and the cost of `get_state` and `set_state`
 - [Migrating from GRF](../docs/migrating-from-grf.md), for dumps and the interfaces of GRF
-- [Backends](../docs/backends.md), for the devices, the threads and several GPUs
+- [Performance](../docs/performance.md), for the devices, the threads and several GPUs

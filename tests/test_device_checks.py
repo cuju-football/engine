@@ -16,8 +16,6 @@ from cuju._batch import Batch
 ASSETS = '5_vs_5_l4_r0'
 cuda = pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
 
-# A child process steps a batch on actions whose pointer names no device memory, so the step
-# faults on the device, which ends the child's CUDA context.
 FAULT = """
 import os
 import sys
@@ -65,7 +63,6 @@ def test_device_actions_outside_the_set_raise_before_the_step():
         batch.step(actions('cuda', 1, 25))
     with pytest.raises(IndexError, match='environment 1'):
         batch.step_async(actions('cuda', 1, -20))
-    # No environment stepped, and the batch goes on.
     assert torch.equal(batch.observation(), observation)
     batch.step(actions('cuda', 1, -19))
     batch.close()
@@ -127,10 +124,8 @@ def test_debug_raises_a_device_fault_at_the_step_that_caused_it(debug):
     )
     last = child.stdout.strip().splitlines()[-1]
     if debug:
-        # The step itself waits and raises the library's error, naming the CUDA call.
         assert last.startswith('DeviceError cudaStreamSynchronize'), child.stdout + child.stderr
     else:
-        # The step returns, and the fault surfaces at a later wait.
         assert 'stepped' in child.stdout and not last.startswith('DeviceError'), child.stdout
 
 

@@ -8,7 +8,6 @@ import torch
 from conftest import actions_at, tensor_bytes
 from cuju._batch import Batch
 
-# Short episodes, so that the steps cross several resets and their seed draws.
 ASSETS = 'academy_empty_goal_close_l1_r0'
 
 

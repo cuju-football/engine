@@ -12,9 +12,7 @@
 #include <cstring>
 
 namespace cuju::render::overlay2d {
-
 namespace {
-
 inline float Clamp(float v, float lo, float hi) {
     if (lo > v) return lo;
     if (hi < v) return hi;
@@ -23,7 +21,7 @@ inline float Clamp(float v, float lo, float hi) {
 
 inline std::uint8_t ToUint8(float v) { return static_cast<std::uint8_t>(static_cast<int>(v)); }
 
-}  // namespace
+}
 
 WindowGeometry::WindowGeometry(int context_w, int context_h, float aspect, float margin)
     : context_w_(context_w), context_h_(context_h), aspect_(aspect), margin_(margin) {
@@ -87,7 +85,6 @@ bool Caption::SetCaption(const std::string &caption) {
     // redraws on every call.
     if (caption_ == adapted) return false;
     caption_ = adapted;
-    // ::toupper byte by byte, which in the UTF-8 locale Python sets changes ASCII letters only.
     for (char &c : caption_)
         if (c >= 'a' && c <= 'z') c = static_cast<char>(c - 'a' + 'A');
     Redraw();
@@ -137,8 +134,6 @@ void Caption::Redraw() {
     const int old_w = surface_.w, old_h = surface_.h;
     FillRect(surface_, 0, 0, w, h, 0, 0, 0, 0);
     if (text_w > static_cast<float>(size_w_) || text_h > static_cast<float>(size_h_)) {
-        // Image2D::Resize through Surface::Resize, which zooms the old surface; its content is
-        // cleared below, so only the size counts.
         const int nx = static_cast<int>(text_w), ny = static_cast<int>(text_h);
         double xfac = nx / (surface_.w * 1.0), yfac = ny / (surface_.h * 1.0);
         if (yfac == 0) yfac = xfac;
@@ -163,7 +158,6 @@ void Caption::Redraw() {
 }
 
 namespace {
-
 inline std::uint32_t Le32(const std::uint8_t *p) {
     return p[0] | (p[1] << 8) | (p[2] << 16) | (static_cast<std::uint32_t>(p[3]) << 24);
 }
@@ -177,7 +171,7 @@ inline int Shift(std::uint32_t mask) {
     return s;
 }
 
-}  // namespace
+}
 
 bool DecodeBmp(const std::uint8_t *data, std::size_t size, SourceImage &out) {
     if (size < 54 || data[0] != 'B' || data[1] != 'M') return false;
@@ -227,7 +221,6 @@ Surface ImageSurface(const SourceImage &source, int w, int h) {
     if (source.channels == 4) {
         src.px = source.px;
     } else {
-        // zoomSurface blits a 24-bit source onto an opaque 32-bit surface first.
         for (std::size_t i = 0, n = static_cast<std::size_t>(source.w) * source.h; i < n; ++i) {
             src.px[4 * i + 0] = source.px[3 * i + 0];
             src.px[4 * i + 1] = source.px[3 * i + 1];
@@ -275,15 +268,15 @@ std::string GoalString(int goals) {
 Color3 PlayerColor(int controller_index) {
     switch (controller_index % 6) {
         case 0:
-            return {100.0f, 140.0f, 255.0f};  // blue
+            return {100.0f, 140.0f, 255.0f};
         case 1:
-            return {100.0f, 255.0f, 140.0f};  // green
+            return {100.0f, 255.0f, 140.0f};
         case 2:
-            return {255.0f, 110.0f, 110.0f};  // red
+            return {255.0f, 110.0f, 110.0f};
         case 3:
-            return {255.0f, 255.0f, 60.0f};  // yellow
+            return {255.0f, 255.0f, 60.0f};
         case 4:
-            return {200.0f, 80.0f, 200.0f};  // purple
+            return {200.0f, 80.0f, 200.0f};
         default:
             return kDefaultPlayerColor;
     }
@@ -291,4 +284,4 @@ Color3 PlayerColor(int controller_index) {
 
 Color3 OutlineOf(const Color3 &c) { return {c[0] * 0.4f, c[1] * 0.4f, c[2] * 0.4f}; }
 
-}  // namespace cuju::render::overlay2d
+}

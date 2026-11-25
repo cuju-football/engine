@@ -17,7 +17,6 @@ def test_torch_counts_the_batch_and_gets_it_back():
     before = torch.cuda.memory_allocated()
     batch = Batch('5_vs_5_l4_r0', environment_count=4, allocator='torch')
     held = torch.cuda.memory_allocated() - before
-    # Four worlds alone take more than a megabyte.
     assert held > 1 << 20
     batch.reset()
     batch.step(torch.zeros((4, 4), dtype=torch.int32, device='cuda'))
@@ -51,7 +50,6 @@ def test_the_torch_allocator_gives_the_expected_digest():
 def test_torch_limits_apply_to_the_batch():
     torch.cuda.synchronize()
     total = torch.cuda.get_device_properties(0).total_memory
-    # A fraction that leaves room for what torch holds and not for 512 worlds.
     fraction = (torch.cuda.memory_reserved() + (64 << 20)) / total
     torch.cuda.set_per_process_memory_fraction(fraction)
     try:

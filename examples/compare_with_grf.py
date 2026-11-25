@@ -12,11 +12,11 @@ parity with a GRF on NumPy 2 needs the private option `numpy_legacy`. Two routes
 - by seed: environment `index` of a cuju batch with seed `seed` plays the episodes of a GRF
     environment created after `random.seed(seed * 2**32 + index)`;
 - by state: a state that GRF saves is loaded into cuju, and both continue with the same actions
-    (in this direction GRF's loader cannot spoil the comparison; see docs/states.md).
+    (in this direction GRF's loader cannot spoil the comparison; see docs/getting-started.md).
 
 At every step it compares, bit for bit, the observation of every agent in `--representation`, the
 rewards, the done flag and the match within the state, which is the bytes of `get_state` after
-GRF's pickle, since the pickle differs legitimately between the two (docs/states.md). The match
+GRF's pickle, since the pickle differs legitimately between the two (docs/getting-started.md). The match
 leaves out the three bytes of padding of each angle, which GRF never sets and saves as they are,
 so two GRF environments of the same match differ there too. A difference is expected only with a
 GRF built differently from the reference platform (docs/exactness.md).

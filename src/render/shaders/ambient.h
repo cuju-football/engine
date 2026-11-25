@@ -11,10 +11,8 @@
 #include "../gl/program.h"
 
 namespace cuju::render::shaders {
-
 class AmbientProgram : public gl::Program {
 public:
-    // Uniform locations, as GL assigns them.
     static constexpr int kOrthoViewMatrix = 0;
     static constexpr int kOrthoProjectionMatrix = 1;
     static constexpr int kMapAlbedo = 2;
@@ -30,7 +28,7 @@ public:
     static constexpr int kContextX = 12;
     static constexpr int kContextY = 13;
     static constexpr int kCameraClip = 14;
-    static constexpr int kSsaoKernel = 15;  // 32 locations
+    static constexpr int kSsaoKernel = 15;
     static constexpr int kKernelSize = 32;
 
     AmbientProgram();
@@ -40,6 +38,6 @@ public:
     void ShadeBlock(const gl::FragmentBlock &block) const override;
 };
 
-}  // namespace cuju::render::shaders
+}
 
-#endif  // CUJU_RENDER_SHADERS_AMBIENT_H
+#endif

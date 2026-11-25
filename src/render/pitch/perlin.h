@@ -12,7 +12,6 @@
 #include <cstdint>
 
 namespace cuju::render::pitch {
-
 // glibc's `rand` after `srand(seed)`, the degree-31 additive feedback generator.
 class GlibcRand {
 public:
@@ -44,6 +43,6 @@ private:
     float g2_[kSampleSize + kSampleSize + 2][2];
 };
 
-}  // namespace cuju::render::pitch
+}
 
-#endif  // CUJU_RENDER_PITCH_PERLIN_H
+#endif

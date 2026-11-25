@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The animation tables, in the state's animation index order, as plain data for host and device.
 #pragma once
 
 #include <cstdint>
@@ -20,7 +19,6 @@
 
 namespace cuju {
 namespace animation {
-
 using state::Radian;
 
 struct KeyFrame {
@@ -32,7 +30,6 @@ struct KeyFrame {
 struct InterpolationEntry {
     Quaternion orientation;
     Vector3 position;
-    // Yaw of `orientation`, as `Quaternion::GetAngles` gives it.
     float angleZ;
 };
 
@@ -40,18 +37,14 @@ struct MiddleEntry {
     Quaternion orientation;
     Vector3 position;
     Quaternion normalizedOrientation;
-    // Squared length in `[1e-6, 2)`. `Normalize` scales by 2/3 to 2, so every zero keeps its sign
-    // and no other element becomes zero.
     bool normalizedKeepsZeros;
 };
 
 struct NodeAnimation {
     int32_t bodyPart;
     Span<KeyFrame> keys;
-    // Poses of the frames below `interpolationFrames`. Null computes every frame when read.
     const InterpolationEntry *interpolation = nullptr;
     int32_t interpolationFrames = 0;
-    // Halfway poses of `interpolation`, null on the GPU, which blends the two frames itself.
     const MiddleEntry *middle = nullptr;
 };
 
@@ -78,7 +71,6 @@ inline int32_t InternStateString(const std::string &text) {
 }
 
 struct Animation {
-    // `animationType` is an `e_AnimationString`.
     int32_t frameCount, currentFoot, animationType;
     Vector3 translation, incomingMovement;
     float incomingVelocity;
@@ -90,7 +82,6 @@ struct Animation {
     int32_t quadrantID;
     float specialVariable1, specialVariable2;
     bool lastDitch, baseAnimation;
-    // `StateString` values.
     int32_t outgoingSpecialState, incomingRetainState, incomingSpecialState;
     Span<NodeAnimation> nodes;
     bool hasFootball;
@@ -99,7 +90,6 @@ struct Animation {
     Span<Vector3> positions;
 };
 
-// A cell of the end states that the animation selection searches. `velocity` is an `e_Velocity`.
 struct Quadrant {
     int32_t id;
     Vector3 position;
@@ -113,7 +103,6 @@ struct AnimationCollection {
     Radian maximumIncomingBallDirectionDeviation, maximumOutgoingBallDirectionDeviation;
 };
 
-// Owns the host copy. `view` points into its vectors, so it cannot be copied.
 struct AnimationStore {
     std::vector<Animation> animations;
     std::vector<NodeAnimation> nodes;
@@ -122,7 +111,6 @@ struct AnimationStore {
     std::vector<Vector3> positions;
     std::vector<Quadrant> quadrants;
     std::vector<InterpolationEntry> interpolation;
-    // At the offsets of `interpolation`.
     std::vector<MiddleEntry> middle;
     std::vector<std::string> names;
     std::vector<std::map<std::string, std::string>> variables;
@@ -138,7 +126,6 @@ struct AnimationStore {
     }
 };
 
-// A cursor over little-endian bytes. `what` names the input in the messages.
 class ByteReader {
 public:
     ByteReader(const std::string &bytes, const char *what, size_t start)
@@ -169,15 +156,12 @@ private:
     size_t offset;
 };
 
-// `animations.bin` holds `CUJANIM1`, the animations, the quadrants and the two ball direction
-// deviations. A string is an int32 length and its bytes, a radian the 8 bytes of `Radian`.
 inline std::unique_ptr<AnimationStore> ParseAnimations(const std::string &bytes) {
     if (bytes.compare(0, 8, "CUJANIM1") != 0)
         throw std::runtime_error("expected the animation tables, found another file");
     ByteReader reader(bytes, "the animation tables", 8);
     auto store = std::make_unique<AnimationStore>();
     AnimationStore &tables = *store;
-    // The vectors grow while reading, so offsets are kept and the spans are set at the end.
     struct Ranges {
         size_t firstNode, nodeCount, firstFootballKey, footballKeyCount, firstPosition,
             positionCount;
@@ -228,8 +212,6 @@ inline std::unique_ptr<AnimationStore> ParseAnimations(const std::string &bytes)
         for (int node = 0; node < nodeCount; node++) {
             NodeAnimation nodeAnimation{};
             nodeAnimation.bodyPart = reader.get<int32_t>();
-            // `AnimationApplyPrepare` indexes by body part and needs them distinct within an
-            // animation.
             if (nodeAnimation.bodyPart < 0 || nodeAnimation.bodyPart >= state::BODY_PARTS)
                 throw std::runtime_error(
                     "expected body parts from 0 to " + std::to_string(state::BODY_PARTS - 1) +
@@ -303,5 +285,5 @@ inline std::unique_ptr<AnimationStore> ParseAnimations(const std::string &bytes)
     return store;
 }
 
-}  // namespace animation
-}  // namespace cuju
+}
+}

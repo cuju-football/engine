@@ -2,11 +2,7 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""Batched Google Research Football (GRF) environments on the GPU or the CPU, bit for bit.
-
-`BatchEnvironment` steps many environments per call, and its outputs are PyTorch tensors that share
-its buffers. The guide and the reference are in the repository's `docs/` (`index.md`, `api.md`).
-"""
+"""Batched Google Research Football (GRF) environments on the GPU or the CPU, bit for bit."""
 
 from __future__ import annotations
 
@@ -29,11 +25,8 @@ __all__ = [
     'scenario_names',
 ]
 
-# The names keep `cuju` as their module, so that their reprs and pickles name the public path.
 scenario_names.__module__ = __name__
 
-# The names that build on PyTorch load on first use, so that `import cuju` and the commands that
-# step no batch start without importing PyTorch. Each maps to its module.
 _LAZY = {
     'BatchEnvironment': '_environment',
     'engine_status': 'engine_status',
@@ -56,8 +49,6 @@ def __dir__() -> list[str]:
 
 
 class _RegisteringLoader:
-    """Runs the loader of gymnasium, then registers the ids of `cuju.env` with it."""
-
     def __init__(self, loader, name):
         self._loader = loader
         self._name = name
@@ -75,10 +66,7 @@ class _RegisteringLoader:
 
 
 class _RegistrationFinder:
-    """Hands gymnasium, when imported, a loader that then registers the ids of `cuju.env`."""
-
     waiting: ClassVar[set[str]] = set()
-    # The names being looked up by the other finders, which this one then leaves to them.
     finding: ClassVar[set[str]] = set()
 
     def find_spec(self, name, path=None, target=None):
@@ -95,7 +83,6 @@ class _RegistrationFinder:
 
 
 def _register_ids(module):
-    # A `cuju.env` that is still importing registers the ids itself once it is done.
     try:
         from .env import _register_with
     except ImportError:
@@ -104,11 +91,6 @@ def _register_ids(module):
 
 
 def _register_gymnasium_ids():
-    """Registers the ids of `cuju.env` with gymnasium once it is imported.
-
-    gym gets GRF's ids from `cuju.gfootball`, as importing `gfootball` registers them, so that
-    `import cuju` imports neither.
-    """
     if sys.modules.get('gymnasium') is not None:
         _register_ids('gymnasium')
     else:
@@ -121,16 +103,6 @@ _register_gymnasium_ids()
 
 
 def _with_portions(path):
-    """Returns `path` and, after it, every folder `cuju` that `sys.path` holds elsewhere and that
-    is a portion of the package.
-
-    A package that installs beside cuju puts its files into this folder, and
-    an editable install of it keeps them in its own checkout, whose `cuju` folder holds its modules
-    and no `__init__.py`. Such a folder joins the package as an absolute path, as
-    `pkgutil.extend_path` joins it. A folder `cuju` with an `__init__.py` of its own is a whole
-    cuju, such as an older installation or a checkout in the current directory, and stays out, so
-    that its modules never stand in for missing ones.
-    """
     import os
 
     folders = list(path)
@@ -150,7 +122,6 @@ def _with_portions(path):
 
 __path__ = _with_portions(__path__)
 
-# A module `cuju.<name>` that no package provides names the package that may.
 from . import _plugins  # noqa: E402
 
 _plugins.install_finder()

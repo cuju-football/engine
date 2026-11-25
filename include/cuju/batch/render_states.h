@@ -1,9 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The RenderState of chosen environments of a batch, which GRF's graphics side reads at a render.
-// Each environment keeps its RenderState between calls, as GRF's widgets keep theirs, and starts
-// it afresh at each new match.
 #pragma once
 
 #include <string>
@@ -14,12 +11,9 @@
 
 namespace cuju {
 namespace batch {
-
-// Backend memory. `states` and `episodes` hold one entry per environment, `out` and `processed`
-// one per requested environment, in the order of `indices`.
 struct RenderBuffers {
     render::RenderState *states;
-    int32_t *episodes;  // The reset each RenderState follows, -1 for none.
+    int32_t *episodes;
     const uint8_t *animationMirrored;
     const int32_t *indices;
     int count;
@@ -27,7 +21,6 @@ struct RenderBuffers {
     uint32_t *processed;
 };
 
-// One requested environment, on one thread.
 CUJU_FUNCTION inline void WriteRenderState(const EnvironmentBuffers &buffers,
                                            const Variants &variants, const RenderBuffers &render,
                                            int output) {
@@ -50,7 +43,6 @@ CUJU_FUNCTION inline void WriteRenderState(const EnvironmentBuffers &buffers,
     render.processed[output] = world.stateProcessed;
 }
 
-// One byte per animation, nonzero when GRF's name of the animation contains "mirror".
 inline std::vector<uint8_t> AnimationMirroredNames(const std::vector<std::string> &names) {
     std::vector<uint8_t> mirrored;
     mirrored.reserve(names.size());
@@ -59,5 +51,5 @@ inline std::vector<uint8_t> AnimationMirroredNames(const std::vector<std::string
     return mirrored;
 }
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

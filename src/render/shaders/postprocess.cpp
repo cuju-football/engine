@@ -13,34 +13,29 @@
 #include "quad_vs.h"
 
 namespace cuju::render::shaders {
-
 namespace {
-
 constexpr int kLanes = 16;
 
-// Float constants of the JIT code, by bit pattern.
-const float kHundredth = FromBits(0x3C23D70Au);     // 0.01
-const float kFogBias = FromBits(0x3E23D70Au);       // 0.16
-const float kFogRed = FromBits(0x3F59999Au);        // 0.85, also green
-const float kFogBlue = FromBits(0x3F666666u);       // 0.9
-const float kSkyDepth = FromBits(0x3F7FBE77u);      // 0.999
-const float kSsaoWeight = FromBits(0x3F19999Au);    // 0.6
-const float kSsaoBase = FromBits(0x3ECCCCCDu);      // 0.4
-const float kSaturation = FromBits(0x3F733333u);    // 0.95
-const float kLumaB = FromBits(0x3D93A92Au);         // 0.0721
-const float kLumaG = FromBits(0x3F372474u);         // 0.7154
-const float kLumaR = FromBits(0x3E59999Au);         // 0.2125
-const float kContrastKeep = FromBits(0x3F333333u);  // 0.7
+const float kHundredth = FromBits(0x3C23D70Au);
+const float kFogBias = FromBits(0x3E23D70Au);
+const float kFogRed = FromBits(0x3F59999Au);
+const float kFogBlue = FromBits(0x3F666666u);
+const float kSkyDepth = FromBits(0x3F7FBE77u);
+const float kSsaoWeight = FromBits(0x3F19999Au);
+const float kSsaoBase = FromBits(0x3ECCCCCDu);
+const float kSaturation = FromBits(0x3F733333u);
+const float kLumaB = FromBits(0x3D93A92Au);
+const float kLumaG = FromBits(0x3F372474u);
+const float kLumaR = FromBits(0x3E59999Au);
+const float kContrastKeep = FromBits(0x3F333333u);
 const float kPi = FromBits(0x40490FDBu);
-const float kContrastBias = FromBits(0x3E99999Au);  // 0.3
+const float kContrastBias = FromBits(0x3E99999Au);
 
-// The 16-bit value of a channel as the 10-bit store computes it: clamp max(x, 0) then min(x, 1),
-// so NaN gives 0, then the +128 trick.
 inline std::uint32_t StoreUnorm16(float c) {
     return gl::Unorm16Ftz(ftz::MinPs(ftz::MaxPs(c, 0.0f), 1.0f));
 }
 
-}  // namespace
+}
 
 PostprocessProgram::PostprocessProgram()
     : gl::Program({{"orthoViewMatrix", gl::kMat4, 1},
@@ -63,12 +58,9 @@ void PostprocessProgram::RunVertices(const gl::DrawState &state, int count,
 }
 
 namespace {
-
 using lanes::F8;
 using lanes::I8;
 
-// One channel of a kNearestClamp fetch at texel indices x, y: the 16-bit half of an RGBA16F texel
-// widened exactly, other formats through FetchNearest at s, t.
 inline F8 FetchChannel(const lanes::NearestLevel &l, I8 x, I8 y, F8 s, F8 t, int c) {
     using namespace lanes;
     if (l.format == Format::R16G16B16A16_FLOAT) {
@@ -81,7 +73,6 @@ inline F8 FetchChannel(const lanes::NearestLevel &l, I8 x, I8 y, F8 s, F8 t, int
     return rgba[c];
 }
 
-// The red, green and blue channels of a kNearestClamp fetch.
 inline void FetchRgb(const lanes::NearestLevel &l, F8 s, F8 t, F8 *rgb) {
     F8 rgba[4];
     lanes::FetchNearest(l, s, t, rgba);
@@ -90,10 +81,8 @@ inline void FetchRgb(const lanes::NearestLevel &l, F8 s, F8 t, F8 *rgb) {
     rgb[2] = rgba[2];
 }
 
-}  // namespace
+}
 
-// fs161, one half of eight lanes at a time. Every lane is shaded; the store writes the covered
-// ones.
 void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     using namespace lanes;
     const gl::DrawState &st = *b.state;
@@ -113,12 +102,10 @@ void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     const F8 neg_clip_near = Splat(-st.Uniform(kCameraClip, 0));
     const F8 clip_far = Splat(st.Uniform(kCameraClip, 1));
     const float fog_scale = st.Uniform(kFogScale);
-    // gl_FragCoord.y = raw * T.x + T.y, T = (-1, H) in the window, (1, 0) in an FBO.
     const F8 wpos_scale = Splat(st.target.window ? -1.0f : 1.0f);
     const F8 wpos_offset = Splat(st.target.window ? static_cast<float>(st.target.height) : 0.0f);
     const F8 zero = Splat(0.0f), half = Splat(0.5f), one = Splat(1.0f);
 
-    // The edge blur's offsets, the SSAO blur's texel steps and the fog's constants, all scalar.
     const F8 up = Splat(ftz::Div(1.0f, ch));
     const F8 right = Splat(ftz::Div(1.0f, cw));
     const F8 down = Splat(ftz::Div(-1.0f, ch));
@@ -151,7 +138,6 @@ void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         const I8 my = NearestIndex(ty, modifier.fh, modifier.h);
         const F8 mod_r = FetchChannel(modifier, mx, my, tx, ty, 0);
 
-        // Edge blur where modifier.r > 0, ordered.
         const F8 blur = Olt(zero, mod_r);
         if (MoveMask(blur) != 0) {
             F8 t0[3], t1[3], sum[3];
@@ -169,7 +155,6 @@ void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
             }
         }
 
-        // SSAO blur over 4x4 modifier texels, x outer, the sum starting from the first sample.
         I8 sx[4], sy[4];
         F8 fsx[4], fsy[4];
         for (int i = 0; i < 4; ++i) {
@@ -191,7 +176,6 @@ void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         F8 r = Mul(base[0], ssao);
         F8 g = Mul(base[1], ssao);
         F8 bl = Mul(base[2], ssao);
-        // Fog, clamped by min(x, 0.25), max(x, 0) and an extra min(x, 1).
         const F8 frag_depth = Div(clip_far, Add(d, neg_clip_near));
         const F8 f0 = Add(Mul(Mul(frag_depth, Splat(kHundredth)), fog_keep_scale), fog_bias);
         const F8 fog = MinPs(MaxPs(MinPs(f0, Splat(0.25f)), zero), one);
@@ -201,19 +185,16 @@ void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         r = Add(Mul(r, keep), fog_rg);
         g = Add(Mul(g, keep), fog_rg);
         bl = Add(Mul(bl, keep), fog_b);
-        // The sky above depth 0.999, ordered.
         const F8 sky = Olt(Splat(kSkyDepth), d);
         r = Select(sky, Splat(kFogRed), r);
         g = Select(sky, Splat(kFogRed), g);
         bl = Select(sky, Splat(kFogBlue), bl);
-        // Saturation mix against the luminance.
         const F8 sat =
             Mul(Splat(kSaturation), Add(Splat(kSsaoBase), Mul(ssao, Splat(kSsaoWeight))));
         const F8 luma =
             Add(Add(Mul(Splat(kLumaB), bl), Mul(Splat(kLumaG), g)), Mul(Splat(kLumaR), r));
         const F8 grey = Mul(luma, Add(one, Neg(sat)));
         const F8 c[3] = {Add(grey, Mul(r, sat)), Add(grey, Mul(g, sat)), Add(grey, Mul(bl, sat))};
-        // AlternateContrast with the JIT's cosine, then the store's clamps max(x, 0), min(x, 1).
         I8 u16[3];
         for (int k = 0; k < 3; ++k) {
             const F8 kept = Mul(c[k], Splat(kContrastKeep));
@@ -234,4 +215,4 @@ void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kPostprocess, PostprocessProgram);
 
-}  // namespace cuju::render::shaders
+}

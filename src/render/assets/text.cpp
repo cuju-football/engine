@@ -14,7 +14,6 @@
 
 namespace cuju::render::assets::text {
 namespace {
-
 bool IsSpace(char c) {
     return c == ' ' || c == '\t' || c == '\n' || c == '\v' || c == '\f' || c == '\r';
 }
@@ -23,7 +22,7 @@ bool IsSpace(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-}  // namespace
+}
 
 double Atof(const char *s) {
     while (IsSpace(*s)) s++;
@@ -55,7 +54,6 @@ int Atoi(const char *s) {
     while (IsSpace(*s)) s++;
     bool negative = false;
     if (*s == '+' || *s == '-') negative = *s++ == '-';
-    // strtol with a 64-bit long saturates, then atoi keeps the low 32 bits.
     const std::uint64_t limit = negative ? (std::uint64_t)INT64_MAX + 1 : (std::uint64_t)INT64_MAX;
     std::uint64_t magnitude = 0;
     for (; *s >= '0' && *s <= '9'; s++) {
@@ -105,4 +103,4 @@ bool ReadFile(const std::string &path, std::string *contents, std::string *error
     return true;
 }
 
-}  // namespace cuju::render::assets::text
+}

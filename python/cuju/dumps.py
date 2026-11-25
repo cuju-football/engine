@@ -1,11 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Episodes of a batch as GRF dumps, which GRF's `replay`, `dump_to_txt` and `dump_to_video` read.
-
-A `DumpWriter` writes chosen environments of a batch in the format of GRF's
-`observation_processor.py`, one pickle per step, and `read_dump` reads a dump without GRF or numpy.
-The guide is in the repository's `docs/migrating-from-grf.md`, under Dumps from a batch.
-"""
+"""Episodes of a batch as GRF dumps, which GRF's `replay` and `dump_to_video` read."""
 
 from __future__ import annotations
 
@@ -123,21 +118,15 @@ _ACTION_SETS = {
 _ACTION_SET_NAMES = {len(actions): name for name, actions in _ACTION_SETS.items()}
 # GRF: `observation_processor.PAST_STEPS_TRACE_SIZE`, the steps before a goal in its dump.
 _STEPS_BEFORE_GOAL = 100
-# The count of values that `cuju_environment_episode` writes.
 _EPISODE_VALUES = 17
 
 
 class _BackendAction(int):
-    """Stands in for GRF's `e_BackendAction` in a pickle."""
-
     __slots__ = ()
 
 
 class _CoreAction:
-    """Stands in for GRF's `CoreAction` in a pickle, and serves as it in `cuju.gfootball.env`."""
-
     def __init__(self, backend_action, name, sticky=False, directional=False):
-        # Exact: the pickle of an action holds these four attributes in GRF's order.
         self._backend_action = backend_action
         self._name = name
         self._sticky = sticky
@@ -146,8 +135,7 @@ class _CoreAction:
     def is_in_actionset(self, config):
         return self._name in _ACTION_SETS[config['action_set']]
 
-    # GRF: an action compares only with an action, by its name for equality and by its backend
-    # action for order.
+    # GRF: an action compares by its name for equality and by its backend action for order.
     def __eq__(self, other):
         assert set(other.__dict__) == set(self.__dict__)
         return self._name == other._name
@@ -184,7 +172,6 @@ _CORE_ACTIONS = {
 }
 
 
-# A class, because the pickler saves a function by its own name and a class by `save_global`.
 class _Reconstruct:
     """Stands in for numpy's `_reconstruct` in a pickle."""
 
@@ -194,8 +181,6 @@ class _NumpyArray:
 
 
 class _NumpyType:
-    """A numpy `dtype` in a pickle, with a `code` such as `f8` and its byte order."""
-
     def __init__(self, code, order):
         self.code, self.order = code, order
 
@@ -203,7 +188,6 @@ class _NumpyType:
         return _NumpyType, (self.code, False, True), (3, self.order, None, None, None, -1, -1, 0)
 
 
-# The numpy types of GRF's observation, each with its struct format.
 _FLOAT64 = (_NumpyType('f8', '<'), 'd')
 _INT64 = (_NumpyType('i8', '<'), 'q')
 _BOOL = (_NumpyType('b1', '|'), '?')
@@ -211,8 +195,6 @@ _UINT8 = (_NumpyType('u1', '|'), 'B')
 
 
 class _Array:
-    """A numpy array in a pickle, which numpy reads as numpy 1 and 2 write it."""
-
     def __init__(self, kind, shape, values):
         self.kind, self.shape, self.values = kind, tuple(shape), list(values)
 
@@ -222,8 +204,6 @@ class _Array:
         return _Reconstruct, (_NumpyArray, (0,), b'b'), (1, self.shape, numpy_type, False, data)
 
 
-# The names under which GRF and numpy find the classes of the stand-ins. The module
-# `numpy.core.multiarray` loads in numpy 1 and 2 alike.
 _GLOBALS = {
     _BackendAction: ('_gameplayfootball', 'e_BackendAction'),
     _CoreAction: ('gfootball.env.football_action_set', 'CoreAction'),
@@ -234,8 +214,6 @@ _GLOBALS = {
 
 
 class _Pickler(pickle._Pickler):
-    """Pickles the stand-ins as references to GRF's and numpy's classes, without importing them."""
-
     def save_global(self, obj, name=None):
         target = _GLOBALS.get(obj)
         if target is None:
@@ -249,14 +227,12 @@ class _Pickler(pickle._Pickler):
 
 
 def _pickle(entry):
-    """Returns the pickle of one step, as GRF's `cPickle.dump` writes it."""
     buffer = io.BytesIO()
     _Pickler(buffer, protocol=4).dump(entry)
     return buffer.getvalue()
 
 
 def _write_file(path, pickles):
-    """Writes the pickles of a dump to `path`, which appears only once complete."""
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
     temporary = path + '.writing'
     with open(temporary, 'wb') as handle:
@@ -266,7 +242,6 @@ def _write_file(path, pickles):
 
 
 def _difficulty_text(value):
-    """Returns a difficulty as part of a module name, `none` for the scenario's, else like `0p5`."""
     return 'none' if value is None else repr(float(value)).replace('.', 'p').replace('-', 'm')
 
 
@@ -282,14 +257,11 @@ def build_scenario(builder):
 
 
 def _flip_sticky(states, sticky_names):
-    """Returns sticky action states for the other side, as GRF's `rotate_sticky_actions`."""
     index = {name: position for position, name in enumerate(sticky_names)}
     return [states[index[_FLIPPED.get(name, name)]] for name in sticky_names]
 
 
 class _Episode:
-    """The steps of one episode of one environment that the writer has read."""
-
     def __init__(self, environment, values, config, full, goals):
         self.environment = environment
         self.episode = values[2]
@@ -302,35 +274,15 @@ class _Episode:
         self.recent = collections.deque(maxlen=_STEPS_BEFORE_GOAL)
         self.cumulative = 0
         self.frame = 0
-        # The time that names the dump of the episode as GRF names it.
         self.stamp = None
 
 
 def _stamp():
-    """Returns the time of now as GRF's dumps name it, such as `20261027-142233123456`."""
     return datetime.datetime.now().strftime('%Y%m%d-%H%M%S%f')
 
 
 class DumpWriter:
-    """Writes the episodes of chosen environments of a batch as GRF dumps.
-
-    Create it before the batch's `reset`, or right after one, and call `record` after every
-    `step` with the actions of that step. An environment that the writer meets in the middle of an
-    episode starts with its next episode. An episode that `set_state` or a `reset` cuts is dropped.
-
-    GRF throttles its dumps by wall-clock time, a full-episode dump at most every 10 seconds and a
-    goal dump at most every 10 minutes. The writer writes every episode that `dump_frequency`
-    selects, and every goal. An episode whose difficulties differ from its scenario's names its
-    level `<scenario>_difficulty_<left>_<right>` and writes that GRF scenario file into `logdir`.
-
-    Attributes:
-        batch: The `Batch` that it follows.
-        logdir: The directory of the dumps, GRF's `logdir`, which each configuration names as
-            `tracesdir`.
-        environments: The environments that the writer follows.
-        write_full_episode_dumps, write_goal_dumps, dump_frequency: GRF's dump options.
-        paths: The path of every dump written so far.
-    """
+    """Writes the episodes of chosen environments of a batch as GRF dumps."""
 
     def __init__(
         self,
@@ -341,28 +293,7 @@ class DumpWriter:
         write_goal_dumps: bool = False,
         dump_frequency: int = 1,
     ) -> None:
-        """Follows `environments` of `batch` from the episodes that its next steps start.
-
-        Args:
-            batch: A `BatchEnvironment`, or the `Batch` of the engine's own commands.
-            logdir: The directory of the dumps, created when the first is written.
-            environments: The indices of the environments to follow, or `None` for every one.
-            write_full_episode_dumps: Whether to write each selected episode as
-                `episode_done_environment_<index>_episode_<episode>.dump`, as GRF's option.
-            write_goal_dumps: Whether to write, at each goal of a selected episode, the steps
-                before it, up to 100, and the step that scored, as GRF's `score_...` and
-                `lost_score_...` dumps, the latter for a goal of the right team.
-            dump_frequency: GRF's option, which selects the first episode of an environment and
-                then every `dump_frequency`-th, or every one at 1 or less.
-
-        Raises:
-            ArgumentError: If an environment lies outside the batch. It is a `ValueError` and an
-                `IndexError`.
-            ClosedError: If the batch is closed. It is a `RuntimeError`.
-            LibraryError: If the library of the batch lacks the episode bookkeeping of this
-                version. It is a `RuntimeError`.
-        """
-        # A `BatchEnvironment` holds its `Batch` in `_batch`, which the writer follows.
+        """Follows `environments` of `batch` from the episodes that its next steps start."""
         batch = getattr(batch, '_batch', batch)
         batch._handle()
         library = batch._library
@@ -392,7 +323,6 @@ class DumpWriter:
         self.write_goal_dumps = bool(write_goal_dumps)
         self.dump_frequency = int(dump_frequency)
         self.paths: list[str] = []
-        # Whether the dumps take GRF's names, as for the one environment of `create_environment`.
         self._grf_names = False
         self._action_set = _ACTION_SETS[_ACTION_SET_NAMES[batch.action_count]]
         self._sticky = [name for name in self._action_set if name in _STICKY]
@@ -402,17 +332,14 @@ class DumpWriter:
         batch._wait_for_device()
         for environment in self.environments:
             values, _ = self._episode_values(environment)
-            # A batch reset and not yet stepped holds each episode at its start.
             self._episodes[environment] = (
                 self._open(environment) if values[2] >= 1 and values[5] == -1 else None
             )
 
     def _episode_values(self, environment, difficulty=False):
-        """Returns an environment's `cuju_environment_episode` values, and difficulties if asked."""
         return _episode_values(self.batch, environment, difficulty)
 
     def _level(self, bundle, difficulties):
-        """Returns GRF's `level` of an episode, writing a scenario file for its own difficulties."""
         batch = self.batch
         name = batch._library.cuju_environment_scenario(batch._handle(), bundle).decode()
         played, own = difficulties[:2], difficulties[2:]
@@ -434,7 +361,6 @@ class DumpWriter:
         return level
 
     def _config(self, values, difficulties):
-        """Returns the configuration of GRF's dump, as `Config.get_dictionary()` holds it."""
         seed, reverse, episode, offset, bundle, _, fixed, deterministic, ticks, left, right = (
             values[:11]
         )
@@ -456,12 +382,10 @@ class DumpWriter:
             'write_video': False,
             'render_resolution_y': 720,
         }
-        # GRF: a seed given as an option precedes the episode number, and a drawn one is a value
-        # of the scenario, which `get_dictionary` adds last.
+        # GRF: a seed given as an option precedes the episode number.
         if fixed >= 0:
             config['game_engine_random_seed'] = seed
-        # GRF: the creation of an environment builds the scenario of its first number, and each
-        # reset the next, so the first episode is the second. Its parity picks the scenario's form.
+        # GRF: the creation builds the first scenario number, so the first episode is the second.
         config['episode_number'] = episode + 1 + offset
         if not deterministic:
             config['reverse_team_processing'] = bool(reverse)
@@ -470,7 +394,6 @@ class DumpWriter:
         return config
 
     def _open(self, environment):
-        """Returns the episode that an environment starts, with the dumps it selects."""
         values, difficulties = self._episode_values(environment, difficulty=True)
         frequency = self.dump_frequency
         # GRF: `PeriodicDumpWriter` counts the resets, the first included.
@@ -484,11 +407,9 @@ class DumpWriter:
         )
 
     def _observation(self, rows, episode, designated):
-        """Returns GRF's observation of the match from an episode's raw views, or `None`."""
         return _match_observation(rows, episode, designated, self._sticky)
 
     def _core_actions(self, episode, row):
-        """Returns GRF's `CoreAction`s of one step, with the right agents' directions turned."""
         count = len(self._action_set)
         actions = []
         for agent, index in enumerate(row[: episode.left + episode.right]):
@@ -504,13 +425,6 @@ class DumpWriter:
         return actions
 
     def _path(self, kind, episode, frame=None, stamp=None):
-        """Returns the path of a dump of an episode, and keeps it in `paths`.
-
-        The writer of one environment of `create_environment` names a dump as GRF does,
-        `<logdir>/<kind>_<date>-<time>.dump`, with the time when GRF starts the dump, `stamp` or
-        now. Two environments of a batch can start dumps in the same microsecond, so a batch's
-        writer names each by its environment, its episode and, for a goal, its step.
-        """
         if self._grf_names:
             path = f'{self.logdir}{os.sep}{kind}_{stamp or _stamp()}.dump'
         else:
@@ -522,11 +436,9 @@ class DumpWriter:
         return path
 
     def _append(self, episode, entry):
-        """Adds a step to an episode, and returns the kind and the path of a goal dump it writes."""
         written = []
         reward = entry['reward']
-        # GRF: the first step of a dump takes the configuration into the step itself, so a later
-        # dump that holds the step holds it too.
+        # GRF: the first step of a dump takes the configuration into the step itself.
         if episode.goals and reward in (1, -1):
             # GRF: the dump of a goal holds the steps before it and the step that scored.
             entries = [*episode.recent, entry]
@@ -546,7 +458,6 @@ class DumpWriter:
         return written
 
     def _finish(self, episode):
-        """Writes the full dump of an episode, if selected, and returns its kind and path."""
         if not episode.full or not episode.pickles:
             return []
         path = self._path('episode_done', episode, stamp=episode.stamp)
@@ -554,7 +465,6 @@ class DumpWriter:
         return [('episode_done', path)]
 
     def _rows(self, actions):
-        """Returns the followed environments' actions, dones, rewards and raw views on the host."""
         batch = self.batch
         shape = (batch.environment_count, batch.agents)
         _, _, done, _ = batch._outputs()
@@ -565,8 +475,6 @@ class DumpWriter:
         reward_rows = score[index].to('cpu').tolist()
         raw_rows = None
         if batch._raw_fields is not None:
-            # An ended episode's last observation is in `final_raw`, which an automatic reset
-            # keeps.
             current, final = batch._raw('raw'), batch._raw('final_raw')
             raw_rows = {
                 name: torch.where(
@@ -581,7 +489,6 @@ class DumpWriter:
         return action_rows, ended.to('cpu').tolist(), reward_rows, raw_rows
 
     def _entry(self, episode, actions, reward, raw, designated):
-        """Returns GRF's entry of an episode's next step, and counts the step."""
         episode.cumulative += reward
         entry = {
             'debug': {
@@ -600,25 +507,10 @@ class DumpWriter:
         return entry
 
     def record(self, actions: Any) -> list[str]:
-        """Reads the step that just ran and writes the dumps it completes.
-
-        Call it after each `step`, before `reset_done`.
-
-        Args:
-            actions: The actions that the step took, `[environment_count, agents]`, or
-                `[environment_count]` for one agent.
-
-        Returns:
-            The paths of the dumps that this call wrote.
-
-        Raises:
-            ArgumentError: If the actions have another shape or an action lies outside the
-                action set. It is a `ValueError` and an `IndexError`.
-        """
+        """Reads the step that just ran and writes the dumps it completes."""
         return [path for _, path in self._record(actions)]
 
     def _record(self, actions):
-        """Does what `record` does, and returns the kind and the path of each dump written."""
         batch = self.batch
         batch._handle()
         actions = torch.as_tensor(actions)
@@ -639,15 +531,12 @@ class DumpWriter:
             episode = self._episodes[environment]
             ended = bool(done_rows[row])
             if ended:
-                # A reset in the step leaves the next episode at its start.
                 continues = episode is not None and (
                     (episodes == episode.episode + 1 and step == -1)
                     if auto_reset
                     else (episodes == episode.episode and step == episode.frame)
                 )
             else:
-                # Within an episode the step count goes up by one per step, so another count means
-                # a reset or a state set in between.
                 if episode is not None and not (
                     episodes == episode.episode and step == episode.frame
                 ):
@@ -662,7 +551,6 @@ class DumpWriter:
                         {name: raw_rows[name][row][agent] for name in raw_rows}
                         for agent in range(batch.agents)
                     ]
-                # An ended episode's designated players outlive the automatic reset in its slot.
                 designated = values[15:17] if ended else values[13:15]
                 entry = self._entry(
                     episode, action_rows[row], int(reward_rows[row]), raw, designated
@@ -676,13 +564,7 @@ class DumpWriter:
         return written
 
     def close(self) -> list[str]:
-        """Writes each unfinished episode as its dump and stops following the batch.
-
-        GRF also leaves the dump of an episode that its environment closes in.
-
-        Returns:
-            The paths of the dumps that this call wrote.
-        """
+        """Writes each unfinished episode as its dump and stops following the batch."""
         written = []
         for environment, episode in self._episodes.items():
             if episode is not None:
@@ -698,7 +580,6 @@ class DumpWriter:
 
 
 def _episode_values(batch, environment, difficulty=False):
-    """Returns an environment's `cuju_environment_episode` values, and difficulties if asked."""
     library = batch._library
     library.cuju_environment_episode.argtypes = [
         ctypes.c_void_p,
@@ -721,27 +602,14 @@ def _episode_values(batch, environment, difficulty=False):
 
 
 def _sticky_names(action_count):
-    """Returns the names of the sticky actions of the action set of `action_count` actions."""
     return [name for name in _ACTION_SETS[_ACTION_SET_NAMES[action_count]] if name in _STICKY]
 
 
 def _match_observation(rows, episode, designated, sticky_names):
-    """Returns GRF's observation of the match from an episode's raw views, or `None`.
-
-    It is the dictionary of GRF's `FootballEnvCore.observation()`, which a dump holds, with the
-    arrays as `_Array` stand-ins.
-
-    Args:
-        rows: The raw observation of each agent of the environment, as lists.
-        episode: The `_Episode`, which gives the agents of each side and the team sizes.
-        designated: The designated player of each team.
-        sticky_names: The names of the sticky actions of the action set.
-    """
     left, right = episode.left, episode.right
     if left + right == 0:
         return None
-    # GRF: a right agent, here the first agent without left agents, sees the match turned by
-    # 180 degrees with the teams swapped.
+    # GRF: a right agent sees the match turned by 180 degrees with the teams swapped.
     base = rows[0]
     turned = not left
     sign = -1.0 if turned else 1.0
@@ -807,8 +675,6 @@ class _ReadBackendAction(int):
 
 
 class _ReadType:
-    """A numpy `dtype` as `read_dump` loads it."""
-
     def __init__(self, code, align=False, copy=True):
         self.code, self.order = code, '|'
 
@@ -817,8 +683,6 @@ class _ReadType:
 
 
 class _ReadArray:
-    """A numpy array as `read_dump` loads it."""
-
     def __setstate__(self, state):
         _, self.shape, self.type, _, self.data = state
 
@@ -845,7 +709,6 @@ _READ_GLOBALS = {
     ('gfootball.env.football_action_set', 'CoreAction'): _ReadAction,
     ('_gameplayfootball', 'e_BackendAction'): _ReadBackendAction,
     ('gfootball_engine', 'e_BackendAction'): _ReadBackendAction,
-    # The names of the same classes in the dumps of GRF's Python under `cuju.gfootball`.
     ('cuju.gfootball.env.football_action_set', 'CoreAction'): _ReadAction,
     ('cuju.gfootball_engine._gameplayfootball', 'e_BackendAction'): _ReadBackendAction,
     ('cuju.gfootball_engine', 'e_BackendAction'): _ReadBackendAction,
@@ -859,8 +722,6 @@ _READ_GLOBALS = {
 
 
 class _DumpUnpickler(pickle.Unpickler):
-    """Reads a dump and resolves only GRF's actions and numpy's arrays."""
-
     def find_class(self, module, name):
         target = _READ_GLOBALS.get((module, name))
         if target is None:
@@ -869,7 +730,6 @@ class _DumpUnpickler(pickle.Unpickler):
 
 
 def _converted(value):
-    """Returns a loaded value with tensors for arrays and names for actions."""
     if isinstance(value, _ReadArray):
         dtype = _READ_TYPES.get(re.sub(r'^[<|=]', '', value.type.code))
         if dtype is None or value.type.order == '>':
@@ -889,21 +749,7 @@ def _converted(value):
 
 
 def read_dump(path: str) -> list[dict[str, Any]]:
-    """Reads a GRF dump, of this module or of GRF, without GRF or numpy.
-
-    Each step is a dictionary as GRF wrote it, with CPU tensors in place of numpy arrays and the
-    name of each action in place of its `CoreAction`. Only GRF's actions and numpy's arrays load,
-    so a dump runs no code of its own.
-
-    Args:
-        path: The path of the dump.
-
-    Returns:
-        The steps of the dump.
-
-    Raises:
-        pickle.UnpicklingError: If the file holds other objects.
-    """
+    """Reads a GRF dump, of this module or of GRF, without GRF or numpy."""
     return _read_dump(path, strict=False)
 
 
@@ -926,7 +772,6 @@ def _read_dump(path: str, *, strict: bool) -> list[dict[str, Any]]:
 
 
 def _read_cli_dump(path: str) -> list[dict[str, Any]]:
-    """Reads a complete dump for the command line."""
     try:
         return _read_dump(path, strict=True)
     except (

@@ -1,18 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Draws GRF's frames for `cuju.gfootball_engine` with cuju's software renderer.
-
-A `GameEnv` whose `game_config.render` is on at `start_game` opens one session, which holds one
-renderer of `cuju._pixels` and calls it where GRF's `GameEnv` touches its graphics: the steps of
-each reset and the start of its match, every render of the match's RenderState, and every save
-or load of a state. `frame()` returns GRF's screen bytes, `render_resolution_x *
-render_resolution_y * 3` bytes, rows from the bottom. The renderer needs libcuju_render and GRF's
-media, from cuju-grf-media or from the folder that `CUJU_GRF_MEDIA` names. The key
-`render_threads` of the machine config sets the threads that draw each frame, which leave every
-frame as it is.
-"""
-
 from __future__ import annotations
 
 import ctypes
@@ -55,8 +43,6 @@ def _media_folder():
 
 
 class Session:
-    """The graphics of one rendering engine, as GRF's `GameEnv` drives them."""
-
     def __init__(self, env):
         game = env.game_config
         try:
@@ -99,11 +85,7 @@ class Session:
             self.renderer.render_scene(True)
 
     def reset(self, env, animations):
-        """GRF's `GameEnv::reset` after the engine's own reset: its graphics, then StartMatch.
-
-        GRF: with `game_config.render` off since `disable_render`, the match is built without
-        rendering, on the pitch alone, and its first render raises where GRF's process crashes.
-        """
+        """GRF's `GameEnv::reset` after the engine's own reset: its graphics, then StartMatch."""
         rendering = bool(env.game_config.render)
         self._reset_steps(rendering)
         self.renderer.set_render(rendering)
@@ -131,25 +113,20 @@ class Session:
 
 
 class _Provider:
-    """The renderer of this package."""
-
     @staticmethod
     def open_session(env):
         return Session(env)
 
 
 def provider():
-    """Returns what opens the sessions, cuju's own renderer unless a test replaces it."""
     return _Provider
 
 
 def open_session(env):
-    """Opens the renderer's session for `env`, which `start_game` asks for when rendering."""
     return provider().open_session(env)
 
 
 def require(session):
-    """Returns `session`, or raises when no renderer opened one at `start_game`."""
     if session is None:
         raise RuntimeError(
             'GRF renders only an engine whose game_config.render was true at start_game()'

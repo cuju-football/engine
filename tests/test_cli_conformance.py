@@ -43,7 +43,6 @@ PROFILE = Profile(
     variables={},
 )
 
-# The family's spellings. An option whose destination is a key here must use exactly these strings.
 SHARED = {
     'json': ('--json',),
     'quiet': ('-q', '--quiet'),
@@ -67,7 +66,6 @@ SHARED = {
     'overwrite': ('--overwrite',),
     'replace': ('--replace',),
 }
-# Spellings that the contract replaced, which no parser may hold.
 FORBIDDEN = {
     '--out',
     '--to',
@@ -76,7 +74,7 @@ FORBIDDEN = {
     '--left-ability',
     '--right-ability',
     '--eleven',
-    '--no-open',  # only as the negative half of BooleanOptionalAction `--open`
+    '--no-open',
     '--delete-group',
     '--restore-group',
     '--package',
@@ -150,8 +148,6 @@ VERBS = {
     'off',
     'status',
 }
-# Prose of help, words, commas and periods, and code tokens such as builtin:0.3 or KEY=VALUE. A
-# colon followed by a space, a semicolon, brackets, backticks and quotes are prose punctuation.
 _PROSE = re.compile(r'[;()\[\]{}`\"!?]|: ')
 _EXAMPLE = re.compile(r'^\s+(cuju .+)$', re.MULTILINE)
 
@@ -221,14 +217,11 @@ def _flags(parser: argparse.ArgumentParser) -> set[str]:
 
 @pytest.fixture(autouse=True)
 def _homes(tmp_path, monkeypatch):
-    """Points every home and settings variable of the package at a temporary folder."""
     for name, below in PROFILE.variables.items():
         monkeypatch.setenv(name, str(tmp_path / below) if below else '')
 
 
 def _run(words: list[str], capsys) -> tuple[int, str, str]:
-    """Runs the package's `main` on the words after `cuju` and returns its status, standard
-    output and standard error. A package's `main` takes the words after its own name."""
     main = importlib.import_module(PROFILE.module).main
     try:
         status = main(list(words[len(_base()) :]))
@@ -236,9 +229,6 @@ def _run(words: list[str], capsys) -> tuple[int, str, str]:
         status = exit.code if isinstance(exit.code, int) else 1
     captured = capsys.readouterr()
     return int(status or 0), captured.out, captured.err
-
-
-# Shape of the tree.
 
 
 def test_the_tree_is_at_most_two_words_below_the_package():
@@ -260,9 +250,6 @@ def test_a_word_below_a_noun_is_a_known_verb():
         depth = len(node.words) - len(_base())
         if depth == 2:
             assert node.words[-1] in VERBS, _label(node)
-
-
-# Help.
 
 
 @pytest.mark.parametrize('node', [n for n in NODES if n.words != _base()], ids=_label)
@@ -318,9 +305,6 @@ def test_option_help_is_prose_and_metavars_are_known(node):
             assert metavar in METAVARS, f'{action.dest}, {metavar}'
 
 
-# Options.
-
-
 @pytest.mark.parametrize('node', CHECKED, ids=_label)
 def test_shared_options_keep_their_spelling(node):
     for action in _options(node.parser):
@@ -364,11 +348,7 @@ def test_a_leaf_that_prints_data_takes_json(node):
     assert '--json' in _flags(node.parser)
 
 
-# The status and the errors of bad arguments. These parse and fail, so nothing runs.
-
-
 def _bad_values(node: Node) -> Iterator[list[str]]:
-    """Yields argument lists that must fail while parsing."""
     yield ['--no-such-option']
     for action in _options(node.parser):
         flag = action.option_strings[-1]
@@ -423,16 +403,8 @@ def test_the_version_names_the_distribution(capsys):
         assert re.fullmatch(r'\S+ \S+', line), line
 
 
-# A helper for the tests of each command, which run it for real with `--json`.
-
-
 def answer(out: str, schema: str) -> dict:
-    """Returns the one JSON object of a command's standard output, checked against the contract.
-
-    Raises:
-        AssertionError: If the output is not one object whose first key is `schema` with the
-            value given, such as `arena.team.list/1`.
-    """
+    """Returns the one JSON object of a command's standard output, checked against the contract."""
     found = json.loads(out)
     assert isinstance(found, dict), 'one object, never a bare list'
     assert list(found)[:1] == ['schema'] and found['schema'] == schema, found.get('schema')

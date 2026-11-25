@@ -2,11 +2,7 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""GRF's module `_gameplayfootball` over cuju's engine, with its names, types and conversions.
-
-Every class, enumeration and method keeps the behaviour of GRF's boost.python module, so GRF's
-Python runs on it unchanged. A call that GRF answers with a fatal error raises instead.
-"""
+"""GRF's module `_gameplayfootball` over cuju's engine, with its names, types and conversions."""
 
 from __future__ import annotations
 
@@ -47,7 +43,6 @@ __all__ = [
     'e_Team',
 ]
 
-# The name that GRF's reprs and messages print for this module.
 _NAME = '_gameplayfootball'
 _FLOAT = struct.Struct('<f')
 _PICKLING = (
@@ -60,7 +55,6 @@ _Y_SCALE = _FLOAT.unpack(_FLOAT.pack(-2.36))[0]
 
 
 def _float32(value):
-    """Returns `value` rounded to float, as a C cast rounds it, infinite past the range."""
     try:
         return _FLOAT.unpack(_FLOAT.pack(float(value)))[0]
     except OverflowError:
@@ -86,7 +80,6 @@ def _signature_error(owner, method, arguments, signature):
     )
 
 
-# Each converter returns the C++ value of an argument or raises `_MismatchError`.
 def _to_float(value):
     if isinstance(value, (int, float)):
         return _float32(value)
@@ -147,7 +140,6 @@ def _instance(kind):
 
 
 def _arguments(owner, method, signature, arguments, keywords, converters):
-    """Converts the positional `arguments` of a call as boost.python does, or raises its error."""
     if keywords or len(arguments) != len(converters):
         raise _signature_error(owner, method, arguments, signature)
     try:
@@ -157,8 +149,6 @@ def _arguments(owner, method, signature, arguments, keywords, converters):
 
 
 def _setter(owner_type, cpp_type, convert):
-    """Returns the conversion of a property's value, raising the error of boost.python's setter."""
-
     def apply(instance, value):
         try:
             return convert(value)
@@ -188,8 +178,6 @@ def _no_deleter(owner):
 
 
 class _Instance:
-    """The base of every class, which prints as boost.python's and refuses pickling."""
-
     def __repr__(self):
         return f'<{_NAME}.{type(self).__name__} object at {hex(id(self))}>'
 
@@ -202,12 +190,7 @@ class _Instance:
         raise RuntimeError(_PICKLING.format(type(self).__name__))
 
 
-# Enumerations.
-
-
 class enum(int):
-    """The base of every enumeration, as boost.python's `enum`."""
-
     names: dict
     values: dict
 
@@ -253,7 +236,6 @@ def _make_enum(name, pairs):
 
 
 def _enum_value(kind, value):
-    """The named value of `kind` for `value`, or an unnamed one, as boost.python converts it."""
     member = kind.values.get(value)
     return member if member is not None and int(member) == value else kind(value)
 
@@ -293,10 +275,6 @@ e_BackendAction = _make_enum(
     'e_BackendAction', [(name, index) for index, name in enumerate(_ACTIONS)]
 )
 e_Team = _make_enum('e_Team', [('e_Left', 0), ('e_Right', 1)])
-
-
-# Records, which hold the values that several wrappers may share. A record of a `ScenarioConfig`
-# counts its changes in `version`, and every record inside it points at it through `root`.
 
 
 class _Root:
@@ -462,9 +440,6 @@ _ENTRY_ARGUMENTS = [
 ]
 
 
-# Vectors, as boost.python's `vector_indexing_suite` gives them.
-
-
 class _ListRecord:
     __slots__ = ('items', 'root')
 
@@ -474,12 +449,6 @@ class _ListRecord:
 
 
 class _Vector(_Instance):
-    """A `std::vector` of GRF, with the semantics of boost.python's `vector_indexing_suite`.
-
-    `_store` turns a Python value into a stored item or raises `_MismatchError`, `_load` turns a
-    stored item into the value that indexing returns, and `_same` is the C++ equality of two items.
-    """
-
     def __init__(self, *arguments, **keywords):
         name = type(self).__name__
         _arguments(
@@ -877,9 +846,6 @@ class SharedInfo(_Instance):
     del _read, _team, _controllers, _plain, _flag
 
 
-# The configurations.
-
-
 class _ScenarioRecord(_Root):
     __slots__ = (
         'ball',
@@ -929,7 +895,6 @@ class _ScenarioRecord(_Root):
         self.cache = [False, False, -1, -1]
 
     def assign(self, other):
-        """Copies `other` in, as GRF's `ScenarioConfig` assignment does, the cache included."""
         for name in _SCENARIO_FIELDS:
             setattr(self, name, getattr(other, name))
         self.ball.values = list(other.ball.values)
@@ -952,7 +917,6 @@ class _ScenarioRecord(_Root):
         self.version += 1
 
     def to_native(self):
-        """Returns `cuju_engine_scenario` of the record and the entry arrays it points at."""
         teams = []
         for team in (self.left_team.items, self.right_team.items):
             if len(team) > _native.TEAM_PLAYERS:
@@ -987,7 +951,6 @@ class _ScenarioRecord(_Root):
         return scenario, teams
 
     def from_native(self, scenario):
-        """Copies `cuju_engine_scenario` in, its entries included."""
         for name in _SCENARIO_FIELDS:
             value = getattr(scenario, name)
             if isinstance(getattr(self, name), bool):
@@ -1019,7 +982,6 @@ class _ScenarioRecord(_Root):
         self.version += 1
 
 
-# Each field of `ScenarioConfig` with its C++ type and its conversion.
 _SCENARIO_TYPES = {
     'left_agents': ('int', _to_int),
     'right_agents': ('int', _to_int),
@@ -1179,7 +1141,6 @@ class _Tracker:
         self.start = 0
         self.end = 1000000000
         self.waiting = None
-        # The failure of the comparison that the waiting engine takes up when it wakes.
         self.failure = None
 
     def setup(self, env, start, end):
@@ -1248,14 +1209,11 @@ class _Tracker:
 
 _TRACKER = _Tracker()
 
-# The engines of finalized `GameEnv`s, each with a weak reference to its `GameEnv`, which a
-# resurrected one keeps alive.
 _RELEASED = []
 _RELEASED_LOCK = threading.Lock()
 
 
 def _free_released():
-    """Frees the engines of every finalized `GameEnv` that no object refers to any more."""
     with _RELEASED_LOCK:
         kept = []
         for reference, engine in _RELEASED:
@@ -1300,8 +1258,6 @@ class GameEnv(_Instance):
         self._render_mode = False
 
     def __del__(self):
-        # A finalizer may resurrect the engine, as GRF's core does when it returns an engine to its
-        # pool during a collection, so the engine is freed only once nothing refers to it.
         engine = getattr(self, '_engine', None)
         if engine:
             with _RELEASED_LOCK:
@@ -1322,14 +1278,12 @@ class GameEnv(_Instance):
         raise _errors.ArgumentError(message)
 
     def _push(self):
-        """Writes `config` into the engine if it changed since the engine last saw it."""
         if self._match and self._config.version != self._pushed:
             scenario, _entries = self._config.to_native()
             self._raise(_native.library().cuju_engine_set_config(self._engine, scenario))
             self._pushed = self._config.version
 
     def _pull_cache(self):
-        """Reads the engine's cache of the scenario, which a step or a state may change."""
         cache = (ctypes.c_int * 4)()
         _native.library().cuju_engine_config_cache(self._engine, cache)
         values = [bool(cache[0]), bool(cache[1]), cache[2], cache[3]]
@@ -1345,7 +1299,6 @@ class GameEnv(_Instance):
         return self._game.physics_steps_per_frame
 
     def _sync_render(self):
-        """Tells the engine whether it renders, as GRF's graphics read `game_config.render`."""
         mode = self._render is not None and bool(self._game.render)
         if mode != self._render_mode:
             _native.library().cuju_engine_set_render(self._engine, 1 if mode else 0)
@@ -1505,7 +1458,6 @@ class GameEnv(_Instance):
             processed(self)
 
     def _prepare_render(self):
-        """Runs GRF's `PrepareRender` on the match and returns the renderer's session."""
         session = _render_hooks.require(self._render)
         self._sync_render()
         self._raise(_native.library().cuju_engine_prepare_render(self._engine))

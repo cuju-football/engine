@@ -1,18 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks that this installation reproduces the expected outputs, on the CPU and on every GPU.
-
-    cuju check                # every case on the CPU and on every visible GPU
-    cuju check --long         # also the long cases, later episodes and the second half
-    cuju check --device cuda  # one backend, which must then be present
-    cuju check --list         # the cases, without playing them
-
-It prints the setup, checks the package data against `data/SHA256SUMS`, and plays each case of
-`data/digests.json`, four environments with fixed actions whose outputs and final states hash into
-one SHA-256, against the digest of a build that matches GRF. The exit status is 0 when everything
-that ran matched, else 1. An absent backend is reported and skipped unless `--device` names it,
-when the status is 3.
-"""
+"""Checks that this installation reproduces the expected outputs, on the CPU and on every GPU."""
 
 from __future__ import annotations
 
@@ -41,7 +29,6 @@ if TYPE_CHECKING:
     import torch
 
 DIGESTS = os.path.join(_checksums.DATA_DIRECTORY, 'digests.json')
-# The processor features that the packaged CPU library needs.
 _FEATURES = ('avx2', 'bmi2', 'fma')
 
 
@@ -78,15 +65,9 @@ def actions_at(step: int, environments: int, agents: int, action_count: int) -> 
 
 
 def play_digest(assets, device, steps, seed=7, environments=4, **options) -> str:
-    """Plays a batch with the actions of `actions_at` and returns the SHA-256 of its outputs.
-
-    The digest covers every observation, reward and done flag of every step, then the state of
-    every environment at the end unless the batch stacks its observations. A GPU batch runs on
-    the current CUDA device.
-    """
+    """Plays a batch with the actions of `actions_at` and returns the SHA-256 of its outputs."""
     from ._batch import Batch
 
-    # The speed settings of the machine config apply, and none changes an output.
     batch = Batch(
         assets,
         environment_count=environments,
@@ -120,10 +101,6 @@ def play_digest(assets, device, steps, seed=7, environments=4, **options) -> str
 
 
 def _fatbin_sections(data: bytes) -> list[tuple[int, int]] | None:
-    """Returns the offset and size of each section that holds fat binaries, or `None`.
-
-    A 64-bit little-endian ELF file names it `.nv_fatbin`, a Windows DLL `.nv_fatb`.
-    """
     if data[:6] == b'\x7fELF\x02\x01':
         (table,) = struct.unpack_from('<Q', data, 0x28)
         entry_size, count, names = struct.unpack_from('<HHH', data, 0x3A)
@@ -158,10 +135,7 @@ def _fatbin_sections(data: bytes) -> list[tuple[int, int]] | None:
 
 
 def cuda_architectures(path: str) -> list[str] | None:
-    """Returns the GPU code in a CUDA library's fat binary, or `None` for a file without one.
-
-    Machine code reads as `sm_86` and PTX as `compute_86`.
-    """
+    """Returns the GPU code in a CUDA library's fat binary, or `None` for a file without one."""
     try:
         with open(path, 'rb') as handle:
             data = handle.read()
@@ -178,8 +152,6 @@ def cuda_architectures(path: str) -> list[str] | None:
                     continue
                 entry = position + header
                 while entry < position + header + length:
-                    # Each entry holds its kind, 1 for PTX and 2 for machine code, its header size,
-                    # its payload size and, at byte 28, the architecture.
                     kind, _, entry_header, payload = struct.unpack_from('<HHIQ', data, entry)
                     (architecture,) = struct.unpack_from('<I', data, entry + 0x1C)
                     prefix = {1: 'compute', 2: 'sm'}.get(kind)
@@ -197,7 +169,6 @@ def code_for(capability: tuple[int, int], architectures: list[str]) -> str:
     major, minor = capability
     machine = [int(code[3:]) for code in architectures if code.startswith('sm_')]
     ptx = [int(code[8:]) for code in architectures if code.startswith('compute_')]
-    # Machine code runs on its own major version from its minor version up.
     native = [code for code in machine if code // 10 == major and code % 10 <= minor]
     if native:
         return f'runs the machine code of sm_{max(native)}'
@@ -214,7 +185,6 @@ def code_for(capability: tuple[int, int], architectures: list[str]) -> str:
 
 
 def _processor():
-    """Returns the model and the flags of the processor, from `/proc/cpuinfo`."""
     model, flags = platform.processor() or platform.machine(), set()
     try:
         with open('/proc/cpuinfo', encoding='ascii', errors='replace') as handle:
@@ -231,7 +201,6 @@ def _processor():
 
 
 def _cpu_quota():
-    """Returns the CPU quota of the cgroup of the process, such as `200000 100000`, or `None`."""
     try:
         with open('/sys/fs/cgroup/cpu.max', encoding='ascii') as handle:
             quota = handle.read().strip()
@@ -241,7 +210,6 @@ def _cpu_quota():
 
 
 def _driver():
-    """Returns the NVIDIA driver's version and the CUDA version it supports, where they load."""
     parts = []
     try:
         nvml = ctypes.CDLL('nvml.dll' if os.name == 'nt' else 'libnvidia-ml.so.1')
@@ -270,7 +238,6 @@ def _version(module):
 
 
 def _library(device):
-    """Returns the lines that describe the library of `device`, and its GPU code for `cuda`."""
     from ._batch import library as _libraries
 
     path = library_path(device)
@@ -326,7 +293,6 @@ def diagnostics() -> list[str]:
     elif flags:
         missing = [name.upper() for name in _FEATURES if name not in flags]
     else:
-        # Without `/proc/cpuinfo`, the system answers for what it can, Windows for AVX2 alone.
         missing = _libraries._missing_processor_features()
     lines.append(
         '  flags: nothing that the packaged CPU library needs is missing'
@@ -362,7 +328,6 @@ def diagnostics() -> list[str]:
 
 
 def _config_lines() -> list[str]:
-    """Returns the lines on the machine config, its path and every value that differs."""
     file = _config.path()
     try:
         given = _config.read(file)
@@ -384,7 +349,6 @@ def _config_lines() -> list[str]:
 
 
 def _toml(value) -> str:
-    """Returns a value of the machine config as TOML writes it."""
     if isinstance(value, bool):
         return 'true' if value else 'false'
     return json.dumps(value)
@@ -408,7 +372,6 @@ def check_data() -> list[str]:
 
 
 def _loads(device):
-    """Returns why the library of `device` does not load here, or `None` if it does."""
     from ._batch import library as _libraries
 
     try:
@@ -419,7 +382,6 @@ def _loads(device):
 
 
 def _devices(requested):
-    """Returns the devices to play as `(label, device, CUDA index)`, and the notes on the absent."""
     import torch
 
     devices, notes = [], []

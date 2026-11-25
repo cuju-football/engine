@@ -16,7 +16,6 @@ from cuju._batch import Batch
 np = pytest.importorskip('numpy')
 cuju_env = pytest.importorskip('cuju.env')
 
-# The indices of GRF's core actions in the `full` set.
 FULL = {
     'idle': 0,
     'left': 1,
@@ -192,7 +191,6 @@ def test_bot_equals_grf_bot(assets):
             ]
             assert ours.tolist() == theirs, f'step {step}, agent {agent}'
             actions[:, agent] = ours
-        # Random moves now and then put the bots in other situations.
         noise = torch.rand((environments, 2), generator=generator) < 0.2
         random_actions = torch.randint(0, 19, (environments, 2), generator=generator)
         batch.step(torch.where(noise, random_actions, actions).to(torch.int32))
@@ -200,7 +198,6 @@ def test_bot_equals_grf_bot(assets):
 
 
 def test_scripted_players_of_create_environment():
-    # Environment 0 of a batch with seed 2 plays GRF's environment after random.seed(2 * 2**32).
     random.seed(2 * 2**32)
     environment = cuju_env.create_environment(
         'academy_3_vs_1_with_keeper',

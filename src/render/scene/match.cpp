@@ -11,9 +11,7 @@
 #include "random.h"
 
 namespace cuju::render::scene {
-
 namespace {
-
 Vector3 V(const assets::Vec3 &v) { return Vector3(v.v[0], v.v[1], v.v[2]); }
 
 NodePtr BuildNode(Context &context, const assets::ObjectNode &src) {
@@ -52,7 +50,6 @@ NodePtr BuildNode(Context &context, const assets::ObjectNode &src) {
     return node;
 }
 
-// SplitGeometry of utils/splitgeometry.cpp over the scene's GeometryData.
 NodePtr SplitGeometry(Scene &scene, Object &source, float grid) {
     auto result = std::make_shared<Node>(source.name);
     struct Cell {
@@ -111,7 +108,7 @@ void CollectGeometry(Node &node, std::vector<ObjectPtr> &out) {
     node.Collect(out, ObjectType::kGeometry);
 }
 
-}  // namespace
+}
 
 Context::Context(GlStream &gl, int width, int height, const Shared &shared) : shared_(shared) {
     MediaSource media;
@@ -190,7 +187,6 @@ Match::Body Match::CreateBody(int team, const PlayerLook &player, const SurfaceP
         player.z_multiplier > 0.0f ? player.z_multiplier : (1.0f / 1.92f) * player.height;
     SurfacePtr skin_surface = scene.surface_manager().Fetch(
         "media/objects/players/textures/skin0" + std::to_string(player.skin) + ".png", true, true);
-    // Node(*fullbodySourceNode, int_to_str(playerCount++)): the template's objects copied.
     std::string postfix = std::to_string(context_.player_count++);
     Node &tmpl = *context_.fullbody_template;
     body.fullbody_node = std::make_shared<Node>(tmpl.name + postfix);
@@ -217,7 +213,6 @@ Match::Body Match::CreateBody(int team, const PlayerLook &player, const SurfaceP
         }
     }
     scene.OnUpdateGeometryData(*body.fullbody);
-    // SetKit.
     std::string kit_ident = "kit_template.png";
     if (kit) {
         for (Mesh &m : data.meshes) {
@@ -229,7 +224,6 @@ Match::Body Match::CreateBody(int team, const PlayerLook &player, const SurfaceP
         }
     }
     scene.OnUpdateGeometryData(*body.fullbody);
-    // PrepareFullbodyModel: unique vertices and indices, scaled, then the skinned straight pose.
     {
         assets::GeometryData raw;
         for (Mesh &m : data.meshes) {
@@ -247,7 +241,6 @@ Match::Body Match::CreateBody(int team, const PlayerLook &player, const SurfaceP
     // GRF: UpdateFullbodyModel(true), the bake, runs only while rendering.
     if (scene.render()) skin(static_cast<int>(bodies_.size()), *body.fullbody, data);
     scene.OnUpdateGeometryData(*body.fullbody, false);
-    // Hairstyle.
     ResourcePtr<GeometryData> hair_data = scene.geometry_manager().Fetch(
         "media/objects/players/hairstyles/" + player.hair_style + ".ase", true, true);
     body.hair = scene.CreateGeometry("hairstyle");
@@ -273,7 +266,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
     Gui &gui = context.gui();
     dynamic_node_ = std::make_shared<Node>("dynamicNode");
     scene.root().AddNode(dynamic_node_);
-    // Ball.
     ball_node_ = context.LoadObject("media/objects/balls/generic.object");
     dynamic_node_->AddNode(ball_node_);
     {
@@ -281,12 +273,10 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
         CollectGeometry(*ball_node_, g);
         ball_ = g.front();
     }
-    // AnimCollection::Load loads player.object once per process and keeps its objects.
     if (!context.anim_skeleton)
         context.anim_skeleton = context.LoadObject("media/objects/players/player.object");
     if (!context.fullbody_template)
         context.fullbody_template = context.LoadObject("media/objects/players/fullbody.object");
-    // Teams.
     for (int k = 0; k < 2; k++) {
         int t = k == 0 ? look.first_team : 1 - look.first_team;
         teams_[t].node = std::make_shared<Node>("team node #" + std::to_string(t));
@@ -298,7 +288,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
         const TeamLook &team = look.teams[t];
         for (std::size_t i = 0; i < team.players.size(); i++) {
             const PlayerLook &p = team.players[i];
-            // Player's constructor: the name tag.
             int stable_id =
                 static_cast<int>(i) +
                 (k == 0 ? 0 : static_cast<int>(look.teams[look.first_team].players.size()));
@@ -321,7 +310,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
             }
         }
     }
-    // Officials.
     SurfacePtr referee_kit =
         scene.surface_manager().Fetch("media/objects/players/textures/referee_kit.png", true, true);
     for (int i = 0; i < 3; i++) {
@@ -344,7 +332,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
         dynamic_node_->AddObject(yellow_);
         dynamic_node_->AddObject(red_);
     }
-    // Camera.
     camera_ = std::make_shared<Object>(ObjectType::kCamera, "camera");
     scene.InitCamera(*camera_);
     camera_->fov = 25;
@@ -352,7 +339,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
     camera_node_->AddObject(camera_);
     camera_node_->position = Vector3(40, 0, 100);
     dynamic_node_->AddNode(camera_node_);
-    // Stadium. GRF: a match built without rendering stands on the pitch alone, with no adboards.
     if (!scene.render()) {
         if (!context.stadium_no_render)
             context.stadium_no_render =
@@ -371,8 +357,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
         context.stadium = context.LoadObject("media/objects/stadiums/test/test.object");
     }
     if (scene.render()) {
-        // RandomizeAdboards, from rng_non_deterministic as StartMatch seeds it. The placeholders
-        // are gone after the first match, which then draws nothing.
         std::vector<std::string> files = {"ad_3xblast01.bmp",
                                           "ad_altfunc01.bmp",
                                           "ad_blauwprint01.bmp",
@@ -419,13 +403,11 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
         stadium_node_->absolute = true;
         scene.root().AddNode(stadium_node_);
     }
-    // Goals.
     if (!context.goals) {
         context.goals = context.LoadObject("media/objects/stadiums/goals.object");
         context.goals->absolute = true;
     }
     scene.root().AddNode(context.goals);
-    // Pitch, once per process, while rendering.
     if (scene.render() && !context.pitch_loaded) {
         context.pitch_loaded = true;
         const pitch::PitchTextures &tex = context.shared().pitch();
@@ -458,7 +440,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
             upload(normal, InternalFormat::kRGB8, z.normalWidth, z.normalHeight, tex.normal[i]);
         }
     }
-    // Sun.
     sun_node_ = context.LoadObject("media/objects/lighting/generic.object");
     dynamic_node_->AddNode(sun_node_);
     sun_ = sun_node_->GetObject("sun");
@@ -466,7 +447,6 @@ Match::Match(Context &context, const MatchLook &look, const SkinFunction &skin)
     sun_->position = look.sun_position;
     sun_->light_radius = 1000000.0f;
     sun_->light_color = look.sun_color;
-    // GUI.
     radar_ = new Radar(&gui, 38, 78, 24, 18);
     gui.AddView(gui.root(), radar_);
     gui.Show(radar_);
@@ -622,4 +602,4 @@ void Match::UploadNetting(const std::function<void(GeometryData &goals)> &nettin
     context_.scene().OnUpdateGeometryData(*goals, false);
 }
 
-}  // namespace cuju::render::scene
+}

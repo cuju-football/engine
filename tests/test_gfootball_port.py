@@ -1,11 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks that `cuju.gfootball` is GRF's Python package with its import lines changed, and its gym.
-
-`ci/port_gfootball.py` writes the tree, `GRF_SOURCES` and `GYM_SOURCES`. These tests remove the
-lines it adds, undo its rewrites with its own tables and compare the digests, so the claim that the
-port is GRF's code, and that its vendored gym is gym's, stays checked without either source.
-"""
+"""Checks that `cuju.gfootball` is GRF's Python package with its imports changed."""
 
 import ast
 import hashlib
@@ -21,7 +16,6 @@ import cuju
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PACKAGE = os.path.join(os.path.dirname(cuju.__file__), 'gfootball')
 SHIPPED_SCENARIOS = os.path.join(os.path.dirname(cuju.__file__), 'data', 'scenarios')
-# The folder that holds `cuju`, for the interpreters that the tests start.
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(cuju.__file__)))
 
 
@@ -44,7 +38,6 @@ def _read(*parts):
 
 
 def _run(code, path=()):
-    """Returns what `code` prints in a new interpreter, with the folders `path` ahead of `cuju`."""
     environment = dict(os.environ)
     inherited = [entry for entry in [os.environ.get('PYTHONPATH')] if entry]
     environment['PYTHONPATH'] = os.pathsep.join([*map(str, path), HOME, *inherited])
@@ -64,7 +57,6 @@ def test_each_ported_file_is_grf_s_file_with_its_imports_changed(path):
     ported = _read(PACKAGE, *path.split('/'))
     original = port.unport(ported, path, port.GRF_REWRITES, 'grf')
     assert hashlib.sha256(original.encode('utf-8')).hexdigest() == GRF_DIGESTS[path]
-    # The port is the image of GRF's file, so it holds no change that the inverse would undo.
     assert port.port(original, path, port.GRF_REWRITES, 'grf') == ported
 
 
@@ -95,7 +87,6 @@ def test_the_tree_holds_the_listed_files_alone():
 
 
 def _code(path):
-    """Returns the statements of the module at `path`, without its docstring and its imports."""
     tree = ast.parse(_read(path))
     body = tree.body
     if body and isinstance(body[0], ast.Expr) and isinstance(body[0].value, ast.Constant):
@@ -104,8 +95,6 @@ def _code(path):
 
 
 def test_the_shipped_scenarios_are_grf_s_scenarios():
-    # The shipped copies carry cuju's header and format, so their code is compared, constant by
-    # constant and statement by statement, with GRF's files in the port.
     grf = sorted(
         path.removeprefix('scenarios/').removesuffix('.py')
         for path in GRF_DIGESTS
@@ -129,7 +118,6 @@ def test_import_of_cuju_leaves_gym_and_absl_out():
 
 
 def test_without_gym_the_vendored_core_serves():
-    # A `None` in `sys.modules` makes the import fail, as an installation without gym does.
     found = _run(
         "import sys; sys.modules['gym'] = None\n"
         'from cuju.gfootball import _gym as gym\n'
@@ -147,7 +135,6 @@ def test_without_gym_the_vendored_core_serves():
 
 
 def _fake_gym(root, version, source):
-    """Writes a package `gym` of `version` under `root`, with `source` as its `__init__.py`."""
     package = root / 'gym'
     (package / 'envs').mkdir(parents=True)
     (package / '__init__.py').write_text(source, encoding='utf-8')
@@ -194,7 +181,6 @@ def test_gym_0_21_serves_as_itself(tmp_path):
 
 
 def _fake_numpy_version(root, version):
-    """Writes the metadata of a numpy of `version` under `root`, which lookups find first."""
     information = root / f'numpy-{version}.dist-info'
     information.mkdir()
     (information / 'METADATA').write_text(

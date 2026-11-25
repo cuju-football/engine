@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The static scene graph of a humanoid, and the world transforms and bounding boxes of its nodes.
 #pragma once
 
 #include <limits>
@@ -18,7 +17,6 @@
 
 namespace cuju {
 namespace animation {
-
 constexpr int LOCAL_MODE_RELATIVE = 0, LOCAL_MODE_ABSOLUTE = 1;
 
 struct SkeletonGeometry {
@@ -27,14 +25,12 @@ struct SkeletonGeometry {
     Vector3 position;
     Quaternion rotation;
     Vector3 scale;
-    // In mesh space.
     Vector3 boundingBoxMinimum, boundingBoxMaximum;
 };
 constexpr int MAXIMUM_GEOMETRIES_PER_NODE = 2;
 struct SkeletonNode {
     int32_t parent;
     int32_t localMode;
-    // The transform at load. The state holds the live one.
     Vector3 position;
     Quaternion rotation;
     Vector3 scale;
@@ -42,7 +38,6 @@ struct SkeletonNode {
 };
 struct Skeleton {
     int32_t nodeMap[state::BODY_PARTS];
-    // Pre-order, so every parent comes before its children.
     InlineVector<SkeletonNode, state::HUMANOID_NODES> nodes;
 };
 
@@ -90,7 +85,6 @@ inline int BodyPartFromString(const std::string &part) {
     return -1;
 }
 
-// A world transform.
 struct Derived {
     Vector3 position, scale;
     Quaternion rotation;
@@ -123,7 +117,6 @@ CUJU_FUNCTION inline void DeriveNodes(const Skeleton &skeleton, const state::Nod
     }
 }
 
-// As `DeriveNodes`, with `root` in place of node 0.
 CUJU_FUNCTION inline void DeriveNodesWithRoot(const Skeleton &skeleton,
                                               const state::NodeState *nodes,
                                               const state::NodeState &root,
@@ -141,7 +134,7 @@ struct AxisAlignedBoundingBox {
     Vector3 minimumCorner, maximumCorner;
 
     // GRF: the maximum starts at `numeric_limits<float>::min() / 100`, just above zero, so on an
-    // axis where every point is negative it stays near zero. Collisions depend on it.
+    // axis where every point is negative it stays near zero.
     CUJU_FUNCTION void Reset() {
         const float smallest = std::numeric_limits<float>::min() / 100;
         const float largest = std::numeric_limits<float>::max() / 100;
@@ -203,14 +196,12 @@ struct AxisAlignedBoundingBox {
         }
         return squaredDistance <= radius * radius;
     }
-    // Exact: each coordinate divides by 2 in double and rounds to float.
     CUJU_FUNCTION Vector3 Center() const {
         float x = (minimumCorner.coordinates[0] + maximumCorner.coordinates[0]) / 2.0;
         float y = (minimumCorner.coordinates[1] + maximumCorner.coordinates[1]) / 2.0;
         float z = (minimumCorner.coordinates[2] + maximumCorner.coordinates[2]) / 2.0;
         return Vector3(x, y, z);
     }
-    // Exact: squares and roots in double, as `std::pow(float, int)` does, rounded to float twice.
     CUJU_FUNCTION float Radius() const {
         float x = maximumCorner.coordinates[0] - minimumCorner.coordinates[0];
         float y = maximumCorner.coordinates[1] - minimumCorner.coordinates[1];
@@ -224,7 +215,7 @@ struct WorldGeometry {
     AxisAlignedBoundingBox boundingBox;
     Vector3 position;
 };
-// GRF: the box is the mesh box rotated and moved by the world transform. The scale does not enter.
+// GRF: the box is the mesh box rotated and moved by the world transform.
 CUJU_FUNCTION inline WorldGeometry GeometryWorld(const SkeletonGeometry &geometry,
                                                  const Derived &node) {
     Derived derived = DeriveChild(&node, geometry.localMode, geometry.position, geometry.rotation,
@@ -234,5 +225,5 @@ CUJU_FUNCTION inline WorldGeometry GeometryWorld(const SkeletonGeometry &geometr
                          derived.position};
 }
 
-}  // namespace animation
-}  // namespace cuju
+}
+}

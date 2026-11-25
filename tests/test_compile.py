@@ -76,14 +76,12 @@ def test_a_squeezed_batch_compiles(device):
 
 
 @pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
-# PyTorch's Windows wheels come without Triton, which inductor's GPU code needs.
 @pytest.mark.skipif(importlib.util.find_spec('triton') is None, reason='no Triton')
 def test_inductor_captures_the_step_and_a_policy_in_a_cuda_graph():
     torch._dynamo.reset()
 
     def act(batch, actions):
         observation, reward, done, information = batch.step(actions)
-        # A policy's work in the same graph, the next actions from integer arithmetic.
         return observation, reward, done, information, (actions + 1) % batch.action_count
 
     def run(function):

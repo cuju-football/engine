@@ -37,21 +37,17 @@
 #include "surface.h"
 
 namespace cuju::render::overlay2d {
-
 namespace {
-
 constexpr double kValueLimit = 0.001;
 
-// x >> 16 with the sign kept, as x86 shifts a negative int.
 inline int Shr16(int x) { return x >= 0 ? x >> 16 : -((-x + 65535) >> 16); }
 
-// (int) of a double as x86 cvttsd2si, which gives INT_MIN for values out of range and NaN.
 inline int TruncToInt(double v) {
     if (!(v > -2147483649.0 && v < 2147483648.0)) return std::numeric_limits<int>::min();
     return static_cast<int>(v);
 }
 
-}  // namespace
+}
 
 void ZoomSurfaceSize(int width, int height, double zoomx, double zoomy, int &dstw, int &dsth) {
     if (zoomx < 0.0) zoomx = -zoomx;
@@ -89,8 +85,8 @@ Surface ZoomSurface(const Surface &src, double zoomx, double zoomy) {
     }
 
     const std::uint8_t *base = src.px.data();
-    const long gap = src.w;  // pixels per source row
-    long sp = 0;             // source pixel index
+    const long gap = src.w;
+    long sp = 0;
     std::uint8_t *dp = dst.px.data();
     for (int y = 0; y < dh; ++y) {
         const long csp = sp;
@@ -120,4 +116,4 @@ Surface ZoomSurface(const Surface &src, double zoomx, double zoomy) {
     return dst;
 }
 
-}  // namespace cuju::render::overlay2d
+}

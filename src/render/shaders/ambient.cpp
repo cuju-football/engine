@@ -13,42 +13,35 @@
 #include "quad_vs.h"
 
 namespace cuju::render::shaders {
-
 namespace {
-
 using lanes::F8;
 using lanes::I8;
 
 constexpr int kLanes = 16;
 
-// The red channel of a kNearestClamp fetch.
 inline F8 FetchRed(const lanes::NearestLevel &l, F8 s, F8 t) {
     F8 rgba[4];
     lanes::FetchNearest(l, s, t, rgba);
     return rgba[0];
 }
 
-// NIR's fmin and fmax where neither operand is a constant: minps(a, b), or a when b is NaN, so
-// the result is NaN only when both are.
 inline F8 MinNan(F8 a, F8 b) { return lanes::Select(lanes::IsNan(b), a, lanes::MinPs(a, b)); }
 inline F8 MaxNan(F8 a, F8 b) { return lanes::Select(lanes::IsNan(b), a, lanes::MaxPs(a, b)); }
 inline F8 Clamp01(F8 x) {
     return lanes::MinPs(lanes::MaxPs(x, lanes::Splat(0.0f)), lanes::Splat(1.0f));
 }
 
-// The linear depth cameraClip.y / (d - cameraClip.x), as d + -x then an IEEE divide.
 inline F8 LinearDepth(F8 d, F8 neg_clip_x, F8 clip_y) {
     return lanes::Div(clip_y, lanes::Add(d, neg_clip_x));
 }
 
-// mat4 * (x, y, z, 1) row r, column-major, ((m0r * x + m4r * y) + m8r * z) + m12r.
 inline F8 Affine(const float *m, int r, F8 x, F8 y, F8 z) {
     using namespace lanes;
     return Add(Add(Add(Mul(Splat(m[r]), x), Mul(Splat(m[4 + r]), y)), Mul(Splat(m[8 + r]), z)),
                Splat(m[12 + r]));
 }
 
-}  // namespace
+}
 
 AmbientProgram::AmbientProgram()
     : gl::Program({{"orthoViewMatrix", gl::kMat4, 1},
@@ -75,9 +68,6 @@ void AmbientProgram::RunVertices(const gl::DrawState &state, int count, const fl
                       count, attribs[0], clip);
 }
 
-// fs159, one half of eight lanes at a time as the JIT code runs it. Every fetch but the noise is
-// nearest with clamp to edge; the noise is linear, anisotropic, repeat, on its one level. Shader
-// arithmetic is separate fmul and fadd in the IR's operand order, divides are IEEE.
 void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     using namespace lanes;
     const gl::DrawState &st = *b.state;
@@ -102,7 +92,6 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     const F8 neg_cy = Splat(-st.Uniform(kContextY));
     const F8 neg_clip_x = Splat(-st.Uniform(kCameraClip, 0));
     const F8 clip_y = Splat(st.Uniform(kCameraClip, 1));
-    // gl_FragCoord.y through Mesa's window position transform, (1, 0) in a framebuffer object.
     const bool window = st.target.window;
     const F8 wpos_scale = Splat(window ? -1.0f : 1.0f);
     const F8 wpos_offset = Splat(window ? static_cast<float>(st.target.height) : 0.0f);
@@ -111,15 +100,14 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     const F8 minus_one = Splat(-1.0f);
     const F8 c0_7 = Splat(FromBits(0x3F333333u));
     const F8 c0_3 = Splat(FromBits(0x3E99999Au));
-    const F8 tint[3] = {Splat(FromBits(0x3E0A3D71u)),   // 0.9 * 0.15
-                        Splat(FromBits(0x3E19999Au)),   // 0.15
-                        Splat(FromBits(0x3E3851ECu))};  // 1.2 * 0.15
-    const F8 radius = Splat(FromBits(0x3E3851ECu));     // 0.18
-    const F8 min_delta = Splat(FromBits(0x3727C5ACu));  // 0.00001
-    const float milli = FromBits(0x3A83126Fu);          // 0.001
+    const F8 tint[3] = {Splat(FromBits(0x3E0A3D71u)),
+                        Splat(FromBits(0x3E19999Au)),
+                        Splat(FromBits(0x3E3851ECu))};
+    const F8 radius = Splat(FromBits(0x3E3851ECu));
+    const F8 min_delta = Splat(FromBits(0x3727C5ACu));
+    const float milli = FromBits(0x3A83126Fu);
     const float noise_sx = ftz::Div(cw, 4.0f);
     const float noise_sy = ftz::Div(ch, 4.0f);
-    // GetEdge's offsets: scalar divides, then * 0.001.
     const float ow1 = ftz::Mul(cw, milli);
     const float oh1 = ftz::Mul(ch, milli);
     const F8 dxm = Splat(ftz::Mul(ftz::Div(-1.0f, ow1), milli));
@@ -130,7 +118,6 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     float X[kLanes], Y[kLanes];
     gl::LaneCoordinates(b, X, Y);
     float out0[4 * kLanes], out1[4 * kLanes];
-    // What each half keeps from its setup for the kernel and the end.
     struct Half {
         F8 tx, ty, d, n0[3], col[3], vpx, vpy, vpz, vn[3], tg[3], bt[3], occlusion;
     };
@@ -148,7 +135,6 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         FetchNearest(albedo, tx, ty, base);
         FetchNearest(normal, tx, ty, n0);
 
-        // World position from the inverse projection-view matrix.
         const F8 px = Add(Mul(tx, two), minus_one);
         const F8 py = Add(Mul(ty, two), minus_one);
         const F8 pz = Add(Mul(d, two), minus_one);
@@ -157,14 +143,12 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         const F8 wy = Div(Affine(I, 1, px, py, pz), ww);
         const F8 wz = Div(Affine(I, 2, px, py, pz), ww);
 
-        // The blueish tint of the desaturated base colour.
         const F8 avg = Mul(Div(Add(Add(base[0], base[1]), base[2]), Splat(3.0f)), c0_7);
         F8 col[3];
         for (int c = 0; c < 3; ++c) {
             col[c] = Mul(Add(avg, Mul(base[c], c0_3)), tint[c]);
         }
 
-        // View position and view normal.
         const F8 vpx = Affine(V, 0, wx, wy, wz);
         const F8 vpy = Affine(V, 1, wx, wy, wz);
         const F8 vpz = Affine(V, 2, wx, wy, wz);
@@ -174,8 +158,6 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
                         Mul(Splat(V[8 + r]), n0[2]));
         }
 
-        // The noise, tiled every 4 pixels, then the tangent frame: Gram-Schmidt of the random
-        // vector against the view normal and the cross product.
         float ns[8], nt[8], noise[32];
         Store(ns, Mul(tx, Splat(noise_sx)));
         Store(nt, Mul(ty, Splat(noise_sy)));
@@ -210,10 +192,6 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         q.occlusion = zero;
     }
 
-    // Occlusion over the kernel. Speed: the two halves step through the kernel together, several
-    // entries at a time, each stage for all of them before the next, so that the processor
-    // overlaps their independent chains; each lane still runs its operations, and adds its terms,
-    // in kernel order.
     constexpr int kStep = 2;
     constexpr int kChains = 2 * kStep;
     static_assert(kKernelSize % kStep == 0, "the kernel steps kStep entries at a time");
@@ -225,7 +203,6 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
             ky[e] = Splat(kv[1]);
             kz[e] = Splat(kv[2]);
         }
-        // Chain c is half c / kStep at kernel entry i + c % kStep.
         F8 spx[kChains], spy[kChains], spz[kChains], su[kChains], sv[kChains], lin[kChains];
         F8 term[kChains];
         for (int c = 0; c < kChains; ++c) {
@@ -274,7 +251,6 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         }
         Store(out0 + 3 * kLanes + o, one);
 
-        // GetEdge: the eight neighbours one pixel away, round the clock from the lower left.
         const F8 xm = Add(tx, dxm), ym = Add(ty, dym), xp = Add(tx, dxp), yp = Add(ty, dyp);
         const F8 tap_s[8] = {xm, tx, xp, xp, xp, tx, xm, xm};
         const F8 tap_t[8] = {ym, ym, ym, ty, yp, yp, yp, ty};
@@ -309,4 +285,4 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kAmbient, AmbientProgram);
 
-}  // namespace cuju::render::shaders
+}

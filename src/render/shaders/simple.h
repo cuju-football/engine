@@ -10,10 +10,8 @@
 #include "../gl/program.h"
 
 namespace cuju::render::shaders {
-
 class SimpleProgram : public gl::Program {
 public:
-    // Uniform locations, as GL assigns them.
     static constexpr int kModelMatrix = 0;
     static constexpr int kViewMatrix = 1;
     static constexpr int kProjectionMatrix = 2;
@@ -31,6 +29,6 @@ public:
     void ShadeBlock(const gl::FragmentBlock &block) const override;
 };
 
-}  // namespace cuju::render::shaders
+}
 
-#endif  // CUJU_RENDER_SHADERS_SIMPLE_H
+#endif

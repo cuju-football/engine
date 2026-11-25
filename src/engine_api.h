@@ -1,11 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The C API of one GRF engine, `GameEnv` of GRF's `gfootball_engine`, on the host. Include after
-// `environment_api.h`, whose `Fail` and `cuju_last_error` it shares. A failure returns a negative
-// kind, -1 for a call GRF refuses, -2 for a path GRF leaves undefined, -3 for a state GRF refuses,
-// -4 for a scenario GRF crashes or hangs on and -5 for a call out of order, such as a step before
-// a reset, or null, and `cuju_last_error` says why.
 #include <cstring>
 #include <memory>
 #include <string>
@@ -34,14 +29,12 @@ void CheckRenderStateSize(unsigned long long size) {
             " bytes, version " + std::to_string(cuju::render::RENDER_STATE_VERSION) + ", found " +
             std::to_string(size) + " bytes");
 }
-}  // namespace
+}
 
 #if !defined(_MSC_VER)
 #pragma GCC visibility push(default)
 #endif
 extern "C" {
-
-// The Python module refuses a library of another version.
 #define CUJU_ENGINE_VERSION 2
 
 // GRF's `FormationEntry` as `ScenarioConfig` stores it, `y` already times -2.36.
@@ -50,9 +43,9 @@ struct cuju_engine_entry {
     int role, lazy, controllable;
 };
 
-// GRF's `ScenarioConfig`, every field. `cache_*` is GRF's cache of the three read-only values.
+// GRF's `ScenarioConfig`, every field.
 struct cuju_engine_scenario {
-    int version;  // `CUJU_ENGINE_VERSION`
+    int version;
     float ball_position[3];
     cuju_engine_entry *left_team;
     int left_size;
@@ -70,16 +63,15 @@ struct cuju_engine_scenario {
         cache_controllable_right;
 };
 
-// One `PlayerInfo`, raw as GRF's `Position` holds it.
 struct cuju_engine_player {
     float position[3], direction[3];
     float tired_factor;
     int has_card, is_active, designated_player, role;
 };
 
-// GRF's `SharedInfo`. Each controller holds the index of its player within the team, or -1.
+// GRF's `SharedInfo`.
 struct cuju_engine_info {
-    int version;  // `CUJU_ENGINE_VERSION`
+    int version;
     float ball_position[3], ball_direction[3], ball_rotation[3];
     int left_size, right_size;
     cuju_engine_player left_team[11], right_team[11];
@@ -87,7 +79,7 @@ struct cuju_engine_info {
     int left_goals, right_goals, game_mode, is_in_play, ball_owned_team, ball_owned_player, step;
 };
 
-}  // extern "C"
+}
 
 namespace {
 cuju::engine::ScenarioConfig FromScenario(const cuju_engine_scenario &source) {
@@ -144,8 +136,6 @@ cuju::engine::ScenarioConfig FromScenario(const cuju_engine_scenario &source) {
     return config;
 }
 
-// Fills every field of `out` but the version and the entry pointers, whose arrays receive the
-// entries.
 void ToScenario(const cuju::engine::ScenarioConfig &config, cuju_engine_scenario &out) {
     const cuju::state::ScenarioState &scenario = config.scenario;
     for (int index = 0; index < 3; index++)
@@ -187,13 +177,11 @@ void ToScenario(const cuju::engine::ScenarioConfig &config, cuju_engine_scenario
     out.cache_controllable_left = config.cachedControllableLeft;
     out.cache_controllable_right = config.cachedControllableRight;
 }
-}  // namespace
+}
 
 extern "C" {
-
 int cuju_engine_version() { return CUJU_ENGINE_VERSION; }
 
-// An engine that reads `animations`, the path of `animations.bin`, once per process.
 void *cuju_engine_create(const char *animations) {
     try {
         cuju::DefaultFloatingPoint floatingPoint;
@@ -216,8 +204,7 @@ int cuju_engine_start(void *engine) {
     }
 }
 
-// GRF: `reset(scenario, animations)` with `ticks` physics steps per frame. Writes the ball that
-// GRF scales in place back into `scenario`.
+// GRF: `reset(scenario, animations)` with `ticks` physics steps per frame.
 int cuju_engine_reset(void *engine, cuju_engine_scenario *scenario, int animations, int ticks) {
     try {
         cuju::DefaultFloatingPoint floatingPoint;
@@ -231,7 +218,6 @@ int cuju_engine_reset(void *engine, cuju_engine_scenario *scenario, int animatio
     }
 }
 
-// Writes `GameEnv.config` into the engine, for its next calls.
 int cuju_engine_set_config(void *engine, const cuju_engine_scenario *scenario) {
     try {
         Engine(engine).SetConfig(FromScenario(*scenario));
@@ -241,8 +227,6 @@ int cuju_engine_set_config(void *engine, const cuju_engine_scenario *scenario) {
     }
 }
 
-// Reads `GameEnv.config` back. `out->left_team` and `out->right_team` hold room for 11 entries
-// each, or are null to leave the entries out.
 int cuju_engine_config(void *engine, cuju_engine_scenario *out) {
     try {
         ToScenario(Engine(engine).Config(), *out);
@@ -252,8 +236,6 @@ int cuju_engine_config(void *engine, cuju_engine_scenario *out) {
     }
 }
 
-// Writes GRF's cache of the scenario into `cache`, whether computed, the dynamic player
-// selection and the two controllable counts.
 int cuju_engine_config_cache(void *engine, int *cache) {
     const cuju::engine::ScenarioConfig &config = Engine(engine).Config();
     cache[0] = config.cacheComputed;
@@ -293,7 +275,6 @@ int cuju_engine_step(void *engine, int ticks) {
     }
 }
 
-// `count` ticks of a step of `ticks`, without its end. Returns 1 if the match is then in play.
 int cuju_engine_ticks(void *engine, int ticks, int count) {
     try {
         cuju::DefaultFloatingPoint floatingPoint;
@@ -304,7 +285,6 @@ int cuju_engine_ticks(void *engine, int ticks, int count) {
     }
 }
 
-// The end of `step` after its ticks.
 int cuju_engine_finish_step(void *engine) {
     try {
         Engine(engine).FinishStep();
@@ -371,8 +351,7 @@ int cuju_engine_set_waiting_count(void *engine, int count) {
     return 0;
 }
 
-// GRF: `get_state(pickle)`. Writes the bytes, valid until the next call on this thread, into
-// `data`.
+// GRF: `get_state(pickle)`.
 int cuju_engine_get_state(void *engine, const char *pickle, unsigned long long pickle_size,
                           const char **data, unsigned long long *size) {
     thread_local std::string bytes;
@@ -387,7 +366,7 @@ int cuju_engine_get_state(void *engine, const char *pickle, unsigned long long p
     }
 }
 
-// GRF: `set_state(bytes)`. Writes where the pickle lies in `bytes`.
+// GRF: `set_state(bytes)`.
 int cuju_engine_set_state(void *engine, const char *bytes, unsigned long long size,
                           unsigned long long *pickle_offset, unsigned long long *pickle_size) {
     try {
@@ -401,9 +380,7 @@ int cuju_engine_set_state(void *engine, const char *bytes, unsigned long long si
     }
 }
 
-// GRF's tracker. `engine` compares its state with the state of `waiting`, as GRF's
-// `verify_snapshot` does, and writes the position of the first difference into `position`.
-// Returns 0 for equal states and 1 for a difference.
+// GRF's tracker.
 int cuju_engine_verify(void *engine, void *waiting, long long *position) {
     try {
         *position = Engine(engine).Verify(Engine(waiting));
@@ -413,8 +390,7 @@ int cuju_engine_verify(void *engine, void *waiting, long long *position) {
     }
 }
 
-// GRF's render mode: an engine started with its graphics system while `game_config.render` is
-// on. Nonzero plays the match under way and every later one as such an engine plays them.
+// GRF's render mode: an engine started with its graphics system while `game_config.render` is on.
 int cuju_engine_set_render(void *engine, int render_mode) {
     Engine(engine).SetRenderMode(render_mode != 0);
     return 0;
@@ -431,13 +407,9 @@ int cuju_engine_prepare_render(void *engine) {
     }
 }
 
-// The version and the size in bytes of `RenderState`, include/cuju/render/render_state.h, that
-// the engine and the batch fill.
 unsigned int cuju_engine_render_state_version() { return cuju::render::RENDER_STATE_VERSION; }
 unsigned long long cuju_engine_render_state_size() { return sizeof(cuju::render::RenderState); }
 
-// Fills `state`, a RenderState of `size` bytes, as the match's creation gives it, for GRF's
-// `StartMatch` after each reset. The engine's later RenderStates carry on from it.
 int cuju_engine_render_start(void *engine, void *state, unsigned long long size) {
     try {
         cuju::DefaultFloatingPoint floatingPoint;
@@ -449,9 +421,6 @@ int cuju_engine_render_start(void *engine, void *state, unsigned long long size)
     }
 }
 
-// Fills `state`, a RenderState of `size` bytes, for the match of GRF's `start_game`, the reset of
-// `ScenarioConfig::make()` with the seed 42 that a rendering engine draws first. `first` is
-// nonzero for the first rendering engine of the process, whose match generates GRF's pitch.
 int cuju_engine_internal_render_state(void *state, unsigned long long size, int first) {
     try {
         cuju::DefaultFloatingPoint floatingPoint;
@@ -465,9 +434,6 @@ int cuju_engine_internal_render_state(void *state, unsigned long long size, int 
     }
 }
 
-// Fills `state`, a RenderState of `size` bytes, include/cuju/render/render_state.h, with what GRF's
-// graphics side reads at a render, after `cuju_engine_prepare_render`, and `processed` with the
-// count of state saves and loads, after each of which GRF uploads the nets again.
 int cuju_engine_render_state(void *engine, void *state, unsigned long long size,
                              unsigned int *processed) {
     try {
@@ -481,7 +447,7 @@ int cuju_engine_render_state(void *engine, void *state, unsigned long long size,
     }
 }
 
-}  // extern "C"
+}
 #if !defined(_MSC_VER)
 #pragma GCC visibility pop
 #endif

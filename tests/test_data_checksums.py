@@ -26,7 +26,6 @@ def test_every_file_has_its_listed_digest():
 def test_the_list_is_what_the_generator_writes():
     with open(_checksums.CHECKSUMS, encoding='ascii') as handle:
         text = handle.read()
-    # `ci/data_checksums.py` writes this text, so run it after a change to the package data.
     assert text == _checksums.format_checksums(_checksums.data_checksums())
 
 

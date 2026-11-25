@@ -2,13 +2,7 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// GRF's render mode on the match. Ported from GRF's spatial.cpp, geometry.cpp, node.cpp,
-// humanoidbase.cpp, match.cpp, referee.cpp and player.cpp, GRF is Apache-2.0.
-// GRF: with the graphics system, every geometry of a humanoid observes its node, and an
-// invalidation of a node computes the derived transforms of the node and its ancestors at once.
-// The root keeps its cache until the next invalidation, which `ResetPosition` skips, so a read
-// after it derives the nodes from the root where it was. A state's load or save marks every
-// cache to compute afresh. Off, every read derives from the current root, as without graphics.
+// GRF's render mode on the match.
 #pragma once
 
 #include "../animation/skeleton.h"
@@ -16,7 +10,6 @@
 
 namespace cuju {
 namespace simulation {
-
 // GRF: `Node::ProcessState`, which `get_state` and `set_state` run.
 CUJU_FUNCTION inline void InvalidateRootCaches(World &world) {
     for (int humanoid = 0; humanoid < MAXIMUM_HUMANOIDS; humanoid++)
@@ -29,15 +22,13 @@ CUJU_FUNCTION inline void ProcessStateMarks(World &world) {
     world.stateProcessed++;
 }
 
-// GRF: a read of the root computes a cache that is not valid. A valid one stays.
+// GRF: a read of the root computes a cache that is not valid.
 CUJU_FUNCTION inline void ReadRootCache(World &world, int humanoidIndex,
                                         const state::NodeState &root) {
     if (world.renderMode == e_Render_On && !world.rootCaches[humanoidIndex].valid)
         RefreshRootCache(world.rootCaches[humanoidIndex], root);
 }
 
-// The nodes as a read sees them. `humanoidIndex` counts the players, then the officials.
-// Exact: the root's derived transform is its own, so only the root's values change.
 CUJU_FUNCTION inline void DeriveHumanoidNodes(const World &world, int humanoidIndex,
                                               const animation::Skeleton &skeleton,
                                               const state::NodeState *nodes,
@@ -53,9 +44,7 @@ CUJU_FUNCTION inline void DeriveHumanoidNodes(const World &world, int humanoidIn
     animation::DeriveNodesWithRoot(skeleton, nodes, root, derived);
 }
 
-// GRF: `GameTask::PrepareRender`'s `Match::Put` at each render. Team 1 is put mirrored, and
-// `Mirror` invalidates the root twice. Team 0 is only read. The officials are mirrored when the
-// teams are processed in reverse.
+// GRF: `GameTask::PrepareRender`'s `Match::Put` at each render.
 CUJU_FUNCTION inline void MatchPut(World &world) {
     if (world.renderMode != e_Render_On) return;
     state::MatchState &match = world.serialized.match;
@@ -86,8 +75,8 @@ CUJU_FUNCTION inline void SpamMessage(World &world, MessageKind kind, int team, 
     message.player = (int8_t)player;
     message.removeTimeMilliseconds =
         world.serialized.match.actualTimeMilliseconds + (uint64_t)milliseconds;
-    // GRF: `Gui2Caption::SetCaption` returns at once without rendering, and `Show` and the
-    // timeout apply all the same.
+    // GRF: `Gui2Caption::SetCaption` returns at once without rendering, and `Show` and the timeout
+    // apply all the same.
     if (world.renderMode == e_Render_On) {
         message.drawn = true;
         message.drawnKind = message.kind;
@@ -110,8 +99,6 @@ CUJU_FUNCTION inline const char *PlayerLastName(int team, int slot) {
     return slot >= 0 && slot < 11 ? names[team ? 1 : 0][slot] : "";
 }
 
-// The text of `message` as GRF's `SpamMessage` sites compose it, zero terminated, at most
-// `MESSAGE_BYTES - 1` bytes. Returns the length.
 CUJU_FUNCTION inline int MessageText(const World &world, const MatchMessage &message,
                                      char text[MESSAGE_BYTES]) {
     int length = 0;
@@ -178,9 +165,6 @@ CUJU_FUNCTION inline int MessageText(const World &world, const MatchMessage &mes
     return length;
 }
 
-// The root a render derives an unmirrored humanoid's joints from: the cache when it holds one,
-// as `UpdateFullbodyNodes` reads `GetDerivedRotation` and `GetDerivedPosition`. A mirrored one
-// derives from its mirrored root, since `Mirror` refreshes the cache.
 CUJU_FUNCTION inline state::NodeState RenderRoot(const World &world, int humanoidIndex,
                                                  const state::NodeState &root) {
     state::NodeState out = root;
@@ -192,5 +176,5 @@ CUJU_FUNCTION inline state::NodeState RenderRoot(const World &world, int humanoi
     return out;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

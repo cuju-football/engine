@@ -23,7 +23,6 @@ from .errors import ConfigurationError
 
 __all__ = ['DEFAULTS', 'path', 'resolve']
 
-# The keys of `[run]` with their defaults, in the order that `cuju check` lists them.
 DEFAULTS: dict[str, Any] = {
     'threads': 0,
     'debug': False,
@@ -39,7 +38,6 @@ _VARIABLE = 'CUJU_CONFIG'
 
 
 def path() -> str:
-    """Returns the path of the machine config, which may name no file."""
     given = os.environ.get(_VARIABLE)
     if given:
         return given
@@ -64,7 +62,6 @@ def _load(text: str, name: str) -> dict[str, Any]:
 
 
 def _check(key: str, value: Any, where: str) -> Any:
-    """Returns `value` for `key`, or raises `ConfigurationError` naming `where`."""
     default = DEFAULTS[key]
     if key == 'allocator':
         if value not in ('cuda', 'torch'):
@@ -77,7 +74,6 @@ def _check(key: str, value: Any, where: str) -> Any:
                 f'expected pin_memory to be "auto", true or false in {where}, found {value!r}'
             )
     elif key == 'numa':
-        # A node of each processor, as `0,0,1,1`, stands in for what the system reports.
         if not isinstance(value, bool) and not (isinstance(value, str) and _nodes(value)):
             raise ConfigurationError(
                 f'expected numa to be true, false or the node of each processor such as '
@@ -101,12 +97,6 @@ def _nodes(text: str) -> bool:
 
 
 def read(file: str | None = None) -> dict[str, Any]:
-    """Returns the `[run]` values that the machine config sets, empty for a missing file.
-
-    Raises:
-        ConfigurationError: If the file is no TOML, holds a table other than `[run]` or a key
-            outside a table, or sets an unknown key or a value of the wrong kind.
-    """
     file = path() if file is None else file
     try:
         with open(file, encoding='utf-8') as handle:
@@ -132,15 +122,6 @@ def read(file: str | None = None) -> dict[str, Any]:
 
 
 def resolve(overrides: dict[str, Any] | None = None) -> dict[str, dict[str, Any]]:
-    """Returns each key of `[run]` with its value and where the value came from.
-
-    Args:
-        overrides: The `config=` dict of a call, which wins over the file.
-
-    Returns:
-        A plain dict from each key to `{'value': ..., 'source': ...}`, where the source is
-        `default`, `file <path>` or `call`.
-    """
     file = path()
     given = read(file)
     resolved = {key: {'value': value, 'source': 'default'} for key, value in DEFAULTS.items()}
@@ -161,21 +142,14 @@ def resolve(overrides: dict[str, Any] | None = None) -> dict[str, dict[str, Any]
 
 
 def values(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Returns the resolved value of each key of `[run]`."""
     return {key: entry['value'] for key, entry in resolve(overrides).items()}
 
 
 def differing(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Returns the keys whose resolved value differs from the default."""
     return {key: value for key, value in values(overrides).items() if value != DEFAULTS[key]}
 
 
 def machine_options(overrides: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Returns the speed options of `Batch` that the machine config and `overrides` resolve to.
-
-    The key `pin_memory`, `auto` in the file by default, becomes true where PyTorch sees a CUDA
-    GPU, and the batch applies it to a CPU batch alone.
-    """
     resolved = values(overrides)
     pin = resolved['pin_memory']
     if pin == 'auto':

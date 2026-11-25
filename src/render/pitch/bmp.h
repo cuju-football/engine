@@ -14,9 +14,6 @@
 #include <vector>
 
 namespace cuju::render::pitch {
-
-// RGBA8 rows from the top of the image, the order of an SDL surface. An image without an alpha
-// mask has alpha 255.
 struct Image {
     int width = 0;
     int height = 0;
@@ -27,6 +24,6 @@ struct Image {
 bool DecodeBmp(const std::uint8_t *data, std::size_t size, Image *image, std::string *error);
 bool LoadBmp(const std::string &path, Image *image, std::string *error);
 
-}  // namespace cuju::render::pitch
+}
 
-#endif  // CUJU_RENDER_PITCH_BMP_H
+#endif

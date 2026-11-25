@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The structures of a state, GRF's serialized world, and the codec that loads and saves them.
 #pragma once
 
 #include <cstdint>
@@ -16,18 +15,10 @@
 
 namespace cuju {
 namespace state {
-
-// Each `Process` visits the fields in the order of GRF's byte format, and the same code loads and
-// saves, so a load then a save reproduces the input bytes. A pointer is an `int32_t` index, -1 for
-// null. Players count the first team then the second, teams are 0 and 1, human gamers count the
-// first team's then the second's, keyboards count in creation order, animations index the tables.
-
 #ifndef CUJU_TEAM_PLAYERS
-// Room for players in one team. `-DCUJU_TEAM_PLAYERS=5`, for 5 versus 5 only, shrinks every world.
 #define CUJU_TEAM_PLAYERS 11
 #endif
 constexpr int MAXIMUM_TEAM_PLAYERS = CUJU_TEAM_PLAYERS;
-// One per frame. GRF's animations have at most 306 frames, and the table load rejects more.
 constexpr int MAXIMUM_ANIMATION_POSITIONS = 320;
 
 // GRF: the type tags are mangled C++ type names, which GRF's states hold byte for byte.
@@ -54,13 +45,11 @@ constexpr int MAXIMUM_ANIMATION_POSITIONS = 320;
 #define TYPE_BODY_PART "N7blunted8BodyPartE"
 #define TYPE_FOOT "N7blunted6e_FootE"
 
-// Both macros read the enclosing function's `Archive` parameter, which must be named `archive`.
 #define PROCESS_FIELD(x, tag) (archive.field = #x, archive.Process(x, tag))
-// `kind` is a `PointerKind` without its `POINTER_` prefix.
 #define PROCESS_POINTER_FIELD(x, kind) \
     (archive.field = #x, archive.ProcessPointer(x, POINTER_##kind, TYPE_INTEGER))
 
-// GRF's radian. The true angle is `angle - PI` when `rotated`, and a load keeps the padding.
+// GRF's radian.
 struct Radian {
     float angle;
     bool rotated;
@@ -460,7 +449,7 @@ struct PlayerBaseState {
     void Process(Archive &archive) {
         PROCESS_FIELD(isActive, TYPE_BOOLEAN);
         PROCESS_STRUCT(humanoid);
-        // GRF stores the controller of an active person only. The layout covers every controller.
+        // GRF stores the controller of an active person only.
         if (isActive || archive.Covering()) PROCESS_STRUCT(controller);
         PROCESS_POINTER_FIELD(externalController, GAMER);
         PROCESS_FIELD(lastTouchTimeMilliseconds, TYPE_UNSIGNED_LONG);
@@ -518,8 +507,7 @@ struct PlayerState {
     }
 };
 
-// GRF stores the tactics as a map from 14 keys to `%f` texts. The codec keeps the float `atof` of
-// each text, whose `%f` gives every six-decimal text back, so a save reproduces the bytes.
+// GRF stores the tactics as a map from 14 keys to `%f` texts.
 constexpr int TACTIC_KEYS = 14;
 // GRF: in the alphabetical order of the keys, the order in which a state stores the map.
 enum TacticID {
@@ -674,8 +662,6 @@ struct MentalImageState {
     float maximumDistanceDeviation, maximumMovementDeviation;
     FixedVector<PlayerImage, 2 * MAXIMUM_TEAM_PLAYERS> players;
     FixedVector<Vector3, 320> ballPredictions;
-    // The state omits whether the predictions are mirrored, which the simulation applies only
-    // when it reads them. The codec never mirrors.
     bool lazyFlip = false;
     void Process(Archive &archive) {
         PROCESS_FIELD(timeStampMilliseconds, TYPE_UNSIGNED_INTEGER);
@@ -699,7 +685,6 @@ struct BallSerialized {
     Vector3 positionBuffer;
     Quaternion orientationBuffer;
     bool ballTouchesNet;
-    // The state omits whether `predictions` and `ballPositionHistory` are mirrored, as above.
     bool lazyFlip = false;
     void Process(Archive &archive) {
         PROCESS_FIELD(momentum, TYPE_VECTOR3);
@@ -720,8 +705,6 @@ struct BallSerialized {
     }
 };
 
-// `teamID` is a GRF team ID and `setPieceTeam` a team index. The caller of the codec mirrors
-// `teamID` and `restartPosition` when the teams swap sides.
 struct RefereeBufferState {
     bool active;
     int32_t desiredSetPiece;
@@ -776,19 +759,16 @@ struct RefereeState {
     }
 };
 
-// The members up to `controlAllPlayers` stay constant over an episode, and the rest change.
 struct ScenarioState {
     Vector3 ballPosition;
     int32_t leftTeamSize, rightTeamSize, leftAgents, rightAgents;
     bool useMagnet, offsides;
     float leftTeamDifficulty, rightTeamDifficulty;
     bool deterministic, endEpisodeOnScore, endEpisodeOnPossessionChange, endEpisodeOnOutOfPlay;
-    // In steps.
     int32_t gameDuration, secondHalf;
     bool controlAllPlayers;
     bool realTime;
     uint32_t gameEngineRandomSeed;
-    // The teams swap sides, so the second team plays from the left.
     bool reverseTeamProcessing;
     FormationEntry leftTeam[MAXIMUM_TEAM_PLAYERS], rightTeam[MAXIMUM_TEAM_PLAYERS];
     void Process(Archive &archive) {
@@ -832,20 +812,16 @@ constexpr int MAXIMUM_CONTROLLERS = 32;
 constexpr int MATCH_KEYBOARDS = 22;
 
 struct MatchState {
-    // Team indices of the teams stored first and second, which swap when the teams swap sides.
     int32_t firstTeam, secondTeam;
     FixedVector<MentalImageState, 4> mentalImages;
     TeamState teams[2];
-    // Not in the state.
     int playerCount = MAXIMUM_PLAYERS;
     PlayerState players[MAXIMUM_PLAYERS];
     int32_t goalCount[2];
     float possessionLastMinute;
-    // The referee, then the two linesmen.
     PlayerBaseState<NoController> officials[3];
     // GRF: a second copy of each human gamer's keyboard, first team first, after the officials.
     KeyboardState secondKeyboardCopies[MAXIMUM_CONTROLLERS];
-    // Not in the state.
     int freeControllerCount = 0;
     KeyboardState freeControllers[MAXIMUM_CONTROLLERS];
     BallSerialized ball;
@@ -861,7 +837,6 @@ struct MatchState {
     int32_t designatedPossessionPlayer;
     int32_t ballRetainer;
     uint32_t possessionSideHistoryMaximumTimeMilliseconds;
-    // One value per tick over the last 6000 ms, so at most 600.
     FixedVector<float, 600> possessionSideHistory;
     bool autoUpdateInGameCamera;
     Quaternion cameraOrientation, cameraNodeOrientation;
@@ -881,12 +856,9 @@ struct EnvironmentStateFull {
     MatchState match;
 };
 
-// The state stores neither `freeControllerCount` nor the player count, which follows from the
-// team sizes.
 void ProcessEnvironmentState(Archive &archive, EnvironmentStateFull &environment,
                              int freeControllerCount);
-// The start of a state, up to and including its scenario.
 void ProcessEnvironmentScenario(Archive &archive, EnvironmentStateFull &environment);
 
-}  // namespace state
-}  // namespace cuju
+}
+}

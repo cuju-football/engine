@@ -27,7 +27,6 @@
 #include "program.h"
 
 namespace cuju::render::gl {
-
 class MipCache;
 class Scene;
 class SceneList;
@@ -35,7 +34,6 @@ class ThreadPool;
 struct DrawInput;
 struct DrawChunk;
 
-// The GL enums the context understands.
 enum : std::uint32_t {
     GL_POINTS = 0x0000,
     GL_TRIANGLES = 0x0004,
@@ -98,10 +96,9 @@ enum : std::uint32_t {
 };
 
 struct ContextOptions {
-    int width = 1280;  // the default framebuffer, a pbuffer, B10G10R10X2 with no depth
+    int width = 1280;
     int height = 720;
-    int threads = 1;  // rasterizer threads, 0 or 1 rasterize on the calling thread
-    // Speed: mipmap chains shared with other contexts, none to filter every chain here.
+    int threads = 1;
     std::shared_ptr<MipCache> mip_cache;
 };
 
@@ -112,30 +109,25 @@ public:
     Context(const Context &) = delete;
     Context &operator=(const Context &) = delete;
 
-    // Textures.
     std::uint32_t GenTexture();
     void DeleteTexture(std::uint32_t name);
-    void ActiveTexture(std::uint32_t unit);  // GL_TEXTURE0 + i
+    void ActiveTexture(std::uint32_t unit);
     void BindTexture(std::uint32_t target, std::uint32_t name);
     void TexParameteri(std::uint32_t target, std::uint32_t pname, std::int32_t value);
     void TexParameterf(std::uint32_t target, std::uint32_t pname, float value);
-    // Uploads follow the unpack alignment 4 of GRF. Data may be null.
     void TexImage2D(std::uint32_t target, int level, std::uint32_t internalformat, int width,
                     int height, std::uint32_t format, std::uint32_t type, const void *data);
     void TexSubImage2D(std::uint32_t target, int level, int x, int y, int width, int height,
                        std::uint32_t format, std::uint32_t type, const void *data);
     void GenerateMipmap(std::uint32_t target);
-    // The storage of a texture, for digests and for the scene port. Flushes pending rendering.
     const Texture *GetTexture(std::uint32_t name);
 
-    // Buffers and vertex arrays.
     std::uint32_t GenBuffer();
     void DeleteBuffer(std::uint32_t name);
     void BindBuffer(std::uint32_t target, std::uint32_t name);
     void BufferData(std::uint32_t target, std::size_t size, const void *data, std::uint32_t usage);
     void BufferSubData(std::uint32_t target, std::size_t offset, std::size_t size,
                        const void *data);
-    // MapBufferRange returns a pointer into the buffer's storage, valid until UnmapBuffer.
     void *MapBufferRange(std::uint32_t target, std::size_t offset, std::size_t length,
                          std::uint32_t access);
     void UnmapBuffer(std::uint32_t target);
@@ -147,7 +139,6 @@ public:
     void VertexAttribPointer(std::uint32_t index, int size, std::uint32_t type, bool normalized,
                              int stride, std::size_t offset);
 
-    // Framebuffers. Name 0 is the default framebuffer.
     std::uint32_t GenFramebuffer();
     void DeleteFramebuffer(std::uint32_t name);
     void BindFramebuffer(std::uint32_t target, std::uint32_t name);
@@ -157,7 +148,6 @@ public:
     std::uint32_t CheckFramebufferStatus(std::uint32_t target);
     std::uint32_t BoundFramebuffer() const { return draw_fb_; }
 
-    // Programs.
     std::uint32_t CreateProgram(std::unique_ptr<Program> program);
     void DeleteProgram(std::uint32_t name);
     void UseProgram(std::uint32_t name);
@@ -169,10 +159,8 @@ public:
     void Uniform3f(int loc, float x, float y, float z);
     void Uniform3fv(int loc, int count, const float *v);
     void UniformMatrix4fv(int loc, int count, bool transpose, const float *v);
-    // Raw 32-bit words into a location, the general form of the calls above.
     void UniformBits(int loc, int components, const std::uint32_t *bits);
 
-    // Fixed-function state.
     void Enable(std::uint32_t cap);
     void Disable(std::uint32_t cap);
     void CullFace(std::uint32_t mode);
@@ -185,28 +173,17 @@ public:
     void ClearDepth(double depth);
     void Clear(std::uint32_t mask);
 
-    // Drawing. Only GL_TRIANGLES. A draw with a program that has no class yet is skipped.
     void DrawArrays(std::uint32_t mode, int first, int count);
     void DrawRangeElements(std::uint32_t mode, std::uint32_t start, std::uint32_t end, int count,
                            std::uint32_t type, std::size_t offset);
 
-    // Readback of the default framebuffer, GL_RGB and GL_UNSIGNED_BYTE at pack alignment 4,
-    // rows bottom-up: u8 = (u10 * 255 + 511) / 1023.
     void ReadPixels(int x, int y, int width, int height, std::uint32_t format, std::uint32_t type,
                     void *out);
-    // The default framebuffer as 32-bit words in GL row order (row 0 at the bottom).
     std::vector<std::uint32_t> ReadDefaultFramebufferWords();
-    // Rasterizes everything pending.
     void Finish();
-    // Runs fn(i) for i in [0, n) on the rasterizer's threads, for work outside GL that writes
-    // its own outputs.
     void Parallel(int n, const std::function<void(int)> &fn);
-    // While on, clears, draws and readbacks leave every pixel and the readback's output as they
-    // are, and every other call runs as always. For frames whose pixels nobody reads before the
-    // next frame writes them all.
     void SetDiscard(bool discard);
 
-    // Statistics of the last flushes, for tests and timing.
     struct Stats {
         std::uint64_t triangles_binned = 0;
         std::uint64_t blocks_shaded = 0;
@@ -227,29 +204,20 @@ private:
     TargetInfo CurrentTarget();
     std::shared_ptr<const DrawState> SnapshotState();
     void Draw(DrawInput &input);
-    // Hands the binned scene to the rasterizer threads, which run it while the next draws are
-    // binned into the other scene. One scene rasterizes at a time, in submission order.
     void FlushScene();
-    // Waits for the scene being rasterized.
     void WaitRaster();
-    // FlushScene and WaitRaster: every pixel written, before anything reads or changes textures.
     void Sync();
-    // Hands the draws gathered so far to a worker, which sets them up into a part of the scene.
     void SubmitChunk();
-    // Waits for the workers' draws, before anything changes the buffers they read.
     void DrainDraws();
 
     ContextOptions options_;
     std::unique_ptr<ThreadPool> pool_;
     std::unique_ptr<SceneList> scene_;
-    // The scenes being rasterized, oldest first, and empty ones to bin into next.
     std::vector<std::unique_ptr<SceneList>> rastering_;
     std::vector<std::unique_ptr<SceneList>> spare_;
-    // Finishes the scenes in flight, the first `count` of them.
     void FinishRaster(std::size_t count);
 
     bool discard_ = false;
-    // Draws not yet handed to a worker, and the workers' jobs of the scene being binned.
     std::unique_ptr<DrawChunk> chunk_;
     std::vector<std::shared_ptr<void>> draw_jobs_;
     Stats stats_;
@@ -262,7 +230,6 @@ private:
     std::uint32_t next_texture_ = 1, next_buffer_ = 1, next_vao_ = 1, next_fbo_ = 1,
                   next_program_ = 1;
 
-    // The default framebuffer, B10G10R10X2 words, memory row 0 at the top.
     std::vector<std::uint32_t> window_;
 
     std::uint32_t active_unit_ = 0;
@@ -275,7 +242,7 @@ private:
 
     bool cull_ = false;
     std::uint32_t cull_mode_ = GL_BACK;
-    std::uint32_t front_face_ = 0x0901;  // GL_CCW
+    std::uint32_t front_face_ = 0x0901;
     bool depth_test_ = false;
     std::uint32_t depth_func_ = GL_LESS;
     bool depth_mask_ = true;
@@ -285,10 +252,9 @@ private:
     float clear_color_[4] = {0, 0, 0, 0};
     double clear_depth_ = 1.0;
 
-    // Mapped buffer ranges per target.
     std::uint32_t mapped_array_ = 0, mapped_element_ = 0;
 };
 
-}  // namespace cuju::render::gl
+}
 
-#endif  // CUJU_RENDER_GL_CONTEXT_H
+#endif

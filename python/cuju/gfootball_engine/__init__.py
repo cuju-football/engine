@@ -2,12 +2,7 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""GRF's package `gfootball_engine`, whose module `_gameplayfootball` cuju's engine implements.
-
-`cuju.gfootball` imports it as GRF's Python imports `gfootball_engine`. The module keeps GRF's
-names and the environment variables that GRF's package sets, and leaves `sys.path` as it is, so
-that GRF's own `_gameplayfootball` is never shadowed where both are installed.
-"""
+"""GRF's package `gfootball_engine`, whose module `_gameplayfootball` cuju's engine implements."""
 
 from __future__ import absolute_import, division, print_function  # noqa: UP010, GRF's names
 

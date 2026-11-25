@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The memory a batch requests at its creation, counted without allocating it.
 #pragma once
 
 #include <type_traits>
@@ -12,15 +11,12 @@
 
 namespace cuju {
 namespace batch {
-
-// Counts what a backend's tables upload, as `HostTables` and `DeviceTables` do, and keeps none.
 template <bool HOST_TABLES>
 struct MeasuringTables {
     static constexpr bool HOST = HOST_TABLES;
     simulation::SimulationContext context{};
     size_t bytes = 0;
 
-    // The host values stand in for the copies, which the creation never reads.
     template <class T>
     T *Upload(const T *data, size_t count) {
         if (count == 0) return nullptr;
@@ -33,8 +29,6 @@ struct MeasuringTables {
     }
 };
 
-// Stands in for `Real`, `CpuBackend` or `CudaBackend`, through a batch's creation. It counts every
-// `Allocate` as `Real` does and allocates nothing.
 template <class Real>
 class MeasuringBackend {
 public:
@@ -60,13 +54,10 @@ private:
     size_t allocatedBytes_ = 0;
 };
 
-// The bytes that a batch of `configuration` on `Real` requests at its creation, as
-// `BackendBatchEnvironment::MemoryBytes` reports right after it. It reads the bundles and the
-// animation tables, as the creation does.
 template <class Real>
 size_t EstimateMemory(const BatchEnvironmentConfiguration &configuration) {
     return BackendBatchEnvironment<MeasuringBackend<Real>>(configuration).MemoryBytes();
 }
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

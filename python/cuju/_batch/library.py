@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""The library of each backend, the device a batch runs on, and the C signatures of the library."""
-
 from __future__ import annotations
 
 import ctypes
@@ -25,7 +23,6 @@ from ..errors import DeviceError, LibraryError, MissingFileError
 
 
 def _placement(device: Any) -> torch.device:
-    """Returns the torch device that a batch of `device` runs on, the current GPU for `cuda`."""
     if _backend(device) == 'cpu':
         return torch.device('cpu')
     if not torch.cuda.is_available():
@@ -46,8 +43,6 @@ def _placement(device: Any) -> torch.device:
 
 
 class _Configuration(ctypes.Structure):
-    """`cuju_configuration` of the C API."""
-
     _fields_ = [
         ('version', ctypes.c_int),
         ('assets', ctypes.POINTER(ctypes.c_char_p)),
@@ -81,12 +76,10 @@ class _Configuration(ctypes.Structure):
     ]
 
 
-# `CUJU_CONFIGURATION_VERSION` of the C API.
 _CONFIGURATION_VERSION = 3
 
 
 def _load_library(path=None, device='cuda'):
-    """Loads the library of `device`, by default at `library_path`, and declares its signatures."""
     variable = _LIBRARIES[device][1]
     if path is None and os.environ.get(variable) and not os.path.isfile(os.environ[variable]):
         raise MissingFileError(
@@ -95,7 +88,6 @@ def _load_library(path=None, device='cuda'):
         )
     path = path or library_path(device)
     if not os.path.isfile(path):
-        # A CPU-only build, such as the wheels for macOS and Linux on Arm, has no CUDA library.
         advice = (
             "pass device='cpu', or build the package with a CUDA compiler"
             if device == 'cuda'

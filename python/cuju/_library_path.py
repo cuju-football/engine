@@ -1,11 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""The path of each backend's library and the processor check of the CPU library, without PyTorch.
-
-PyTorch loads only to read a device that is neither `cpu` nor `cuda`, or to resolve `auto`.
-"""
-
 from __future__ import annotations
 
 import ctypes
@@ -16,9 +11,7 @@ from typing import Any
 
 from .errors import ChoiceError
 
-# The directory of the package, where the libraries sit.
 _PACKAGE_DIRECTORY = os.path.dirname(__file__)
-# The library of each device, and the environment variable that overrides its path.
 if os.name == 'nt':
     _LIBRARY_FILE = '{}.dll'
 elif sys.platform == 'darwin':
@@ -32,7 +25,6 @@ _LIBRARIES = {
 
 
 def _backend(device: Any) -> str:
-    """Returns `cuda` or `cpu`, the backend of a device such as `cuda:1` or a `torch.device`."""
     if isinstance(device, str) and device in _LIBRARIES:
         return device
     import torch
@@ -49,12 +41,10 @@ def _backend(device: Any) -> str:
 
 
 def _automatic(device: Any) -> Any:
-    """Returns the CUDA device for `auto` if a GPU and the CUDA library exist, else `cpu`."""
     if not (isinstance(device, str) and device == 'auto'):
         return device
     name, variable = _LIBRARIES['cuda']
     library = os.environ.get(variable) or os.path.join(_PACKAGE_DIRECTORY, name)
-    # A `CUJU_CUDA_LIBRARY` that names no file still picks the GPU, whose load then says so.
     present = bool(os.environ.get(variable)) or os.path.isfile(library)
     if not present:
         return 'cpu'
@@ -66,22 +56,10 @@ def _automatic(device: Any) -> Any:
 
 
 def library_path(device: Any = 'cuda') -> str:
-    """Returns the path of the library that `BatchEnvironment` loads by default for a device.
-
-    Args:
-        device: `cuda`, `cuda:N` or a `torch.device` for `libcuju_cuda.so`, `cpu` for
-            `libcuju_cpu.so`, or `auto` for the one that `device='auto'` picks (`cuju_cuda.dll`
-            and `cuju_cpu.dll` on Windows, `libcuju_cpu.dylib` on macOS). The library sits inside
-            the package unless `CUJU_CUDA_LIBRARY` or `CUJU_CPU_LIBRARY` names another path.
-
-    Raises:
-        ChoiceError: If `device` names neither. It is a `ValueError` and a `KeyError`.
-    """
     name, variable = _LIBRARIES[_backend(_automatic(device))]
     return os.environ.get(variable) or os.path.join(_PACKAGE_DIRECTORY, name)
 
 
-# The sysctl keys under which macOS reports each feature.
 _MACOS_FEATURES = (
     ('AVX2', 'hw.optional.avx2_0'),
     ('BMI2', 'hw.optional.bmi2'),
@@ -90,7 +68,6 @@ _MACOS_FEATURES = (
 
 
 def _macos_feature(key):
-    """Returns whether macOS reports the processor feature `key`, true when it cannot tell."""
     try:
         sysctl = ctypes.CDLL(None).sysctlbyname
     except (OSError, AttributeError):
@@ -124,9 +101,6 @@ def _check_processor(path):
     """Raises `DeviceError` for the packaged CPU library on a CPU without AVX2, BMI2 or FMA."""
     from .errors import DeviceError
 
-    # The packaged library targets x86-64-v3, so elsewhere it stops Python with an illegal
-    # instruction; a library at another path is a build of its own. An aarch64 build targets the
-    # base Armv8-A, which every aarch64 processor has.
     if platform.machine().lower() not in ('x86_64', 'amd64'):
         return
     if os.path.abspath(path) != os.path.join(

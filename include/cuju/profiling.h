@@ -1,15 +1,12 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Device profiler, off unless built with `CUJU_PROFILE`. Each scope adds its cycles, callees
-// included, to `scopeCycles` and its calls to `scopeCalls`. `cudaMemcpyFromSymbol` reads both.
 #pragma once
 
 #include "host_device.h"
 
 namespace cuju {
 namespace profiling {
-
 // clang-format off
 #define CUJU_PROFILE_SCOPE_IDENTIFIERS(ENTRY)                                                      \
     ENTRY(TICK) ENTRY(MATCH_PROCESS) ENTRY(MIRROR_MATCH) ENTRY(CHECK_BALL_COLLISIONS)              \
@@ -66,5 +63,5 @@ struct Scope {
 #define CUJU_PROFILE_SCOPE(id)
 #endif
 
-}  // namespace profiling
-}  // namespace cuju
+}
+}

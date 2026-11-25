@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// One tick of a team, its possession amounts, team AI, players, gamer switches, designated player.
 #pragma once
 
 #include "../profiling.h"
@@ -19,8 +18,6 @@
 
 namespace cuju {
 namespace simulation {
-
-// Defined in `team_ai.h`, and `PlayerSendOff` in `reset.h`.
 CUJU_FUNCTION inline bool TeamAIProcess(World &world, const SimulationContext &context, int teamID);
 CUJU_FUNCTION inline bool TeamCalculateDynamicRoles(World &world, const SimulationContext &context,
                                                     int teamID);
@@ -70,7 +67,6 @@ CUJU_FUNCTION_NO_INLINE inline PlayerList GetClosestPlayers(
                              (!onlySelectable || Formation(world, context, player).controllable);
         return candidate;
     };
-    // Exact: a player goes after those at an equal distance, so ties keep state order.
     WarpPipeline<Candidate>(world.serialized.match.playerCount, evaluate,
                             [&](int player, const Candidate &candidate) {
                                 if (!candidate.eligible) return;
@@ -313,8 +309,7 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamProcess(World &world, const SimulationCo
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}
 
-// The player AI needs the functions above. `ai_controller.h` ends by including `team_ai.h`.
 #include "ai_controller.h"

@@ -2,12 +2,7 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""GRF's `MultiAgentToSingleAgent` wrapper, over every environment of a batch.
-
-In a scenario that sets `control_all_players`, the policy sees and moves each side's designated
-player, the one that leads the play, and the built-in AI moves the others. The guide is in the
-repository's `docs/migrating-from-grf.md`, under Scripted players and `control_all_players`.
-"""
+"""GRF's `MultiAgentToSingleAgent` wrapper, over every environment of a batch."""
 
 from __future__ import annotations
 
@@ -25,7 +20,6 @@ _BUILTIN_AI = 19
 
 
 def _select(value, index):
-    """Returns `value[environment, index[environment, k]]` for every environment and `k`."""
     rows = torch.arange(index.shape[0], device=index.device)[:, None]
     if isinstance(value, dict):
         return {name: tensor[rows, index] for name, tensor in value.items()}
@@ -33,28 +27,11 @@ def _select(value, index):
 
 
 def _broadcast(flags, like):
-    """Returns `[environment_count]` flags shaped to broadcast over `like`."""
     return flags.view((-1,) + (1,) * (like.dim() - 1))
 
 
 class MultiAgentToSingleAgent:
-    """GRF's `MultiAgentToSingleAgent` over a batch whose scenario sets `control_all_players`.
-
-    The batch holds an agent for every controllable player of each side the policy plays, and the
-    wrapper gives the policy, for each such side, the agent whose active player is the side's
-    designated player. Each step moves that agent with the policy's action and every other agent
-    with `builtin_ai`, so the batch needs an action set that holds it. `v2` plays GRF's `default`
-    set exactly, since `default`'s 19 actions keep their indices in `v2`.
-
-    The reward is the batch's, `[environment_count, agents]`, as GRF's wrapper passes the reward of
-    every agent on. GRF's single-agent wrapper then takes the first agent's, as `squeeze` does here.
-
-    Attributes:
-        batch: The wrapped batch.
-        players: The sides the policy plays, 1 or 2, the left one first.
-        action_count: The actions of the policy's action set.
-        last_actions: The batch's actions of the last step, `[environment_count, agents]`.
-    """
+    """GRF's `MultiAgentToSingleAgent` over a batch whose scenario sets `control_all_players`."""
 
     def __init__(
         self,
@@ -66,28 +43,7 @@ class MultiAgentToSingleAgent:
         squeeze: bool = False,
         _slots: list[int] | None = None,
     ) -> None:
-        """Wraps a batch.
-
-        Args:
-            batch: A batch with `with_raw=True` or the raw representation, the action set `v2` or
-                `full`, which hold `builtin_ai`, no stack, and on each side either no agent or one
-                for every controllable player.
-            left_players: 1 if the policy plays the left side, else 0.
-            right_players: 1 if the policy plays the right side, else 0.
-            action_set: The policy's action set, `default`, `v2` or `full`, or `None` for the
-                batch's. `default` needs a batch of `v2` or `full`.
-            stacked: Whether the observation stacks the last 4 of the policy's observations, as
-                GRF's `FrameStack` over this wrapper does. The designated player changes during
-                play, so this differs from the batch's own stack, which stacks each agent's.
-            squeeze: Whether the observation drops the axis of the sides, except for `raw`, and the
-                reward keeps only the first agent's, as GRF's single-agent wrappers do for one side.
-
-        Raises:
-            ValueError: If the batch lacks the raw arrays or `builtin_ai`, stacks its observations,
-                holds agents on a side that the policy does not play or none on one it plays, or if
-                `squeeze` meets two sides or `stacked` meets `raw`.
-            KeyError: If `action_set` names no known set.
-        """
+        """Wraps a batch."""
         if left_players not in (0, 1) or right_players not in (0, 1):
             raise ValueError(
                 f'expected 0 or 1 left and right players, found {left_players} and {right_players}'
@@ -103,8 +59,6 @@ class MultiAgentToSingleAgent:
             raise ValueError('expected a batch with the raw representation or with_raw=True')
         if stacked and batch._representation == 'raw':
             raise ValueError('expected simple115, simple115v2 or extracted for a stack, found raw')
-        # The agents that the policy's sides cover. `create_environment` passes the slots of GRF's
-        # `agent` player, and the players of `extra_players` in the other slots act on their own.
         covered = torch.ones(batch.agents, dtype=torch.bool)
         if _slots is not None:
             covered = torch.zeros(batch.agents, dtype=torch.bool)
@@ -147,16 +101,6 @@ class MultiAgentToSingleAgent:
         self.last_actions = None
 
     def _selection(self, raw, only=None):
-        """Returns, for each environment, the agent of each side whose active player is designated.
-
-        Args:
-            raw: The raw arrays of the batch.
-            only: The environments to check, or `None` for every one. The others get any agent.
-
-        Raises:
-            RuntimeError: If a checked side has no such agent or several, which GRF's wrapper does
-                not handle either.
-        """
         match = raw['active'] == raw['designated']
         columns = []
         for side in self._sides:
@@ -175,22 +119,16 @@ class MultiAgentToSingleAgent:
         return torch.stack(columns, 1)
 
     def _shape(self, observation):
-        """Applies `squeeze` to an observation of the policy."""
         if not self._squeeze or isinstance(observation, dict):
             # GRF: the raw observation of one agent keeps its agent axis.
             return observation
         return observation.squeeze(1)
 
     def _current(self):
-        """Returns the observation of the selected agents in the last outputs of the batch."""
         return _select(self.batch.observation(), self._index)
 
     def observation(self) -> Any:
-        """Returns the policy's observation of the last `reset` or `step`.
-
-        It is `[environment_count, players, ...]`, or a dictionary for `raw`, stacked and squeezed
-        as the options say.
-        """
+        """Returns the policy's observation of the last `reset` or `step`."""
         if self._index is None:
             raise RuntimeError('reset must be called before the observation')
         observation = torch.cat(self._frames, dim=-1) if self._stacked else self._current()
@@ -206,7 +144,6 @@ class MultiAgentToSingleAgent:
         return self.observation()
 
     def _inner_actions(self, actions):
-        """Returns the batch's actions, the policy's for the chosen agents and `builtin_ai` else."""
         count = self.action_count
         environments = self.batch.environment_count
         if not isinstance(actions, torch.Tensor):
@@ -224,7 +161,6 @@ class MultiAgentToSingleAgent:
         if actions.device.type == 'cpu' and bool(((actions < -count) | (actions >= count)).any()):
             raise IndexError(f'expected actions from {-count} to {count - 1}')
         actions = actions.to(self._index.device, torch.int64)
-        # A negative index counts from the end of the policy's set, not of the batch's.
         actions = torch.where(actions < 0, actions + count, actions)
         inner = torch.full(
             (environments, self.batch.agents), _BUILTIN_AI, dtype=torch.int64, device=actions.device
@@ -235,25 +171,10 @@ class MultiAgentToSingleAgent:
     def step(
         self, actions: Any, *, _others: list[tuple[int, int]] | None = None
     ) -> tuple[Any, Any, Any, dict[str, Any]]:
-        """Runs one step of the batch.
-
-        Args:
-            actions: `[environment_count, players]` indices into the policy's action set, or
-                `[environment_count]` for one side.
-
-        Returns:
-            The policy's observation, the batch's reward `[environment_count, agents]`, or the
-            first agent's with `squeeze`, the done flags and the batch's information, whose
-            `final_observation` holds the policy's observation of the step that ended each
-            episode.
-
-        Raises:
-            RuntimeError: Before the first `reset`, or as `_selection`.
-        """
+        """Runs one step of the batch."""
         if self._index is None:
             raise RuntimeError('reset must be called before step')
         self.last_actions = self._inner_actions(actions)
-        # The players of `extra_players` that `create_environment` adds act in their own slots.
         for slot, action in _others or []:
             self.last_actions[:, slot] = action
         _, reward, done, information = self.batch.step(self.last_actions)
@@ -264,8 +185,6 @@ class MultiAgentToSingleAgent:
         self._index = self._selection(self.batch.raw())
         if self._stacked:
             current = self._current()
-            # The step that ends an episode stacks its final observation, and an automatic reset
-            # then fills the stack with the first observation of the next episode.
             frames = [*self._frames[1:], torch.where(_broadcast(ended, current), final, current)]
             final = torch.cat(frames, dim=-1)
             if self.batch.auto_reset:
@@ -299,20 +218,13 @@ class MultiAgentToSingleAgent:
 
     @staticmethod
     def get_observation(observation: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        """Returns the raw observations of one environment whose active player is designated.
-
-        It is GRF's static method.
-        """
+        """Returns the raw observations of one environment whose active player is designated."""
         assert 'designated' in observation[0], 'Only raw observations can be converted'
         return [entry for entry in observation if entry['designated'] == entry['active']]
 
     @staticmethod
     def get_action(actions: Any, original_observation: list[dict[str, Any]]) -> list[Any]:
-        """Returns an action for each raw observation of `original_observation`.
-
-        It is GRF's static method. Where the active player is the designated one it takes the next
-        of `actions`, and elsewhere GRF's `builtin_ai` action.
-        """
+        """Returns an action for each raw observation of `original_observation`."""
 
         assert 'designated' in original_observation[0], 'Only raw observations can be converted'
         result = [_CORE_ACTIONS['builtin_ai']] * len(original_observation)

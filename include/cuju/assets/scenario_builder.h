@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Builds the agentless bundle of a GRF scenario file without GRF. Every constant table is GRF's.
 #pragma once
 
 #include <cmath>
@@ -24,26 +23,19 @@
 
 namespace cuju {
 namespace assets {
-
 // GRF: `TeamData` has 11 formation slots and 11 persons, and a larger team crashes GRF.
 constexpr int MAXIMUM_SCENARIO_TEAM_PLAYERS = 11;
 constexpr int PLAYER_ROLES = 10;
 
-// One `AddPlayer` call, in environment coordinates. `role` is an `e_PlayerRole`.
 struct ScenarioPlayer {
-    // x in [-1, 1], y in [-0.42, 0.42]. GRF rounds both to float, so double keeps Python's value.
+    // x in [-1, 1], y in [-0.42, 0.42].
     double x = 0, y = 0;
     int32_t role = 0;
     bool lazy = false, controllable = true;
 };
 
-// What a scenario file builds for one parity of the episode number. Python has already added the
-// lazy goalkeeper of `Scenario._FakePlayersForEmptyTeam` to an empty team.
-// GRF: the defaults are those of `ScenarioConfig` in `main.hpp`.
 struct ScenarioDescription {
-    // As `SetBallPosition` takes it.
     double ballX = 0, ballY = 0;
-    // In `AddPlayer` order.
     std::vector<ScenarioPlayer> leftTeam, rightTeam;
     bool useMagnet = true, offsides = true, realTime = false;
     double leftTeamDifficulty = 1.0, rightTeamDifficulty = 0.6;
@@ -56,8 +48,8 @@ struct ScenarioDescription {
 };
 
 // GRF: `TeamData::TeamData` gives player i of every team the person `PlayerData::PlayerData(id)`
-// for the IDs 398, 11, 254, 320, 103, 188, 74, 332, 290, 391 and 264, with the 22 statistics
-// that `CalculateStat` gives in `PlayerStatistic` order, the velocity statistic and the height.
+// for the IDs 398, 11, 254, 320, 103, 188, 74, 332, 290, 391 and 264, with the 22 statistics that
+// `CalculateStat` gives in `PlayerStatistic` order, the velocity statistic and the height.
 constexpr float PLAYER_TABLE[MAXIMUM_SCENARIO_TEAM_PLAYERS][simulation::PLAYER_STATISTICS + 2] = {
     {0x1.e1e3eap-1f, 0x1.000000p+0f, 0x1.97c0d2p-1f, 0x1.4d9ddcp-1f, 0x1.97c0d2p-1f,
      0x1.e1e3eap-1f, 0x1.e1e3eap-1f, 0x1.72af58p-2f, 0x1.72af58p-2f, 0x1.037ac4p-1f,
@@ -114,9 +106,8 @@ constexpr float PLAYER_TABLE[MAXIMUM_SCENARIO_TEAM_PLAYERS][simulation::PLAYER_S
      0x1.000000p+0f, 0x1.000000p+0f, 0x1.d56ffcp-1f, 0x1.51083ep-1f, 0x1.000000p+0f,
      0x1.7d2ac8p-1f, 0x1.a94d72p-1f, 0x1.a94d72p-1f, 0x1.a94d72p-1f, 0x1.c56366p-2f,
      0x1.000000p+0f, 0x1.7d2ac8p-1f, 0x1.000000p+0f, 0x1.b0a3d8p+0f}};
-// The skin colour of each of those persons, which the simulation never reads.
 constexpr int32_t PLAYER_SKIN[MAXIMUM_SCENARIO_TEAM_PLAYERS] = {1, 2, 4, 1, 1, 4, 3, 1, 1, 2, 3};
-// GRF: the officials get `PlayerData::PlayerData()`. Their skin colour is a draw of the generator.
+// GRF: the officials get `PlayerData::PlayerData()`.
 constexpr float OFFICIAL_STATISTIC = (float)0.6, OFFICIAL_HEIGHT = 1.8f;
 // GRF: `Match::matchDurationFactor`, `match_duration * 0.2f + 0.05f` with the 0.027 that
 // `GameEnv::start_game` sets.
@@ -128,7 +119,6 @@ struct SkeletonNodeConstant {
     int32_t parent, localMode;
     const char *geometry;
     int32_t geometryLocalMode;
-    // Position, rotation, scale, then the two corners of the mesh box.
     float geometryValues[16];
 };
 constexpr int32_t SKELETON_NODE_MAP[state::BODY_PARTS] = {2,  3, 8, 11, 9, 12, 10,
@@ -227,8 +217,7 @@ constexpr SkeletonNodeConstant SKELETON_NODES[state::HUMANOID_NODES] = {
      0,
      {0, 0, 0, 0, 0, 0, 1, 1, 1, 1, -0x1.5182aap-5f, -0x1.491d14p-3f, -0x1.d288cep-4f,
       0x1.573eacp-5f, 0x1.89a028p-4f, 0x1.47aep-133f}}};
-// GRF: the bone offsets of `player.object`, as `HumanoidBase::ResetPosition` leaves them. The root
-// position and identity rotations it sets already hold. The root rotation keeps the file's -0.
+// GRF: the bone offsets of `player.object`, as `HumanoidBase::ResetPosition` leaves them.
 struct TemplateNode {
     float position[3], rotation[4];
     int32_t localMode;
@@ -250,7 +239,7 @@ constexpr TemplateNode TEMPLATE_NODES[state::HUMANOID_NODES] = {
     {{0, -0x1.47ae14p-5f, -0x1.c28f5cp-2f}, {0, 0, 0, 1}, 0}};
 
 // GRF: the tactics of the `TeamAIController` constructor in `state::TacticID` order, the live ones
-// mixed with those of `TeamData`. GRF keeps `%f` text, so each is its `atof`, rounded to float.
+// mixed with those of `TeamData`.
 constexpr double BASE_TACTICS[state::TACTIC_KEYS] = {0.75, 0.8, 0.5, 0.35, 0.54, 0.4, 0.8,
                                                      0.9,  0.7, 0.6, 0.35, 0.52, 0.1, 0.9};
 constexpr double LIVE_TACTICS[state::TACTIC_KEYS] = {0.71,  0.938, 0.776, 0.35, 0.54, 0.332, 0.84,
@@ -260,7 +249,6 @@ constexpr double LIVE_TACTICS[state::TACTIC_KEYS] = {0.71,  0.938, 0.776, 0.35, 
 constexpr double FORMATION_SLOTS[MAXIMUM_SCENARIO_TEAM_PLAYERS][2] = {
     {-1.0, 0.0}, {-0.7, 0.75}, {-1.0, 0.25}, {-1.0, -0.25}, {-0.7, -0.75}, {0.0, 0.5},
     {-0.2, 0.0}, {0.0, -0.5},  {0.6, 0.75},  {1.0, 0.0},    {0.6, -0.75}};
-// GK, LB, CB, CB, RB, CM, CM, CM, LM, CF and RM.
 constexpr int32_t FORMATION_SLOT_ROLES[MAXIMUM_SCENARIO_TEAM_PLAYERS] = {0, 2, 1, 1, 3, 5,
                                                                          5, 5, 6, 9, 7};
 
@@ -312,8 +300,7 @@ inline state::FormationEntry ScenarioEntry(const ScenarioPlayer &player) {
     return entry;
 }
 
-// GRF: `TeamData::TeamData` builds the spots from the fixed slots. The role, start position and
-// flags come from the scenario afterwards, so a player's spot follows its index, not its role.
+// GRF: `TeamData::TeamData` builds the spots from the fixed slots.
 inline std::vector<state::FormationEntry> TeamFormation(
     const std::vector<state::FormationEntry> &team) {
     const int count = (int)team.size();
@@ -362,7 +349,6 @@ inline std::vector<state::FormationEntry> TeamFormation(
     return formation;
 }
 
-// The two teams as the formation entries of GRF's `ScenarioConfig`, left first.
 using ScenarioTeams = std::vector<state::FormationEntry>[2];
 
 inline void CheckTeams(const ScenarioTeams &teams) {
@@ -446,7 +432,6 @@ inline std::string StaticBytes(const std::vector<state::FormationEntry> &formati
     return out;
 }
 
-// One skeleton for all, since GRF scales only the rendered mesh by the height, never the skeleton.
 inline std::vector<animation::Skeleton> ConstantSkeletons(int humanoids) {
     animation::Skeleton skeleton{};
     for (int bodyPart = 0; bodyPart < state::BODY_PARTS; bodyPart++)
@@ -569,9 +554,7 @@ inline BuilderTables LoadBuilderTables(const std::string &animationBytes) {
 }
 
 // GRF: the template is the state that `GameEnv::reset` leaves before the ticks that bring the match
-// into play. Each field is set as the GRF constructors named below set it. `teams` and `ball`, the
-// ball position as `ScenarioConfig` holds it before `GameEnv::setConfig` scales it, stand in for
-// the teams and ball of `description`.
+// into play.
 inline BuiltVariant BuildVariant(const ScenarioDescription &description, const ScenarioTeams &teams,
                                  const Vector3 &ball, bool reverse, const BuilderTables &tables) {
     CheckTeams(teams);
@@ -581,7 +564,6 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, const S
     state::ScenarioState &scenario = environment.scenario;
     state::MatchState &match = environment.match;
 
-    // 1000 + reverse is the seed of the shipped bundles. Every episode reseeds anyway.
     const uint32_t seed =
         description.deterministic ? description.gameEngineRandomSeed : 1000u + (reverse ? 1u : 0u);
 
@@ -619,7 +601,6 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, const S
     for (int player = 0; player < scenario.rightTeamSize; player++)
         scenario.rightTeam[player] = teams[1][player];
 
-    // Slot 0 holds the team processed first, the right team when reversed.
     match.firstTeam = 0;
     match.secondTeam = 1;
     match.playerCount = scenario.leftTeamSize + scenario.rightTeamSize;
@@ -699,7 +680,6 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, const S
     match.ballRetainer = -1;
     match.possessionSideHistoryMaximumTimeMilliseconds = 6000;
     match.autoUpdateInGameCamera = true;
-    // The referee prepares the kickoff of the first team, in the frame of the rest.
     state::RefereeState &referee = match.referee;
     referee.buffer.active = true;
     referee.buffer.desiredSetPiece = simulation::e_GameMode_KickOff;
@@ -742,8 +722,6 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, const S
     codec.freeControllerCount = match.freeControllerCount;
     variant.state = codec.SaveFrame(*world, 0);
 
-    // The skeletons hold the pose after the ticks into play. The simulation reads the state
-    // instead.
     auto played = std::make_unique<World>(*world);
     simulation::EnvironmentCore core;
     if (!simulation::EnvironmentCoreAfterReset(*played, context, core))
@@ -758,8 +736,6 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, const S
     return variant;
 }
 
-// The template of a scenario file's description, each player as `FormationEntry(x, y, ...)` and
-// the ball as `SetBallPosition` sets it.
 inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool reverse,
                                  const BuilderTables &tables) {
     ScenarioTeams teams;
@@ -770,8 +746,6 @@ inline BuiltVariant BuildVariant(const ScenarioDescription &description, bool re
     return BuildVariant(description, teams, ball, reverse, tables);
 }
 
-// The four variants of an agentless `l0_r0` bundle, as `LoadAssets` reads it. The loader adds the
-// agents. GRF: the first episode, `parity[0]`, is even, as GRF's second scenario build is.
 inline std::string BuildBundle(const std::string &name, const ScenarioDescription (&parity)[2],
                                const BuilderTables &tables) {
     if (parity[0].leftTeam.size() != parity[1].leftTeam.size() ||
@@ -797,5 +771,5 @@ inline std::string BuildBundle(const std::string &name, const ScenarioDescriptio
     return out;
 }
 
-}  // namespace assets
-}  // namespace cuju
+}
+}

@@ -18,13 +18,7 @@
 #include "srgb.h"
 
 namespace cuju::render {
-
 namespace {
-
-// vrsqrtps of AMD Zen 3 for x in [0.5, 2), measured on every input. Entry j of a parity holds the
-// result for mantissas j * 2^11 to j * 2^11 + 2^11 - 1 as 13 bits: the exponent above 126, then 12
-// mantissa bits. Entries decrease by 0, 1 or 2; the strings hold the steps, two per hex digit as
-// d0 + 3 * d1.
 constexpr std::uint16_t kRsqrtFirst[2] = {0x16a0, 0x0fff};
 constexpr const char *kRsqrtSteps[2] = {
     "1431431414314314143143171431431414314311143143141431431414314314143143141431431114314314"
@@ -99,16 +93,16 @@ constexpr RsqrtTable BuildRsqrtTable() {
 
 constexpr RsqrtTable kRsqrt = BuildRsqrtTable();
 
-}  // namespace
+}
 
 float RsqrtZen3(float x) {
     const std::uint32_t b = Bits(x);
     const std::uint32_t e = (b >> 23) & 0xFFu;
     if ((b & 0x7FFFFFFFu) > 0x7F800000u) {
-        return FromBits(b | 0x00400000u);  // NaN, quieted
+        return FromBits(b | 0x00400000u);
     }
     if (e == 0) {
-        return FromBits((b & 0x80000000u) | 0x7F800000u);  // zero and subnormals give infinity
+        return FromBits((b & 0x80000000u) | 0x7F800000u);
     }
     if (b & 0x80000000u) {
         return FromBits(0xFFC00000u);
@@ -118,16 +112,13 @@ float RsqrtZen3(float x) {
     }
     const std::uint32_t parity = e & 1u;
     const std::uint32_t code = kRsqrt.code[parity][(b >> 11) & 0xFFFu];
-    // x = m * 2^(e - 127) with the table's x in [0.5, 2); its result scales by 2^((126 + p - e) /
-    // 2).
     const int shift = (static_cast<int>(126 + parity) - static_cast<int>(e)) / 2;
     const std::uint32_t exponent = static_cast<std::uint32_t>(126 + (code >> 12) + shift);
     return FromBits(exponent << 23 | (code & 0xFFFu) << 11);
 }
 
 namespace {
-
-constexpr float kInv255 = 0.0039215688593685627f;  // 0x3B808081
+constexpr float kInv255 = 0.0039215688593685627f;
 
 inline std::uint32_t Load32(const std::uint8_t *p) {
     return static_cast<std::uint32_t>(p[0]) | static_cast<std::uint32_t>(p[1]) << 8 |
@@ -141,13 +132,10 @@ inline void Store32(std::uint8_t *p, std::uint32_t v) {
     p[3] = static_cast<std::uint8_t>(v >> 24);
 }
 
-// The blit's texture coordinate of destination texel i: (i + 0.5) / size, exact for powers of two.
 inline float BlitCoord(int i, int size) {
     return ftz::Div(ftz::Add(static_cast<float>(i), 0.5f), static_cast<float>(size));
 }
 
-// The AoS 8-bit coordinate: c = cvtps2dq(s * (size << 8)) - 128, the texel c >> 8 and the weight
-// c & 255. Out of range texels clamp to the edge and then take the same texel twice.
 struct AosCoord {
     int i0;
     int i1;
@@ -164,7 +152,6 @@ inline AosCoord AosClamp(float s, int size) {
     return AosCoord{i0, i0 + ((ge0 && lt) ? 1 : 0), c & 255};
 }
 
-// pmulhrsw then the byte add: a + round(w * (b - a) / 256), modulo 256.
 inline std::uint32_t Lerp8(std::uint32_t a, std::uint32_t b, int w) {
     const std::int32_t d =
         static_cast<std::int16_t>(static_cast<std::int32_t>(b) - static_cast<std::int32_t>(a));
@@ -174,7 +161,6 @@ inline std::uint32_t Lerp8(std::uint32_t a, std::uint32_t b, int w) {
     return (a + r) & 0xFFu;
 }
 
-// The unorm8 store of the blit shader: min(1, x) * 255, rounded, saturated by the packs.
 inline std::uint32_t StoreUnorm8(std::uint32_t byte) {
     const float v = ftz::Mul(static_cast<float>(byte), kInv255);
     const std::int32_t c = CvtPs2Dq(ftz::Mul(ftz::MinPs(1.0f, v), 255.0f));
@@ -258,7 +244,7 @@ void GenerateChain(Texture &texture) {
     }
 }
 
-}  // namespace
+}
 
 int MipLevelCount(int width, int height) {
     int size = width > height ? width : height;
@@ -283,4 +269,4 @@ void GenerateMipmaps(Texture &texture) {
     GenerateChain(texture);
 }
 
-}  // namespace cuju::render
+}

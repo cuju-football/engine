@@ -80,7 +80,6 @@ def test_a_scenario_file_and_missing_levels(tmp_path):
     assert [player.key() for player in scenario.right_team] == [(-1.0, 0.42, 0, True, True)]
     assert scenario.game_engine_random_seed == 42
     assert 'reverse_team_processing' not in values
-    # A bundle holds no scenario file.
     for level in ('no_such_scenario', os.path.join(ASSETS, '5_vs_5_l0_r0.cjb')):
         with pytest.raises(NotImplementedError, match='scenario file'):
             config.Config({'level': level, 'game_engine_random_seed': 1}).ScenarioConfig()

@@ -2,14 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""`cuju dump`, which writes a dump as text, as GRF's script `dump_to_txt` does.
-
-It reads the dump with `cuju.dumps`, so dumps of GRF, of `cuju.env`, of a batch and of
-`cuju.gfootball` print alike, and runs no code from them.
-
-    cuju dump /tmp/input.dump -o /tmp/output.txt
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -64,7 +56,6 @@ def _run(arguments: argparse.Namespace) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Runs the converter on the command line."""
     return contract.run_command(_cli_parsers.dump(), _run, argv)
 
 

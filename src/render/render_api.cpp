@@ -20,7 +20,6 @@
 #include "sha256.h"
 
 namespace {
-
 using cuju::render::AreaResize;
 using cuju::render::Renderer;
 using cuju::render::RendererOptions;
@@ -34,7 +33,6 @@ int Fail(int status, const std::string &message) {
     return status;
 }
 
-// The media of each path, shared by the renderers that hold it.
 std::mutex media_mutex;
 std::map<std::string, std::weak_ptr<SharedMedia>> media_by_path;
 
@@ -69,19 +67,18 @@ bool CheckState(const void *state, size_t size, std::string *error) {
     return true;
 }
 
-}  // namespace
+}
 
 struct cuju_renderer {
     std::unique_ptr<Renderer> renderer;
     std::shared_ptr<SharedMedia> media;
-    RenderState state;  // an aligned copy of the caller's bytes
+    RenderState state;
     bool has_frame = false;
     std::vector<std::uint8_t> top_down;
     std::map<std::array<int, 3>, std::unique_ptr<AreaResize>> resizers;
 };
 
 namespace {
-
 template <typename F>
 int Guard(cuju_renderer *r, F &&body) {
     if (!r) return Fail(CUJU_RENDER_ERROR_ARGUMENT, "the renderer is null");
@@ -132,10 +129,9 @@ int Resize(cuju_renderer *r, int width, int height, bool gray, std::uint8_t *out
     return CUJU_RENDER_OK;
 }
 
-}  // namespace
+}
 
 extern "C" {
-
 uint32_t cuju_render_api_version(void) { return CUJU_RENDER_API_VERSION; }
 
 uint32_t cuju_render_state_version(void) { return cuju::render::RENDER_STATE_VERSION; }
@@ -302,7 +298,6 @@ size_t cuju_render_digests(cuju_renderer *renderer, char *out, size_t size) {
             std::uint32_t ours = renderer->renderer->stream().ContextTexture(name);
             const cuju::render::Texture *t = ours ? gl.GetTexture(ours) : nullptr;
             if (!t || t->levels.size() < 2) continue;
-            // Each level as glGetTexImage reads it, RGB formats without their fourth byte.
             const bool rgb = t->format == cuju::render::Format::R8G8B8X8_UNORM ||
                              t->format == cuju::render::Format::R8G8B8X8_SRGB;
             const int bpp = cuju::render::BytesPerTexel(t->format);
@@ -336,4 +331,4 @@ int cuju_render_has_frame(cuju_renderer *renderer, int *out) {
     });
 }
 
-}  // extern "C"
+}

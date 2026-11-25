@@ -13,7 +13,6 @@
 #include "pipeline.h"
 
 namespace cuju::render::gl {
-
 void LaneCoordinates(const FragmentBlock &b, float *X, float *Y) {
     const float bx = static_cast<float>(b.x);
     const float by = static_cast<float>(b.y);
@@ -84,25 +83,24 @@ void DepthToD16(const float *z, std::uint16_t *d16) {
 }
 
 namespace {
-
 bool DepthPasses(std::uint32_t func, std::uint32_t frag, std::uint32_t stored) {
     switch (func) {
         case 0x0200:
-            return false;  // NEVER
+            return false;
         case 0x0201:
-            return frag < stored;  // LESS
+            return frag < stored;
         case 0x0202:
-            return frag == stored;  // EQUAL
+            return frag == stored;
         case 0x0203:
-            return frag <= stored;  // LEQUAL
+            return frag <= stored;
         case 0x0204:
-            return frag > stored;  // GREATER
+            return frag > stored;
         case 0x0205:
-            return frag != stored;  // NOTEQUAL
+            return frag != stored;
         case 0x0206:
-            return frag >= stored;  // GEQUAL
+            return frag >= stored;
         default:
-            return true;  // ALWAYS
+            return true;
     }
 }
 
@@ -110,14 +108,11 @@ inline std::uint8_t *LanePtr(std::uint8_t *base, int stride, int lane, int bpp) 
     return base + kLaneY[lane] * stride + kLaneX[lane] * bpp;
 }
 
-}  // namespace
+}
 
 #if CUJU_RENDER_LANES_AVX2
 
 namespace {
-
-// The stored D16 values of half h of a block in lane order: rows 2h and 2h + 1 interleaved in
-// pairs.
 inline __m128i LoadDepth8(const std::uint8_t *base, int stride, int h) {
     const std::uint8_t *row0 = base + (2 * h) * stride;
     const __m128i r0 = _mm_loadl_epi64(reinterpret_cast<const __m128i *>(row0));
@@ -125,12 +120,11 @@ inline __m128i LoadDepth8(const std::uint8_t *base, int stride, int h) {
     return _mm_unpacklo_epi32(r0, r1);
 }
 
-// Bit i set where 16-bit element i of the mask is set.
 inline unsigned Mask16Bits(__m128i m) {
     return static_cast<unsigned>(_mm_movemask_epi8(_mm_packs_epi16(m, _mm_setzero_si128())));
 }
 
-}  // namespace
+}
 
 std::uint16_t DepthTest(const FragmentBlock &b, const std::uint16_t *d16, std::uint16_t lanes) {
     const FragmentOps &ops = b.state->ops;
@@ -151,28 +145,28 @@ std::uint16_t DepthTest(const FragmentBlock &b, const std::uint16_t *d16, std::u
         switch (ops.depth_func) {
             case 0x0200:
                 m = _mm_setzero_si128();
-                break;  // NEVER
+                break;
             case 0x0201:
                 m = _mm_andnot_si128(eq, le);
-                break;  // LESS
+                break;
             case 0x0202:
                 m = eq;
-                break;  // EQUAL
+                break;
             case 0x0203:
                 m = le;
-                break;  // LEQUAL
+                break;
             case 0x0204:
                 m = _mm_xor_si128(le, ones);
-                break;  // GREATER
+                break;
             case 0x0205:
                 m = _mm_xor_si128(eq, ones);
-                break;  // NOTEQUAL
+                break;
             case 0x0206:
                 m = _mm_or_si128(_mm_xor_si128(le, ones), eq);
-                break;  // GEQUAL
+                break;
             default:
                 m = ones;
-                break;  // ALWAYS
+                break;
         }
         pass |= Mask16Bits(m) << (8 * h);
     }
@@ -198,7 +192,6 @@ void DepthWrite(const FragmentBlock &b, const std::uint16_t *d16, std::uint16_t 
                 _mm_cmpeq_epi16(_mm_and_si128(_mm_set1_epi16(static_cast<short>(bits)), sel), sel);
             v = _mm_blendv_epi8(LoadDepth8(b.depth, b.depth_stride, h), v, m);
         }
-        // Lane order (r0 pair 0, r1 pair 0, r0 pair 1, r1 pair 1) back to the two rows.
         const __m128i rows = _mm_shuffle_epi32(v, _MM_SHUFFLE(3, 1, 2, 0));
         _mm_storel_epi64(reinterpret_cast<__m128i *>(row0), rows);
         _mm_storel_epi64(reinterpret_cast<__m128i *>(row1), _mm_unpackhi_epi64(rows, rows));
@@ -243,9 +236,6 @@ void DepthWrite(const FragmentBlock &b, const std::uint16_t *d16, std::uint16_t 
 #if CUJU_RENDER_LANES_F16C
 
 namespace {
-
-// The halves of eight lanes of half h of a block, SoA: one vector of eight halves per channel, in
-// lane order. Rows 2h and 2h + 1 of the block hold lanes (0, 1, 4, 5) and (2, 3, 6, 7) of the half.
 inline void LoadHalves8(const std::uint8_t *base, int stride, int h, __m128i *rgba) {
     const std::uint8_t *row0 = base + (2 * h) * stride;
     const std::uint8_t *row1 = row0 + stride;
@@ -280,14 +270,12 @@ inline void StoreHalves8(std::uint8_t *base, int stride, int h, const __m128i *r
     _mm_storeu_si128(reinterpret_cast<__m128i *>(row1 + 16), _mm_unpackhi_epi32(rg_hi, ba_hi));
 }
 
-// HalfRz(HalfToFloat(x)) of each half: the half itself, a NaN with its quiet bit set.
 inline __m128i Requiet(__m128i x) {
     const __m128i nan =
         _mm_cmpgt_epi16(_mm_and_si128(x, _mm_set1_epi16(0x7FFF)), _mm_set1_epi16(0x7C00));
     return _mm_or_si128(x, _mm_and_si128(nan, _mm_set1_epi16(0x200)));
 }
 
-// All ones in the 16-bit elements of the lanes of `bits`, bit i for lane i.
 inline __m128i LaneMask8(unsigned bits) {
     const __m128i b = _mm_set1_epi16(static_cast<short>(bits));
     const __m128i sel = _mm_setr_epi16(1, 2, 4, 8, 16, 32, 64, 128);
@@ -296,7 +284,7 @@ inline __m128i LaneMask8(unsigned bits) {
 
 inline __m128i Select16(__m128i mask, __m128i t, __m128i f) { return _mm_blendv_epi8(f, t, mask); }
 
-}  // namespace
+}
 
 void StoreRgba16f(const FragmentBlock &b, int buffer, const float *rgba, std::uint16_t lanes) {
     std::uint8_t *base = b.color[buffer];
@@ -330,8 +318,6 @@ void LoadRgba16f(const FragmentBlock &b, int buffer, float *rgba) {
 }
 
 namespace {
-
-// IEEE arithmetic, called inside FpScope(kIeee) and reading its operands from memory.
 CUJU_GL_NOINLINE void BlendAddKernel(const FragmentBlock *b, int buffer, const float *rgba,
                                      std::uint16_t lanes) {
     std::uint8_t *base = b->color[buffer];
@@ -349,7 +335,7 @@ CUJU_GL_NOINLINE void BlendAddKernel(const FragmentBlock *b, int buffer, const f
     }
 }
 
-}  // namespace
+}
 
 #else
 
@@ -382,8 +368,6 @@ void StoreRgba16f(const FragmentBlock &b, int buffer, const float *rgba, std::ui
 }
 
 namespace {
-
-// IEEE arithmetic, called inside FpScope(kIeee) and reading its operands from memory.
 CUJU_GL_NOINLINE void BlendAddKernel(const FragmentBlock *b, int buffer, const float *rgba,
                                      std::uint16_t lanes) {
     for (int l = 0; l < 16; ++l) {
@@ -398,7 +382,7 @@ CUJU_GL_NOINLINE void BlendAddKernel(const FragmentBlock *b, int buffer, const f
     }
 }
 
-}  // namespace
+}
 
 #endif
 
@@ -421,4 +405,4 @@ void Load10(const FragmentBlock &b, int buffer, std::uint32_t *words) {
     }
 }
 
-}  // namespace cuju::render::gl
+}

@@ -28,7 +28,6 @@ def test_import_leaves_gym_and_gymnasium_out():
 
 
 def test_import_leaves_torch_out_until_a_batch_is_used():
-    # cuju and its state reader start without importing PyTorch.
     found = run(
         "import sys, cuju, cuju.state; print('torch' in sys.modules); "
         "print('BatchEnvironment' in dir(cuju), sorted(cuju.__all__) == sorted(set(cuju.__all__)))"
@@ -40,7 +39,6 @@ def test_import_leaves_torch_out_until_a_batch_is_used():
 
 
 def test_scenarios_and_the_library_path_leave_torch_out():
-    # The scenario builder and the locator of the CPU library run without PyTorch.
     found = run(
         'import sys, cuju.scenarios, cuju._library_path as path; '
         "path.library_path('cpu'); print('torch' in sys.modules)"
@@ -58,13 +56,11 @@ def test_every_public_name_of_cuju_resolves():
 
 
 def test_action_log_imports_first():
-    # A submodule that builds on `BatchEnvironment` imports on its own, before any name of `cuju`.
     found = run("import cuju.action_log; print('ok')")
     assert found == ['ok']
 
 
 def test_import_of_gfootball_works_without_gym():
-    # Each `None` in `sys.modules` makes its import fail, as an installation without it does.
     found = run(
         "import sys; sys.modules['gym'] = sys.modules['gymnasium'] = None; "
         'import cuju.gfootball; '
@@ -93,10 +89,6 @@ def test_gymnasium_imported_later_gets_the_ids():
 
 
 def test_only_a_portion_of_a_package_joins_the_package(tmp_path):
-    # A whole cuju later on the path, such as an older installation with a module of its own, stays
-    # out of the package, and a folder `cuju` that holds a module and no `__init__.py`, as an
-    # editable install of a package beside cuju keeps, joins it as an absolute path, here the
-    # current directory's.
     stray = tmp_path / 'stray' / 'cuju'
     (stray / 'fakepkg').mkdir(parents=True)
     (stray / '__init__.py').write_text("raise SystemExit('the stray cuju was imported')\n")

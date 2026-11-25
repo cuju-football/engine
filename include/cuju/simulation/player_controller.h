@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The controllers of the players and the situation ratings that the player AI reads.
 #pragma once
 
 #include <vector>
@@ -15,8 +14,6 @@
 
 namespace cuju {
 namespace simulation {
-
-// Reaction times are in milliseconds.
 CUJU_FUNCTION inline int BaseReactionTime(const World &world, const SimulationContext &context,
                                           int player) {
     return FloatToInt32(
@@ -129,7 +126,6 @@ CUJU_FUNCTION_NO_INLINE inline void ControllerCalculateSituation(
             (BallPredict(match.ball, 300).Get2D() - playerState.base.humanoid.spatialState.position)
                 .GetLength(),
             2.0f, 14.0f);
-        // Exact: a product in place of GRF's power of 2.0f gives the same float for every input.
         float distanceBias = distance * distance;
         controller.fadingTeamPossessionAmount =
             controller.fadingTeamPossessionAmount * distanceBias +
@@ -139,11 +135,9 @@ CUJU_FUNCTION_NO_INLINE inline void ControllerCalculateSituation(
     controller.hasBestPossession = controller.hasPossession && controller.possessionAmount >= 1.0f;
 }
 
-// Defined in `team_ai.h`. A `manualPlayer` of -1 lets the team AI choose the runner.
 CUJU_FUNCTION inline void TeamApplyAttackingRun(World &world, const SimulationContext &context,
                                                 int teamID, int manualPlayer = -1);
 
-// Only for a player under external control.
 CUJU_FUNCTION_NO_INLINE inline bool HumanControllerProcess(World &world,
                                                            const SimulationContext &context,
                                                            int player) {
@@ -163,7 +157,6 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanControllerProcess(World &world,
     float unusedVelocity = 0.0f;
     HumanGetKeyboardInput(world, player, currentDirection, unusedVelocity);
     humanController.previousDirection = currentDirection;
-    // The steady direction follows the input at once, so its snapshot time is now.
     humanController.steadyDirection = currentDirection;
     humanController.lastSteadyDirectionSnapshotTimeMilliseconds =
         (int32_t)match.actualTimeMilliseconds;
@@ -244,5 +237,5 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanControllerProcess(World &world,
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

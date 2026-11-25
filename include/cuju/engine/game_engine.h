@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC
 // SPDX-License-Identifier: Apache-2.0
 
-// One engine of GRF's `gfootball_engine`, `GameEnv` without its Python, on the host over the
-// tables of the CPU backend. GRF's Python plays the episode around it.
 #pragma once
 
 #include <algorithm>
@@ -28,24 +26,18 @@
 
 namespace cuju {
 namespace engine {
-
-// A state that GRF refuses with a fatal error.
 struct StateRefused : std::invalid_argument {
     using std::invalid_argument::invalid_argument;
 };
-// A scenario that GRF crashes or hangs on, or that cuju cannot play as GRF does.
 struct ScenarioRefused : std::invalid_argument {
     using std::invalid_argument::invalid_argument;
 };
-// A path that GRF leaves undefined, as `UnsupportedReason` names it.
 struct UndefinedPath : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
-// A call that GRF answers with a fatal error, such as the sticky state of a release action.
 struct CallRefused : std::invalid_argument {
     using std::invalid_argument::invalid_argument;
 };
-// A call in an order that GRF asserts against or crashes on, such as a step before a reset.
 struct OrderRefused : std::logic_error {
     using std::logic_error::logic_error;
 };
@@ -70,8 +62,6 @@ struct ScenarioConfig {
     }
 };
 
-// The host copies of the tables of `UploadTables`, with the host-only tables, as the CPU backend
-// holds them.
 struct HostCopies {
     static constexpr bool HOST = true;
     simulation::SimulationContext context{};
@@ -93,7 +83,6 @@ struct HostCopies {
     }
 };
 
-// The tables that every engine of a process shares, built once.
 struct EngineTables {
     assets::BuilderTables builder;
     HostCopies host;
@@ -118,13 +107,10 @@ inline std::shared_ptr<const EngineTables> SharedEngineTables(const std::string 
     return built;
 }
 
-// The world after `GameEnv::reset` of one scenario, agents and `reverse_team_processing`, before
-// the seed is drawn, as a batch's template is.
 struct EngineTemplate {
     batch::AssetVariant variant;
 };
 
-// The scenario bytes that pick a template, without what a reset sets after the copy.
 inline std::string TemplateKey(const state::ScenarioState &source) {
     state::ScenarioState scenario = source;
     scenario.gameEngineRandomSeed = 0;
@@ -135,7 +121,6 @@ inline std::string TemplateKey(const state::ScenarioState &source) {
     return archive.data();
 }
 
-// `scenario` holds the ball as `ScenarioConfig` holds it before `GameEnv::setConfig` scales it.
 inline std::shared_ptr<const EngineTemplate> BuildTemplate(const state::ScenarioState &scenario,
                                                            const EngineTables &tables) {
     assets::ScenarioDescription description;
@@ -177,7 +162,6 @@ inline std::shared_ptr<const EngineTemplate> BuildTemplate(const state::Scenario
     return made;
 }
 
-// Process-wide, the templates last used, keyed by `TemplateKey` of the unscaled scenario.
 class TemplateCache {
 public:
     std::shared_ptr<const EngineTemplate> Get(const state::ScenarioState &scenario,
@@ -203,7 +187,6 @@ public:
     }
 
 private:
-    // Each entry holds a world of about 430 KB.
     static constexpr size_t CAPACITY = 8;
     std::mutex mutex_;
     std::list<std::pair<std::string, std::shared_ptr<const EngineTemplate>>> entries_;
@@ -234,7 +217,6 @@ inline std::string ConstantPart(const state::ScenarioState &scenario) {
     return out;
 }
 
-// Names the fields of the constant part that differ, at most three.
 inline std::string ConstantDifference(const state::ScenarioState &engine,
                                       const state::ScenarioState &loaded) {
     std::vector<std::string> names;
@@ -278,8 +260,7 @@ public:
         started_ = true;
     }
 
-    // GRF: `GameEnv::reset`. `config` holds the ball as the scenario file sets it, and on return
-    // the ball that `setConfig` scales, as GRF leaves the caller's object.
+    // GRF: `GameEnv::reset`.
     void Reset(ScenarioConfig &config, bool animations, int ticks) {
         if (!started_) throw OrderRefused("reset() must run after start_game()");
         CheckTicks(ticks);
@@ -322,8 +303,7 @@ public:
         freeControllerCount_ = made->variant.freeControllerCount;
     }
 
-    // GRF reads these fields of `GameEnv.config` during the match. A write between two calls
-    // reaches the next one, and the rest reach the state that `get_state` saves.
+    // GRF reads these fields of `GameEnv.config` during the match.
     void SetConfig(const ScenarioConfig &config) {
         RequireMatch();
         const state::ScenarioState &scenario = config.scenario;
@@ -363,7 +343,6 @@ public:
         return simulation::StickyActionState(*world_, action, leftTeam, player);
     }
 
-    // `count` ticks of a step of `ticks`, without the end of the step.
     void Ticks(int ticks, int count) {
         RequireMatch();
         CheckTicks(ticks);
@@ -394,9 +373,7 @@ public:
         EnvironmentGetInfo(*world_, context_, info);
     }
 
-    // GRF: render mode, the engine's graphics system with `game_config.render` on. It holds for
-    // the match under way and every later one. Turned off, the match under way keeps the caches
-    // its graphics computed until each one's next invalidation.
+    // GRF: render mode, the engine's graphics system with `game_config.render` on.
     void SetRenderMode(bool renderMode) {
         renderMode_ = renderMode;
         if (!world_) return;
@@ -411,8 +388,6 @@ public:
         RequireMatch();
         simulation::MatchPut(*world_);
     }
-    // What GRF's graphics side reads at a render, after `PrepareRender`. The engine carries the
-    // RenderState from render to render, as GRF's widgets do, and starts it afresh at each reset.
     const render::RenderState &ExtractRenderState() {
         render::RenderMessage message;
         render::RenderContext context = MakeRenderContext(message);
@@ -420,8 +395,6 @@ public:
         render::ExtractRenderState(*world_, context, *renderState_);
         return *renderState_;
     }
-    // The RenderState that the match's creation gives, which GRF's `StartMatch` builds the
-    // graphics of the match from.
     const render::RenderState &StartRenderState() {
         render::RenderMessage message;
         render::RenderContext context = MakeRenderContext(message);
@@ -434,8 +407,6 @@ public:
     // teams of the eleven players of `TeamData`'s formation, the goalkeeper first. cuju plays no
     // match before the first reset, so only the pictures of that match are made: the looks, from
     // the player database, and the officials' skin and the light, from the draws of its creation.
-    // GRF: the first rendering match of a process generates the pitch, which draws once more
-    // before the light.
     static render::RenderState InternalRenderState(bool firstOfProcess) {
         constexpr int PLAYERS = 11;
         constexpr uint32_t SEED = 42;
@@ -497,7 +468,6 @@ public:
         context.message = &message;
         return context;
     }
-    // The count of saves and loads, after each of which GRF uploads the nets again.
     uint32_t StateProcessed() const {
         RequireMatch();
         return world_->stateProcessed;
@@ -508,8 +478,7 @@ public:
     int WaitingForGameCount() const { return waitingForGameCount_; }
     void SetWaitingForGameCount(int value) { waitingForGameCount_ = value; }
 
-    // GRF: `GameEnv::get_state`, the pickle with its `int32` length, then the engine. The save
-    // clears the cache of the scenario, as GRF's does.
+    // GRF: `GameEnv::get_state`, the pickle with its `int32` length, then the engine.
     std::string GetState(const std::string &pickle) {
         RequireMatch();
         std::string bytes;
@@ -523,7 +492,7 @@ public:
         return bytes;
     }
 
-    // GRF: `GameEnv::set_state`. Returns where the pickle lies in `bytes`.
+    // GRF: `GameEnv::set_state`.
     std::pair<size_t, size_t> SetState(const std::string &bytes) {
         RequireMatch();
         int32_t size = 0;
@@ -548,9 +517,7 @@ public:
         state::ScenarioState source = templateSource_;
         if (fresh.reverseTeamProcessing != source.reverseTeamProcessing) {
             // GRF: the state's order of the teams loads into the scenario, so it plays from a
-            // template of its own. The formation entries load into the scenario too, which only
-            // `LeftTeamOwnsBall` reads, while the players take theirs from the `TeamData` of the
-            // reset, so the template keeps the reset's.
+            // template of its own.
             source.reverseTeamProcessing = fresh.reverseTeamProcessing;
             made = TemplateCache::Instance().Get(source, *tables_);
         }
@@ -561,8 +528,8 @@ public:
         if (!codec.LoadFrame(engine, 0, *world))
             throw StateRefused("the state does not load into this engine");
         freeControllerCount_ = codec.freeControllerCount;
-        // GRF: the referee's flag and a sent-off keeper's hand-over live outside the state, and
-        // the teams keep the difficulties and the magnet of their reset.
+        // GRF: the referee's flag and a sent-off keeper's hand-over live outside the state, and the
+        // teams keep the difficulties and the magnet of their reset.
         world->refereeAnimations = world_->refereeAnimations;
         memcpy(world->formationOverride, world_->formationOverride,
                sizeof(world->formationOverride));
@@ -575,9 +542,8 @@ public:
         memcpy(world->humanoidHidden, world_->humanoidHidden, sizeof(world->humanoidHidden));
         world->stateProcessed = world_->stateProcessed + 1;
         // GRF: `Match::ProcessState` mirrors the ball predictions of each mental image whose flag
-        // `ballPredictions_mirrored` is off once more around their load, after it turned the
-        // images that the engine held into the state's frame. With `reverse_team_processing` on,
-        // an image the engine did not hold, or held flagged, so comes out mirrored and flagged.
+        // `ballPredictions_mirrored` is off once more around their load, after it turned the images
+        // that the engine held into the state's frame.
         if (world->serialized.scenario.reverseTeamProcessing) {
             const int held = world_->serialized.match.mentalImages.count;
             for (int image = 0; image < world->serialized.match.mentalImages.count; image++) {
@@ -599,11 +565,7 @@ public:
         return {4, (size_t)size};
     }
 
-    // GRF: `Tracker::verify_snapshot`, run by this engine on the engine that waits. Each field
-    // compares as GRF's `operator!=` of its type, a float by value, a radian by its angle. The
-    // scenario part, which GRF saves from this engine's configuration for both, and the fields
-    // that GRF saves without validation stay out. Returns the position of the first difference,
-    // or -1, and clears this engine's cache of the scenario, as GRF's saves do.
+    // GRF: `Tracker::verify_snapshot`, run by this engine on the engine that waits.
     long long Verify(const GameEngine &waiting) {
         RequireMatch();
         waiting.RequireMatch();
@@ -708,9 +670,6 @@ private:
                                   std::to_string(gameDuration) + " steps of " +
                                   std::to_string(ticks) + " ticks");
     }
-    // Writes `config_` into the world before ticks. GRF copies the difficulties and the magnet
-    // into its teams and match at the reset, so those keep the reset's values, and
-    // `DynamicPlayerSelection` reads the cache of the scenario.
     void Apply(int ticks) {
         CheckHistory(config_.scenario.gameDuration, ticks);
         context_.ticksPerStep = ticks;
@@ -732,9 +691,6 @@ private:
         if (!config_.cacheComputed && world_->dynamicPlayerSelection < 2) config_.ComputeCache();
     }
 
-    // The engine part of a state with `scenario` in place of the world's, as GRF saves its
-    // `scenario_config`, from a copy of the world in its frame of a state. With `layout`, it
-    // records the saved fields.
     std::string SaveEngine(const state::ScenarioState &scenario,
                            std::vector<state::LayoutEntry> *layout = nullptr) const {
         auto copy = std::make_unique<simulation::World>(*world_);
@@ -762,7 +718,6 @@ private:
 
     std::shared_ptr<const EngineTables> tables_;
     std::shared_ptr<const EngineTemplate> template_;
-    // The scenario of `template_`, with the ball before `setConfig` scales it.
     state::ScenarioState templateSource_{};
     simulation::SimulationContext context_{};
     std::unique_ptr<simulation::World> world_;
@@ -778,5 +733,5 @@ private:
     std::vector<uint8_t> animationMirrored_;
 };
 
-}  // namespace engine
-}  // namespace cuju
+}
+}

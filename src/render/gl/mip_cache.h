@@ -18,13 +18,10 @@
 #include "../texture.h"
 
 namespace cuju::render::gl {
-
 class MipCache {
 public:
-    // Chains are kept while their bytes, level 0 included, stay within `budget`.
     explicit MipCache(std::size_t budget = std::size_t{1} << 30);
 
-    // GenerateMipmaps of `texture`, from the kept chain of an equal level 0 when there is one.
     void Generate(Texture &texture);
 
     std::size_t hits() const;
@@ -34,7 +31,7 @@ public:
 private:
     struct Entry {
         Format format;
-        std::vector<TextureLevel> levels;  // level 0 and its chain
+        std::vector<TextureLevel> levels;
     };
     const Entry *Find(std::uint64_t hash, const Texture &texture) const;
 
@@ -44,6 +41,6 @@ private:
     std::size_t bytes_ = 0, hits_ = 0, misses_ = 0;
 };
 
-}  // namespace cuju::render::gl
+}
 
-#endif  // CUJU_RENDER_GL_MIP_CACHE_H
+#endif

@@ -22,7 +22,6 @@ def play_async(device, **options):
     for step in range(STEPS):
         actions = actions_at(step, ENVIRONMENTS, batch.agents, batch.action_count).to(device)
         batch.step_async(actions)
-        # The caller may reuse the actions at once.
         actions.fill_(0)
         observation, reward, done, _ = batch.step_wait()
         for tensor in (observation, reward, done):
@@ -64,7 +63,6 @@ def test_async_steps_pair_with_waits():
     batch.step_wait()
     with pytest.raises(IndexError):
         batch.step_async(torch.full((2, 8), 19, dtype=torch.int32))
-    # No step started, so none is in flight.
     with pytest.raises(RuntimeError, match='step_async first'):
         batch.step_wait()
     batch.close()
@@ -84,7 +82,6 @@ def test_placed_threads_give_the_same_outputs(placement):
 
 @pytest.mark.skipif(not hasattr(os, 'sched_getaffinity'), reason='no affinity mask')
 def test_numa_groups_give_the_same_outputs():
-    # Three nodes stand in for the machine's, so the groups take ranges of their own.
     processors = sorted(os.sched_getaffinity(0))
     nodes = [0] * (max(processors) + 1)
     for position, processor in enumerate(processors):
@@ -115,7 +112,6 @@ def test_page_locked_outputs():
 @pytest.mark.skipif(not CUDA, reason='no CUDA device or library')
 def test_pinned_host_inputs_may_change_once_the_call_returns():
     pinned = torch.zeros(4, dtype=torch.int64).pin_memory()
-    # A GPU batch copies a pinned input to pageable memory, which the copy stages at once.
     assert not pinned.clone().is_pinned()
 
     def play(changed):
@@ -126,7 +122,6 @@ def test_pinned_host_inputs_may_change_once_the_call_returns():
         for step in range(12):
             actions.copy_(actions_at(step, 4, 8, batch.action_count))
             if changed:
-                # The device reaches the copy of the actions only after this work.
                 torch.cuda._sleep(2**25)
             if step % 2:
                 batch.step_async(actions)

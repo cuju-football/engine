@@ -2,11 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Fills a RenderState from a world between ticks, as GRF's Match::Put and the graphics side read
-// it. Ported from GRF's match.cpp, team.cpp, humanoidbase.cpp, officials.cpp, ball.cpp,
-// player.cpp, radar.cpp and scoreboard.cpp, GRF is Apache-2.0.
-// Exact: GRF's float operations in GRF's order. The extraction reads the world and writes only
-// the RenderState, so it runs on the host and the device.
 #pragma once
 
 #include "../animation/skeleton.h"
@@ -18,9 +13,6 @@
 
 namespace cuju {
 namespace render {
-
-// The message caption of GRF's `SpamMessage`, which no state holds. The engine keeps the last
-// one of the match: its text and the time it hides.
 struct RenderMessage {
     bool spammed = false;
     uint64_t removeTimeMilliseconds = 0;
@@ -29,14 +21,11 @@ struct RenderMessage {
 
 struct RenderContext {
     const simulation::SimulationContext *simulation = nullptr;
-    // One byte per animation, nonzero when GRF's name of the animation contains "mirror".
     const uint8_t *animationMirrored = nullptr;
-    // The match's last message, or null for none.
     const RenderMessage *message = nullptr;
 };
 
 namespace detail {
-
 constexpr float DEFAULT_PLAYER_HEIGHT = 1.92f;
 
 // GRF's player database, slots 0 to 10 of either team: hair style and colour.
@@ -59,7 +48,6 @@ CUJU_FUNCTION inline void HairOfSlot(int slot, int8_t &style, int8_t &color) {
     }
 }
 
-// HumanoidBase::Mirror's change of the root, which a second call undoes bit for bit.
 CUJU_FUNCTION inline void MirrorRoot(state::NodeState &root, bool mirrored) {
     root.position = root.position * Vector3(-1, -1, 1);
     const Quaternion rotation = root.rotation;
@@ -71,9 +59,6 @@ CUJU_FUNCTION inline void MirrorRoot(state::NodeState &root, bool mirrored) {
                                    -rotation.elements[3], rotation.elements[2]);
 }
 
-// UpdateFullbodyNodes: the nodes derived from the root as Put leaves it, mirrored or not. GRF
-// reads the derived transforms from the caches, which `Mirror` refreshes, so an unmirrored humanoid
-// derives from its root's cache in render mode, and the offset reads the root itself.
 CUJU_FUNCTION inline void PutHumanoid(const simulation::World &world, int humanoidIndex,
                                       const state::HumanoidState &humanoid,
                                       const animation::Skeleton &skeleton, bool mirror,
@@ -94,7 +79,6 @@ CUJU_FUNCTION inline void PutHumanoid(const simulation::World &world, int humano
     out.hairRotation = out.joints[2].orientation;
     out.hairPosition = out.joints[2].position * zMultiplier + out.fullbodyOffset;
     out.mirrored = mirror;
-    // Put mirrors back, so Put2D reads the root in the team's own frame.
     out.geomPosition = humanoid.nodes[0].position;
     out.radarPosition = humanoid.spatialState.position;
 }
@@ -120,12 +104,10 @@ CUJU_FUNCTION inline int WriteNumber(char *text, int at, int value) {
     return at;
 }
 
-}  // namespace detail
+}
 
-// Match::SetRandomSunParams from its six draws in the order of the RNG: two in -1.7 to 1.7, one
-// in 0 to 1, three in -0.1 to 0.1. Gives the light's position, `sunPos * 10000`, and colour.
-// GRF's build evaluates a constructor's arguments from the last, so the first draw is y and the
-// last addition is red.
+// Match::SetRandomSunParams from its six draws in the order of the RNG: two in -1.7 to 1.7, one in
+// 0 to 1, three in -0.1 to 0.1.
 CUJU_FUNCTION inline void SunFromDraws(const float draws[6], Vector3 &position, Vector3 &color) {
     Vector3 sun(clamp(draws[1], -1.0f, 1.0f), clamp(draws[0], -1.0f, 1.0f), 1.3f);
     sun.Normalize();
@@ -142,15 +124,11 @@ CUJU_FUNCTION inline void SunFromDraws(const float draws[6], Vector3 &position, 
     color += addition;
 }
 
-// The draws of GRF's Match constructor that only the pictures read, which cuju's reset makes and
-// the engine keeps: the officials' shared skin, `boostrandom(1, 4)`, and the six of the light.
 struct RenderMatchDraws {
     float officialSkin = 1.0f;
     float light[6] = {};
 };
 
-// The fields fixed for a match, and the state GRF's widgets and cards start with. Call it after
-// each reset and after a state is loaded into a new rendering engine.
 CUJU_FUNCTION inline void ResetRenderState(const simulation::World &world,
                                            const RenderContext &context,
                                            const RenderMatchDraws &draws, RenderState &out) {
@@ -188,15 +166,12 @@ CUJU_FUNCTION inline void ResetRenderState(const simulation::World &world,
     // GRF: the cards' nodes start with the rotation (0, 0, -0, 1).
     out.yellowCard.rotation = Quaternion(0, 0, -0.0f, 1);
     out.redCard = out.yellowCard;
-    // The scoreboard starts at 0 to 0 and shows a team's count at its next goal.
     for (int team = 0; team < 2; team++) {
         out.overlay.goals[team] = 0;
         out.lastWorldGoals[team] = match.goalCount[team ^ out.firstTeam];
     }
 }
 
-// One render's Match::Put. `out` keeps what GRF keeps between renders: the cards, the scoreboard
-// and the match's fixed fields from ResetRenderState.
 CUJU_FUNCTION inline void ExtractRenderState(const simulation::World &world,
                                              const RenderContext &context, RenderState &out) {
     const state::MatchState &match = world.serialized.match;
@@ -210,8 +185,6 @@ CUJU_FUNCTION inline void ExtractRenderState(const simulation::World &world,
     out.ball.touchesNet = match.ball.ballTouchesNet;
     out.ball.radarPosition = simulation::BallPredict(match.ball, 0);
 
-    // Team 0 is put unmirrored and team 1 mirrored, whichever team is processed first. The
-    // officials, whom only Put mirrors, are mirrored when the teams swap sides.
     animation::Derived derived[state::HUMANOID_NODES];
     int slots[2] = {0, 0};
     for (int player = 0; player < match.playerCount; player++) {
@@ -246,7 +219,6 @@ CUJU_FUNCTION inline void ExtractRenderState(const simulation::World &world,
                             simulation.skeletons[match.playerCount + official], reverse, false,
                             out.episode.officials[official].zMultiplier, humanoid, derived);
         if (official == 0) {
-            // Officials::Put: the card follows the referee's elbow while he shows it.
             const state::HumanoidState &referee = match.officials[0].humanoid;
             const int foulType = match.referee.foul.foulType;
             if (referee.currentAnimation.functionType == simulation::e_FunctionType_Special &&
@@ -292,7 +264,6 @@ CUJU_FUNCTION inline void ExtractRenderState(const simulation::World &world,
     if (seconds < 10) overlay.clock[at++] = '0';
     at = detail::WriteNumber(overlay.clock, at, seconds);
     overlay.clock[at] = 0;
-    // The scoreboard of the match, which a load leaves as it was.
     for (int team = 0; team < 2; team++) {
         overlay.goals[team] = world.scoreboardGoals[team ^ out.firstTeam];
         out.lastWorldGoals[team] = match.goalCount[team ^ out.firstTeam];
@@ -307,5 +278,5 @@ CUJU_FUNCTION inline void ExtractRenderState(const simulation::World &world,
     overlay.message[length] = 0;
 }
 
-}  // namespace render
-}  // namespace cuju
+}
+}

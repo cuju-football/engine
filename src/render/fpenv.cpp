@@ -18,9 +18,7 @@
 #endif
 
 namespace cuju::render {
-
 namespace {
-
 #if CUJU_RENDER_X86
 constexpr std::uint32_t kFtz = 0x8000u;
 constexpr std::uint32_t kDaz = 0x0040u;
@@ -50,7 +48,7 @@ void WriteFpcr(std::uint64_t v) {
 }
 #endif
 
-}  // namespace
+}
 
 FpScope::FpScope(FpMode mode) {
 #if CUJU_RENDER_X86
@@ -88,9 +86,7 @@ FpScope::~FpScope() {
 }
 
 namespace fpmodel {
-
 namespace {
-
 std::uint64_t DoubleBits(double x) {
     std::uint64_t b;
     std::memcpy(&b, &x, sizeof b);
@@ -103,16 +99,11 @@ double DoubleFromBits(std::uint64_t b) {
     return x;
 }
 
-// Round a finite nonzero double to float, to nearest even with gradual underflow. The double
-// carries a sticky lowest bit, so one rounding of it is the correct rounding of the exact value.
-// With `ftz`, a result that is tiny after rounding, that is below 2^-126 once rounded to 24 bits
-// with an unbounded exponent, becomes zero of its sign.
 float RoundToFloat(double x, bool ftz) {
     const std::uint64_t b = DoubleBits(x);
     const std::uint32_t sign = static_cast<std::uint32_t>(b >> 32) & 0x80000000u;
     const int exponent = static_cast<int>((b >> 52) & 0x7FF) - 1023;
-    const std::uint64_t m = (b & ((1ull << 52) - 1)) | (1ull << 52);  // 53 bits, no subnormal input
-    // Rounding to 24 bits, to nearest even, with an unbounded exponent.
+    const std::uint64_t m = (b & ((1ull << 52) - 1)) | (1ull << 52);
     const std::uint64_t low = m & ((1ull << 29) - 1);
     std::uint64_t r24 = m >> 29;
     if (low > (1ull << 28) || (low == (1ull << 28) && (r24 & 1))) {
@@ -133,8 +124,7 @@ float RoundToFloat(double x, bool ftz) {
     if (ftz) {
         return FromBits(sign);
     }
-    // Subnormal: units of 2^-149, value m * 2^(exponent - 52 + 149).
-    const int shift = -(exponent + 97);  // at least 30
+    const int shift = -(exponent + 97);
     if (shift >= 64) {
         return FromBits(sign);
     }
@@ -144,11 +134,10 @@ float RoundToFloat(double x, bool ftz) {
     if (rest > half || (rest == half && (q & 1))) {
         ++q;
     }
-    // q may reach 2^23, which is the smallest normal, and its bits are the same.
     return FromBits(sign | static_cast<std::uint32_t>(q));
 }
 
-}  // namespace
+}
 
 float Fma(float a, float b, float c, bool ftz) {
     if (ftz) {
@@ -156,17 +145,14 @@ float Fma(float a, float b, float c, bool ftz) {
         b = Daz(b);
         c = Daz(c);
     }
-    const double p = static_cast<double>(a) * static_cast<double>(b);  // exact
+    const double p = static_cast<double>(a) * static_cast<double>(b);
     const double cd = c;
     if (!std::isfinite(p) || !std::isfinite(cd) || a != a || b != b) {
-        // Infinities and NaNs need no rounding. An invalid operation creates x86's NaN.
         const float r = static_cast<float>(p + cd);
         return X86Nan(r, a, b, c);
     }
-    // Neither p nor cd can be subnormal in double, and neither the sum nor its error underflows.
     const double s = p + cd;
     if (s == 0) {
-        // Exact cancellation or two zeros: the sign of an IEEE sum under rounding to nearest.
         return static_cast<float>(s);
     }
     const double bb = s - p;
@@ -175,7 +161,7 @@ float Fma(float a, float b, float c, bool ftz) {
     if (err != 0) {
         std::uint64_t sb = DoubleBits(s);
         if ((err > 0) != (s > 0)) {
-            --sb;  // the exact value lies between s and zero, so truncation is the next double down
+            --sb;
         }
         sb |= 1;
         odd = DoubleFromBits(sb);
@@ -183,6 +169,6 @@ float Fma(float a, float b, float c, bool ftz) {
     return RoundToFloat(odd, ftz);
 }
 
-}  // namespace fpmodel
+}
 
-}  // namespace cuju::render
+}

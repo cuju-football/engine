@@ -42,14 +42,12 @@ def test_only_the_masked_environments_reset(device):
     reset_rows = outputs(batch, observation)
     after = play(batch, [0, 1, 2], 25, start=25)
 
-    # The unmasked environments play on as if nothing happened.
     plain = Batch(ASSETS, environment_count=3, seed=4, device=device)
     plain.reset()
     unbroken = play(plain, [0, 1, 2], 50)
     for environment in (0, 2):
         assert before[environment] + after[environment] == unbroken[environment]
 
-    # The masked environment plays as a GRF environment with a second `reset()` after 25 steps.
     alone = Batch(ASSETS, environment_count=1, seed=4, first_index=1, device=device)
     alone.reset()
     assert play(alone, [1], 25)[0] == before[1]
@@ -97,7 +95,6 @@ def test_a_cuda_graph_captures_a_masked_reset():
         batch.reset()
         mask = torch.tensor([True, False, False, True], device='cuda')
         actions = torch.zeros((4, batch.agents), dtype=torch.int32, device='cuda')
-        # An eager step first makes every output view, which a capture must not create.
         batch.step(actions)
         batch.reset(mask=mask)
         torch.cuda.synchronize()

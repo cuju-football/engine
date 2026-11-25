@@ -63,7 +63,6 @@ def test_an_action_log_replays_its_run(tmp_path):
     logged = run(log, log.batch)
     log.save(tmp_path / 'run.zip')
     assert action_log.replay(tmp_path / 'run.zip', threads=2) == log.hexdigest()
-    # The calls of a log return what the batch's return.
     batch = Batch('5_vs_5_l2_r1', environment_count=3, device='cpu', auto_reset=False)
     assert run(batch, batch) == logged
 
@@ -78,12 +77,10 @@ def test_machine_options_stay_out_of_a_log(tmp_path):
     with zipfile.ZipFile(tmp_path / 'run.zip') as archive:
         files = {name: archive.read(name) for name in archive.namelist()}
     header = json.loads(files['log.json'])
-    # None of them changes an output, so the replaying machine chooses its own.
     assert not set(header['options']) & {*machine, 'allocator', 'pin_memory'}
     assert action_log.replay(tmp_path / 'run.zip', threads=2, **machine) == log.hexdigest()
     with pytest.raises(ValueError, match='change no output'):
         action_log.replay(tmp_path / 'run.zip', seed=3)
-    # A log of an earlier version, which holds them among its options, replays without them.
     header['options'].update({**machine, 'pin_memory': True, 'allocator': 'torch'})
     files['log.json'] = json.dumps(header).encode()
     with zipfile.ZipFile(tmp_path / 'old.zip', 'w') as archive:
@@ -100,7 +97,6 @@ def test_a_changed_action_fails_its_replay(tmp_path):
     log.save(tmp_path / 'run.zip')
     with zipfile.ZipFile(tmp_path / 'run.zip') as archive:
         files = {name: archive.read(name) for name in archive.namelist()}
-    # The first environment's agent runs right from step 2 on.
     actions = bytearray(files['actions.bin'])
     for step in range(2, 10):
         actions[4 * 3 * step] = 5
@@ -108,7 +104,6 @@ def test_a_changed_action_fails_its_replay(tmp_path):
     with zipfile.ZipFile(tmp_path / 'changed.zip', 'w') as archive:
         for name, data in files.items():
             archive.writestr(name, data)
-    # Call 0 is the reset, so step 2 is call 3.
     with pytest.raises(ValueError, match=r'the outputs of call \d+ \(step\) differ') as raised:
         action_log.replay(tmp_path / 'changed.zip')
     assert int(str(raised.value).split()[4]) >= 3

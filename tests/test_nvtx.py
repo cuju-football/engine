@@ -8,7 +8,6 @@ import sys
 
 from conftest import play_digest
 
-# A child process plays a batch as `play_digest` does, with NVTX not yet loaded.
 CHILD = """
 import sys
 sys.path.insert(0, sys.argv[1])
@@ -34,7 +33,5 @@ def test_a_fresh_process_plays_the_same_outputs(device):
 
 
 def test_a_missing_profiler_changes_no_output():
-    # NVTX looks for a tool at this path, finds none and records nothing. The CPU library alone,
-    # since on the GPU the outcome also depends on how CUDA and PyTorch treat the variable.
     environment = dict(os.environ, NVTX_INJECTION64_PATH='/nonexistent/libcuju-no-tool.so')
     assert play_in_child('cpu', environment) == play_digest('5_vs_5_l4_r0', 'cpu', 10)

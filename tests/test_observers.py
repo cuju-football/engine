@@ -52,7 +52,6 @@ def test_observers_leave_every_output_as_it_is(device):
     seen = []
 
     def reader(batch, done, information):
-        # An observer that reads every state and the scoring signal, as a renderer does.
         if done is not None:
             seen.append(int(information['score_reward'].sum()))
             information['reward'].sum().item()
@@ -85,8 +84,6 @@ def test_observers_run_in_order_with_what_each_call_returns():
     _, waited_reward, waited, waited_information = batch.step_wait()
     assert [name for name, _, _ in calls] == ['first', 'second'] * 4
     assert calls[0][1] is None and calls[0][2] == {'reset': None}
-    # A step hands its observers its information and its rewards, the step's own tensors, in a
-    # dictionary of their own, and returns its information as it was.
     for index, done_flags, returned, rewards in (
         (2, done, information, reward),
         (6, waited, waited_information, waited_reward),
@@ -128,7 +125,6 @@ def test_observers_receive_the_actions_of_every_step(device):
     batch.reset()
     on_device = actions_at(1, 3, 4, batch.action_count).to(batch.torch_device)
     _, _, _, _ = batch.step(on_device)
-    # Actions already in the batch's form reach the observers without a copy.
     seen = []
     batch.add_observer(lambda batch, done, information: seen.append(information.get('actions')))
     batch.step(on_device)
@@ -138,7 +134,6 @@ def test_observers_receive_the_actions_of_every_step(device):
         actions_at(2, 3, 4, batch.action_count).tolist(),
         actions_at(3, 3, 4, batch.action_count).to(torch.int64),
         actions_at(4, 3, 4, batch.action_count),
-        # A negative index counts from the end, and the observers see it as given.
         -1 - actions_at(5, 3, 4, batch.action_count),
     ]
     if device == 'cuda':
@@ -147,8 +142,6 @@ def test_observers_receive_the_actions_of_every_step(device):
         batch.step(actions)
         played.append(torch.as_tensor(actions, dtype=torch.int32))
     batch.reset(mask=[True, False, True])
-    # After `step_async` the observers see the actions that the step started with, even when the
-    # caller writes its tensor before `step_wait`.
     for host in (False, True):
         actions = actions_at(7 + host, 3, 4, batch.action_count)
         actions = actions if host else actions.to(batch.torch_device)
@@ -158,7 +151,6 @@ def test_observers_receive_the_actions_of_every_step(device):
         batch.step_wait()
     batch.close()
     steps = [entry for entry in observed if entry[1] is not None]
-    # The two resets and the close carry no actions.
     assert [entry for entry in observed if entry[1] is None] == [(False, None)] * 3
     assert len(steps) == len(played)
     for (_, seen_actions), actions in zip(steps, played, strict=True):
@@ -172,7 +164,6 @@ def test_observers_receive_the_actions_of_a_step_that_resets(device):
     batch.reset()
     resets = 0
     for step in range(400):
-        # The first environment shoots, the second moves, so only one ends on most steps.
         actions = torch.tensor([[12 if step % 2 else 5], [step % 9]], dtype=torch.int32)
         _, _, done, _ = batch.step(actions.squeeze(1) if step % 3 else actions)
         ended, seen = observed[-1]
@@ -261,7 +252,6 @@ def test_an_observer_may_remove_itself_and_close_again_during_the_close_call(cap
 
     def last(batch, done, information):
         calls.append(('last', information))
-        # The batch frees its buffers only once every observer has had its close call.
         batch.get_state(0)
 
     for observer in (leaving, skipped, last):
@@ -272,7 +262,6 @@ def test_an_observer_may_remove_itself_and_close_again_during_the_close_call(cap
     assert [record for record in caplog.records if record.name == 'cuju'] == []
     assert calls[3:] == [('leaving', {'close': True}), ('last', {'close': True})]
     assert batch.observers == ()
-    # Removing an observer of a closed batch does nothing, and so does a second close.
     batch.remove_observer(last)
     batch.close()
     with pytest.raises(cuju.errors.ClosedError):
@@ -306,7 +295,6 @@ def test_an_observer_that_closes_the_batch_makes_its_call_raise(call):
             batch.reset()
         else:
             batch.reset_done()
-    # Every observer has its close call, and the one after the closing observer misses the step.
     assert calls == [('closing', False), ('closing', True), ('later', True)]
     with pytest.raises(cuju.errors.ClosedError):
         batch.step(actions)
@@ -329,7 +317,6 @@ def test_a_dropped_batch_makes_no_close_call_and_a_weak_observer_lets_it_go():
         batch.reset()
         gone = weakref.ref(batch)
         del batch
-        # An observer that keeps the batch forms a cycle, which only the collector breaks.
         assert (gone() is None) is weak
         gc.collect()
         assert gone() is None
@@ -402,11 +389,7 @@ def run(code, **variables):
 
 
 def test_a_step_without_observers_costs_no_more_than_one_with_a_no_op_observer():
-    """A generous guard on the one check per step that a batch without observers pays.
-
-    The steps of one small environment on the CPU leave Python its largest share. Rounds of steps
-    without observers and with an observer that does nothing alternate, so drift touches both.
-    """
+    """A generous guard on the one check per step that a batch without observers pays."""
     batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', threads=1)
     actions = torch.zeros((1, 1), dtype=torch.int32)
     batch.reset()

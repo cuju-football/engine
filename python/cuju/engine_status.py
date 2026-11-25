@@ -1,18 +1,7 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tells an intact engine from a damaged one, and prints the command that repairs it.
-
-Upgrading cuju 0.2.1 to a later release without `pip uninstall cuju` first makes pip remove the
-files of the old distribution after it wrote the new ones, so the engine loses every file that both
-releases have, `cuju/__init__.py` and `cuju/__main__.py` among them, and `cuju` becomes an empty
-namespace. A file whose name is new in a release stays, and this module is such a file. It imports
-only the standard library, so it works where the rest of the engine is gone.
-
-Packages that install beside the engine call `intact()` before they rely on it. The commands
-`python -m cuju.engine_status` and `cuju-repair`, a console script whose name is new as well, print
-the state and, for a damaged engine, the repair command and exit with status 1.
-"""
+"""Tells an intact engine from a damaged one, and prints the command that repairs it."""
 
 from __future__ import annotations
 
@@ -24,7 +13,6 @@ from importlib import metadata
 from . import _cli_contract as contract
 
 DISTRIBUTION = 'cuju-engine'
-# Files whose absence marks a damaged engine, relative to the folder of the package `cuju`.
 REQUIRED = ('__init__.py', '__main__.py', '_version.py', os.path.join('_batch', '__init__.py'))
 
 

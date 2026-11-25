@@ -1,12 +1,5 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""The log that the `log` key of the machine config turns on, a line for each batch created,
-through the logger `cuju`.
-
-The lines go to the handlers of the program's logging when it configured any, and otherwise to
-standard error, each starting with `cuju:`.
-"""
-
 from __future__ import annotations
 
 import logging
@@ -21,8 +14,6 @@ LOGGER = logging.getLogger('cuju')
 
 
 class _StandardError(logging.StreamHandler):
-    """Writes to the `sys.stderr` of each moment, which a test or a notebook may replace."""
-
     @property
     def stream(self):
         return sys.stderr
@@ -33,7 +24,6 @@ class _StandardError(logging.StreamHandler):
 
 
 def enabled(override: bool | None = None) -> bool:
-    """Returns `override` if given, else the `log` key of the machine config."""
     if override is not None:
         return bool(override)
     from .. import _config
@@ -42,7 +32,6 @@ def enabled(override: bool | None = None) -> bool:
 
 
 def _handler():
-    """Readies the logger, with a handler to standard error unless the program has handlers."""
     LOGGER.setLevel(logging.INFO)
     if LOGGER.handlers or logging.getLogger().handlers:
         return
@@ -52,7 +41,6 @@ def _handler():
 
 
 def info(message: str) -> None:
-    """Logs a line if the machine config asks for it."""
     if enabled():
         _handler()
         LOGGER.info(message)
@@ -61,14 +49,6 @@ def info(message: str) -> None:
 def start(
     device: str, torch_device: torch.device | None = None, log: bool | None = None
 ) -> tuple[float, int | None] | None:
-    """Returns the time and the free device memory before a batch's creation, or `None` if off.
-
-    Args:
-        device: The backend of the batch, `cuda` or `cpu`.
-        torch_device: The batch's own `torch.device`, whose free memory counts on the GPU, which
-            need not be the current CUDA device.
-        log: Whether this batch logs, or `None` for the machine config.
-    """
     if not enabled(log):
         return None
     _handler()
@@ -83,7 +63,6 @@ def start(
 
 
 def created(batch, assets, library, started) -> None:
-    """Logs the creation of `batch` from `assets` through `library`, begun at `started`."""
     if started is None:
         return
     began, free = started
@@ -98,7 +77,6 @@ def created(batch, assets, library, started) -> None:
             f'{major}.{minor})'
         )
         if free is not None:
-            # Other users of the GPU blur this difference of the free memory.
             taken = (free - torch.cuda.mem_get_info(index)[0]) / 2**20
             place += f', about {taken:.0f} MiB of device memory'
     else:

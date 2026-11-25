@@ -21,7 +21,6 @@
 #include "grf_math.h"
 
 namespace cuju::render::scene {
-
 class Renderer3D;
 
 enum class InternalFormat : std::uint8_t { kRGB8, kSRGB8, kRGBA8, kSRGBA8, kRGBA16F, kDepth16 };
@@ -84,7 +83,6 @@ private:
     VertexBufferId id_;
 };
 
-// A named resource with GRF's reference counting by holders.
 template <typename T>
 struct Resource {
     explicit Resource(std::string ident) : ident(std::move(ident)), res(std::make_unique<T>()) {}
@@ -147,18 +145,15 @@ public:
 
     GlStream &gl() { return gl_; }
     int context_width() const { return width_; }
-    // The SSAO kernel the ambient shader received, for checks.
     const std::vector<float> &ssao_kernel() const { return ssao_kernel_; }
     int context_height() const { return height_; }
 
-    // CreateContext after the context is made: queries, shaders, noise, quad buffers, clears.
-    // The noise image is media/shaders/noise.bmp.
     void CreateContext(const assets::Surface &noise);
 
     void SwapBuffers(std::vector<std::uint8_t> *screen);
     void SetMatrix(const std::string &name, const Matrix4 &m);
     void RenderOverlay2D(const std::vector<Overlay2DQueueEntry> &queue);
-    void RenderOverlay2D();  // the fullscreen quad of the ambient and postprocess passes
+    void RenderOverlay2D();
     void RenderLights(const std::deque<LightQueueEntry> &lights, const Matrix4 &projection,
                       const Matrix4 &view);
 
@@ -237,6 +232,6 @@ private:
     VertexBufferId overlay_buffer_, quad_buffer_;
 };
 
-}  // namespace cuju::render::scene
+}
 
-#endif  // CUJU_RENDER_SCENE_RENDERER3D_H
+#endif

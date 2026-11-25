@@ -133,7 +133,6 @@ def test_full_episode_dumps_hold_grf_steps(tmp_path):
         right = DEFAULT_ACTIONS[actions[1]]
         assert step['debug']['action'] == [DEFAULT_ACTIONS[actions[0]], FLIPPED.get(right, right)]
         observation, raw = step['observation'], raws[index]
-        # The left agent sees the match as it is, and GRF's arrays are float64.
         assert torch.equal(observation['left_team'], raw['left_team'][0, :4].double())
         assert torch.equal(observation['right_team'], raw['right_team'][0, :2].double())
         assert observation['right_team_designated_player'] == int(raw['designated'][1])

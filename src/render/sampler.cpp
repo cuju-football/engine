@@ -16,10 +16,8 @@
 #include "srgb.h"
 
 namespace cuju::render {
-
 namespace {
-
-constexpr float kInv255 = 0.0039215688593685627f;  // 0x3B808081, fl(1/255)
+constexpr float kInv255 = 0.0039215688593685627f;
 
 struct Level {
     const std::uint8_t *data;
@@ -46,8 +44,6 @@ inline std::uint16_t Load16(const std::uint8_t *p) {
     return static_cast<std::uint16_t>(p[0] | p[1] << 8);
 }
 
-// The per byte decodes as tables. Neither computation meets a subnormal, so the tables built at
-// load time under any MXCSR hold the bits of the FTZ evaluation.
 struct ByteDecodes {
     float srgb[256];
     float unorm[256];
@@ -101,7 +97,6 @@ Rgba Fetch(const Level &level, int x, int y) {
 
 inline float Lerp(float w, float a, float b) { return ftz::Fma(w, ftz::Sub(b, a), a); }
 
-// Bilinear filtering of the four texels, x first on both rows, then y.
 inline Rgba Filter(float fx, float fy, const Rgba &t00, const Rgba &t10, const Rgba &t01,
                    const Rgba &t11) {
     Rgba r;
@@ -113,7 +108,6 @@ inline Rgba Filter(float fx, float fy, const Rgba &t00, const Rgba &t10, const R
     return r;
 }
 
-// REPEAT on a power-of-two size: u = s * w - 0.5, the integer parts masked.
 inline void RepeatCoord(float s, int size, int &i0, int &i1, float &frac) {
     const float u = ftz::Sub(ftz::Mul(s, static_cast<float>(size)), 0.5f);
     const float fl = ftz::Floor(u);
@@ -124,7 +118,6 @@ inline void RepeatCoord(float s, int size, int &i0, int &i1, float &frac) {
     i1 = static_cast<int>((i + 1u) & mask);
 }
 
-// CLAMP_TO_EDGE for linear filtering: u = max(min(s * w, w) - 0.5, 0), the second texel clamped.
 inline void ClampCoord(float s, int size, int &i0, int &i1, float &frac) {
     const float wf = static_cast<float>(size);
     const float u = ftz::MaxPs(ftz::Sub(ftz::MinPs(ftz::Mul(s, wf), wf), 0.5f), 0.0f);
@@ -150,8 +143,6 @@ Rgba Bilinear(const Level &level, float s, float t) {
                   Fetch<F>(level, x1, y1));
 }
 
-// The per-quad part of anisotropic filtering: the number of probes, the major axis and the level
-// of detail, from the coarse derivatives of lanes 0, 1 and 2 scaled by the base size.
 struct Footprint {
     int probes;
     bool major_x;
@@ -177,9 +168,6 @@ Footprint QuadFootprint(const float *s, const float *t, int width, int height) {
     return f;
 }
 
-// Per lane probe directions from the fine derivatives in normalized coordinates: along x, lanes
-// (0, 1) and (2, 3) take the difference of their row, along y, lanes (0, 2) and (1, 3) of their
-// column.
 inline void ProbeDirections(const float *v, bool major_x, float *d) {
     if (major_x) {
         d[0] = d[1] = ftz::Sub(v[1], v[0]);
@@ -190,7 +178,6 @@ inline void ProbeDirections(const float *v, bool major_x, float *d) {
     }
 }
 
-// The probe offsets: (i + (0.5 - 0.5 N)) / (N + 1) as the JIT code rounds it.
 struct ProbeStep {
     float inv_n;
     float inv_n1;
@@ -257,10 +244,6 @@ void AnisoTrilinearQuad(const Texture &texture, const float *s, const float *t, 
     }
 }
 
-// AnisoTrilinearQuad and AnisoLinearQuad for two quads, eight lanes, at a time: the per quad part
-// as above, the per lane part in lanes. Probes past a quad's own count and the second level of a
-// quad without one are masked, so each lane gets the bits of the scalar code. Only the channels in
-// kChannels are computed, bit c for channel c.
 constexpr unsigned kChannelsR = 1u, kChannelsRgb = 7u, kChannelsRgba = 15u;
 
 constexpr bool ForcesAlphaOneFormat(Format f) {
@@ -269,7 +252,7 @@ constexpr bool ForcesAlphaOneFormat(Format f) {
 }
 
 struct PairLevel {
-    const std::uint8_t *data[2];  // lanes 0 to 3, lanes 4 to 7
+    const std::uint8_t *data[2];
     lanes::F8 wf, hf;
     lanes::I8 wmask, hmask, stride;
 };
@@ -278,7 +261,6 @@ inline lanes::F8 Lerp8(lanes::F8 w, lanes::F8 a, lanes::F8 b) {
     return lanes::Fma(w, lanes::Sub(b, a), a);
 }
 
-// SrgbDecode of eight bytes as floats.
 inline lanes::F8 SrgbDecode8(lanes::F8 x) {
     using namespace lanes;
     const F8 lin = Mul(x, Splat(FromBits(0x39A32D56u)));
@@ -289,7 +271,6 @@ inline lanes::F8 SrgbDecode8(lanes::F8 x) {
     return Select(Ugt(x, Splat(15.0f)), pw, lin);
 }
 
-// Channel c of eight RGBA8 texels, sRGB decoded for colour channels of sRGB formats.
 template <bool kSrgb>
 inline lanes::F8 DecodeChannel8(lanes::I8 texels, int c) {
     using namespace lanes;
@@ -302,7 +283,6 @@ inline lanes::F8 DecodeChannel8(lanes::I8 texels, int c) {
     return Mul(v, Splat(kInv255));
 }
 
-// RepeatCoord or ClampCoord per lane: the texel pair i0, i1 and the fraction.
 template <bool kRepeat>
 inline void Coord8(lanes::F8 s, lanes::F8 size, lanes::I8 max, lanes::I8 &i0, lanes::I8 &i1,
                    lanes::F8 &frac) {
@@ -323,8 +303,6 @@ inline void Coord8(lanes::F8 s, lanes::F8 size, lanes::I8 max, lanes::I8 &i0, la
 }
 
 #if CUJU_RENDER_LANES_AVX2
-// The two adjacent 32-bit texels at lo + offsets[i] (lanes 0 to 3) or hi + offsets[i] (lanes 4 to
-// 7): first in `a`, second in `b`.
 inline void GatherPair64(const void *lo, const void *hi, lanes::I8 offsets, lanes::I8 &a,
                          lanes::I8 &b) {
     using namespace lanes;
@@ -381,7 +359,6 @@ alignas(32) constexpr std::int32_t kPermDx1[8] = {1, 1, 3, 3, 5, 5, 7, 7};
 alignas(32) constexpr std::int32_t kPermDy0[8] = {0, 1, 0, 1, 4, 5, 4, 5};
 alignas(32) constexpr std::int32_t kPermDy1[8] = {2, 3, 2, 3, 6, 7, 6, 7};
 
-// FastLog2 per lane.
 inline lanes::F8 FastLog2x8(lanes::F8 x) {
     using namespace lanes;
     const I8 b = AsInt(x);
@@ -390,8 +367,6 @@ inline lanes::F8 FastLog2x8(lanes::F8 x) {
     return Add(e, m);
 }
 
-// The per quad part of AnisoTrilinearQuad for up to four quads, quad k in lane k: footprint, level
-// pair, blend weight and probe steps.
 struct QuadSetup {
     alignas(32) std::int32_t probes[8];
     alignas(32) std::int32_t major_x[8];
@@ -404,7 +379,6 @@ struct QuadSetup {
     alignas(32) float base[8];
 };
 
-// Without trilinear, level 0 alone, as the anisotropic linear kinds sample it.
 void SetupQuads(const Texture &texture, bool trilinear, int nq, const float *s, const float *t,
                 QuadSetup &q) {
     using namespace lanes;
@@ -456,7 +430,6 @@ void SetupQuads(const Texture &texture, bool trilinear, int nq, const float *s, 
     Store(q.base, Add(Mul(nf, Splat(-0.5f)), Splat(0.5f)));
 }
 
-// The per lane level parameters of quads a (lanes 0 to 3) and b (lanes 4 to 7).
 inline PairLevel LevelsOf(const Texture &texture, int la, int lb) {
     using namespace lanes;
     const TextureLevel &a = texture.levels[la];
@@ -472,7 +445,6 @@ inline PairLevel LevelsOf(const Texture &texture, int la, int lb) {
     return l;
 }
 
-// Probe directions of ProbeDirections for two quads of lanes.
 inline lanes::F8 Directions(lanes::F8 v, lanes::F8 major_x) {
     using namespace lanes;
     const F8 along_x = Sub(Permute(v, LoadI(kPermDx1)), Permute(v, LoadI(kPermDx0)));
@@ -480,7 +452,6 @@ inline lanes::F8 Directions(lanes::F8 v, lanes::F8 major_x) {
     return Select(major_x, along_x, along_y);
 }
 
-// Quads qa and qb of the setup (nb = 0 when qb is padding) at lanes s, t; out[c * 8 + lane].
 template <Format F, unsigned kChannels, bool kRepeat>
 void AnisoTrilinearPair(const Texture &texture, const QuadSetup &q, int qa, int qb, bool real_b,
                         const float *s, const float *t, float *out) {
@@ -631,14 +602,12 @@ void AnisoLinearQuad(const Level &level, const float *s, const float *t, float o
     }
 }
 
-// NEAREST with CLAMP_TO_EDGE truncates s * w, then clamps to [0, w - 1].
 inline int NearestClamp(float s, int size) {
     const std::int32_t i = CvttPs2Dq(ftz::Mul(s, static_cast<float>(size)));
     const std::int32_t hi = i < size - 1 ? i : size - 1;
     return hi > 0 ? hi : 0;
 }
 
-// NEAREST with REPEAT floors s * w and masks it.
 inline int NearestRepeat(float s, int size) {
     const std::uint32_t i =
         static_cast<std::uint32_t>(CvttPs2Dq(ftz::Floor(ftz::Mul(s, static_cast<float>(size)))));
@@ -723,7 +692,6 @@ void Dispatch(SamplerKind kind, Format format, const Texture *texture, const Tex
     }
 }
 
-// The eight-lane anisotropic paths, for the RGBA8 formats. False for other formats and kinds.
 bool AnisoLanes(SamplerKind kind, const Texture &texture, int quads, const float *s, const float *t,
                 unsigned channels, float *out) {
     if (kind != SamplerKind::kAnisoTrilinearRepeat && kind != SamplerKind::kAnisoLinearRepeat &&
@@ -748,7 +716,7 @@ bool AnisoLanes(SamplerKind kind, const Texture &texture, int quads, const float
     }
 }
 
-}  // namespace
+}
 
 void SampleQuads(SamplerKind kind, const Texture &texture, int quads, const float *s,
                  const float *t, float *out) {
@@ -774,9 +742,6 @@ void SampleLevelQuads(SamplerKind kind, Format format, const TextureLevel &level
 }
 
 namespace {
-
-// QuadFootprint and Probes for up to eight quads at once, one quad per lane, without the level of
-// detail, which the shadow lookup does not use. s0, s1, s2 hold lanes 0, 1 and 2 of each quad.
 struct Footprints {
     std::int32_t probes[8];
     std::int32_t major_x[8];
@@ -809,15 +774,10 @@ void QuadFootprints(const float *s0, const float *s1, const float *s2, const flo
     Store(f.base, Add(Mul(nf, Splat(-0.5f)), Splat(0.5f)));
 }
 
-// Speed: the depth u16 * fl(1 / 65535) never decreases as u16 grows, so a reference r passes
-// the LEQUAL compare, r <= u16 * fl(1 / 65535), for the u16 from a threshold on. The threshold
-// lies within two of r * 65535, and the compares at the candidates around it give it exactly.
-// Returns the threshold minus one, so that u16 passes when u16 > the result.
 lanes::I8 ShadowPassBelow(lanes::F8 r) {
     using namespace lanes;
     const F8 unorm16 = Splat(FromBits(0x37800080u));
     const I8 c = CvttPs2Dq(Mul(r, Splat(65535.0f)));
-    // The threshold is c + 2 less the candidates c - 1, c and c + 1 that pass, a mask of -1 each.
     I8 below = AddI(c, SplatI(1));
     for (int k = -1; k <= 1; ++k) {
         const I8 t = AddI(c, SplatI(k));
@@ -826,7 +786,7 @@ lanes::I8 ShadowPassBelow(lanes::F8 r) {
     return below;
 }
 
-}  // namespace
+}
 
 void SampleShadowQuads(const Texture &texture, int quads, const float *s, const float *t,
                        const float *ref, float *out) {
@@ -839,7 +799,6 @@ void SampleShadowQuads(const Texture &texture, int quads, const float *s, const 
     const F8 half = Splat(0.5f), zero = Splat(0.0f), one = Splat(1.0f);
     const int stride = static_cast<int>(level.stride);
     for (int qa = 0; qa < quads; qa += 8) {
-        // The footprints of up to eight quads.
         const int nqa = quads - qa < 8 ? quads - qa : 8;
         alignas(32) float s0[8] = {}, s1[8] = {}, s2[8] = {}, t0[8] = {}, t1[8] = {}, t2[8] = {};
         for (int k = 0; k < nqa; ++k) {
@@ -854,7 +813,6 @@ void SampleShadowQuads(const Texture &texture, int quads, const float *s, const 
         }
         Footprints fps;
         QuadFootprints(s0, s1, s2, t0, t1, t2, level.w, level.h, fps);
-        // Two quads, eight lanes, at a time, the probes of each quad masked past its own count.
         struct Group {
             F8 s8, t8, ds8, dt8, base8, inv_n1_8, inv_n8, acc;
             I8 probes8, below;
@@ -894,9 +852,6 @@ void SampleShadowQuads(const Texture &texture, int quads, const float *s, const 
             g.below = ShadowPassBelow(MaxPs(MinPs(Load(rv), one), zero));
             g.acc = zero;
         }
-        // Speed: two groups step through their probes together, each stage of a probe for both
-        // before the next, so that the processor overlaps their independent chains. A group past
-        // its own probes keeps its sums, as its lanes past their quad's probes do.
         for (int a = 0; a < ng; a += 2) {
             const int n = a + 1 < ng ? 2 : 1;
             Group *gs = groups + a;
@@ -910,7 +865,6 @@ void SampleShadowQuads(const Texture &texture, int quads, const float *s, const 
                     const F8 off = Mul(Add(Splat(static_cast<float>(i)), g.base8), g.inv_n1_8);
                     const F8 ps = Add(g.s8, Mul(off, g.ds8));
                     const F8 pt = Add(g.t8, Mul(off, g.dt8));
-                    // CLAMP_TO_EDGE for linear filtering: u = max(min(s * w, w) - 0.5, 0).
                     const F8 u = MaxPs(Sub(MinPs(Mul(ps, wf), wf), half), zero);
                     const F8 v = MaxPs(Sub(MinPs(Mul(pt, hf), hf), half), zero);
                     const F8 ufl = Floor(u), vfl = Floor(v);
@@ -937,8 +891,6 @@ void SampleShadowQuads(const Texture &texture, int quads, const float *s, const 
                 }
                 for (int k = 0; k < n; ++k) {
                     Group &g = gs[k];
-                    // LEQUAL against each texel, then the weights of passing texels, selected by
-                    // bit masks, so the sums along x are exact.
                     const F8 p00 = AsFloat(GtI(t00[k], g.below));
                     const F8 p10 = AsFloat(GtI(t10[k], g.below));
                     const F8 p01 = AsFloat(GtI(t01[k], g.below));
@@ -961,4 +913,4 @@ void SampleShadowQuads(const Texture &texture, int quads, const float *s, const 
     }
 }
 
-}  // namespace cuju::render
+}

@@ -1,10 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks how cuju meets the packages that install beside it, with a fake package `cuju.fakepkg`.
-
-Every check runs in a new interpreter whose path holds a folder with a portion of the package
-`cuju` and a fake distribution that declares entry points of the group `cuju.batch_hooks`.
-"""
+"""Checks how cuju meets the packages that install beside it, with a fake package `cuju.fakepkg`."""
 
 import importlib.util
 import os
@@ -253,7 +249,6 @@ def test_an_intact_engine_reports_itself():
 
 @pytest.mark.parametrize('distribution', [None, 'cuju-engine', 'cuju-engine-cpu'])
 def test_a_damaged_engine_names_the_repair(tmp_path, distribution):
-    # An upgrade from cuju 0.2.1 leaves the files with new names in the namespace.
     import importlib.util
 
     folder = tmp_path / 'damaged' / 'cuju'

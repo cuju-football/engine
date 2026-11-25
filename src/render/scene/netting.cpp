@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Ported from GRF's match.cpp and vector3.cpp, Apache-2.0.
-
 #include "scene/netting.h"
 
 #include <cmath>
@@ -14,9 +12,7 @@
 namespace cuju {
 namespace render {
 namespace scene {
-
 namespace {
-
 constexpr float kPitchHalfWidth = 55.0f;
 constexpr float kPi = 3.1415926535897932384626433832795028841972f;
 
@@ -37,7 +33,7 @@ inline float Distance(const Vector3 &a, const Vector3 &b) {
     return length;
 }
 
-}  // namespace
+}
 
 void GoalNetting::Prepare(const std::vector<PlanarMesh> &meshes) {
     size_t total = 0;
@@ -115,6 +111,6 @@ bool GoalNetting::Update(const Vector3 &ball, bool ballTouchesNet) {
     return false;
 }
 
-}  // namespace scene
-}  // namespace render
-}  // namespace cuju
+}
+}
+}

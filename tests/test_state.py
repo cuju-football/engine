@@ -12,7 +12,6 @@ def test_state_round_trip(device):
     for step in range(60):
         batch.step(actions_at(step, 2, 4, 19).to(device))
     batch.set_state(1, batch.get_state(0))
-    # A state carries no generator, so the comparison stops where an episode ends.
     ended = False
     for step in range(60, 160):
         actions = actions_at(step, 1, 4, 19).repeat(2, 1).to(device)
@@ -29,11 +28,7 @@ def test_state_round_trip(device):
 
 
 def test_a_state_of_the_other_parity_plays_as_in_grf(device):
-    # GRF: `11_vs_11_stochastic` swaps the teams' formations with the parity of the episode. A load
-    # takes the state's order of the teams, while the players keep the formation entries of the
-    # reset. The digest is of every field of the clean GRF build's match 115 steps after loading a
-    # state of the second episode into the third, past a goal and its kickoff, without the padding
-    # that GRF leaves unset in each radian.
+    # GRF: `11_vs_11_stochastic` swaps the teams' formations with the parity of the episode.
     import hashlib
 
     import numpy as np

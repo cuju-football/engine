@@ -1,12 +1,7 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Reads single fields of a GRF state, such as the joints of a player or the spin of the ball.
-
-`layout` names every field of the match in memory, with its offset, size and type, and `gather`
-loads a state, as `BatchEnvironment.get_state` or GRF's `get_state` return it, and copies chosen
-fields out of it. The guide is in the repository's `docs/states.md`, under Reading fields.
-"""
+"""Reads single fields of a GRF state, such as the joints of a player or the spin of the ball."""
 
 from __future__ import annotations
 
@@ -22,7 +17,6 @@ from .errors import ArgumentError, ChoiceError, LibraryError, StateError
 
 __all__ = ['FRAMES', 'Field', 'gather', 'layout', 'read']
 
-# The frames of `gather`, as the C API numbers them.
 FRAMES = {'rest': 0, 'pitch': 1}
 
 # GRF: the state names each type as C++'s `typeid` does, and stores it little-endian.
@@ -39,14 +33,7 @@ _DTYPES = {
 
 
 class Field(NamedTuple):
-    """One field of the match in memory.
-
-    Attributes:
-        path: Its name, such as `match.players[3].base.humanoid.nodes[0].rotation`.
-        offset: Its offset in bytes from the start of the match in memory.
-        size: Its size in bytes.
-        type: The type that GRF's state format gives it, such as `f` for a float.
-    """
+    """One field of the match in memory."""
 
     path: str
     offset: int
@@ -56,8 +43,6 @@ class Field(NamedTuple):
 
 @functools.cache
 def _library():
-    """Returns a loaded library, the CPU one where it loads, else the CUDA one."""
-    # Loading imports PyTorch, so it waits for the first state, and `import cuju.state` stays light.
     from ._batch import library as _libraries
 
     failures = []
@@ -84,7 +69,6 @@ def _library():
 
 @functools.cache
 def _fields() -> dict[str, Field]:
-    """Returns the fields of `layout`, read once from the library."""
     library = _library()
     size = ctypes.c_ulonglong()
     pointer = library.cuju_state_layout(ctypes.byref(size))
@@ -98,20 +82,11 @@ def _fields() -> dict[str, Field]:
 
 
 def layout() -> dict[str, Field]:
-    """Returns every field of the match in memory, by path, in the order of GRF's state format.
-
-    Each list covers its whole capacity, so a field such as the eleventh player exists even where a
-    state holds fewer, and the offsets hold for every state of every scenario. A field past the
-    count of its list holds no value of the match.
-
-    Returns:
-        A new dictionary from each path to its `Field`.
-    """
+    """Returns every field of the match in memory, by path, in the order of GRF's state format."""
     return dict(_fields())
 
 
 def _match_bytes(state: bytes) -> bytes:
-    """Returns the match of a state, the bytes after its pickle length and its pickle."""
     if len(state) < 4 or not 0 < struct.unpack_from('<i', state)[0] <= len(state) - 4:
         raise StateError(
             f'expected the bytes of a state: a pickle length, the pickle and the match, found '
@@ -122,7 +97,6 @@ def _match_bytes(state: bytes) -> bytes:
 
 
 def _resolve(fields: Sequence[str | Field]) -> list[Field]:
-    """Returns the `Field` of each path or field, refusing paths that the layout lacks."""
     known = _fields()
     resolved = []
     for field in fields:
@@ -136,25 +110,7 @@ def _resolve(fields: Sequence[str | Field]) -> list[Field]:
 
 
 def gather(state: bytes, fields: Sequence[str | Field], frame: str = 'rest') -> bytes:
-    """Loads a state and returns the bytes of the chosen fields, one after another.
-
-    Args:
-        state: The bytes of a state, as `BatchEnvironment.get_state` or GRF's `get_state` return
-            them.
-        fields: Paths of `layout` or its `Field` values, in the order of the result.
-        frame: `rest`, where the match is as the engine keeps it and the right team plays mirrored,
-            or `pitch`, which turns the right team into the frame of the pitch as GRF's camera
-            does, so both teams and the ball share one frame with the left goal at negative x.
-
-    Returns:
-        The bytes of every field in turn, each as long as its `size`.
-
-    Raises:
-        ChoiceError: If `frame` is neither `rest` nor `pitch`. It is a `KeyError` and a
-            `ValueError`.
-        ArgumentError: If a path is not in `layout`. It is a `ValueError`.
-        StateError: If the bytes hold no state. It is a `ValueError` and a `RuntimeError`.
-    """
+    """Loads a state and returns the bytes of the chosen fields, one after another."""
     if frame not in FRAMES:
         raise ChoiceError(f'expected the frame rest or pitch, found {frame!r}')
     match = _match_bytes(state)
@@ -177,23 +133,7 @@ def gather(state: bytes, fields: Sequence[str | Field], frame: str = 'rest') -> 
 
 
 def read(state: bytes, fields: Sequence[str | Field], frame: str = 'rest') -> list[np.ndarray]:
-    """Loads a state and returns the value of each chosen field as a numpy array.
-
-    A number or an enumeration becomes an array of no dimensions, a vector an array of three floats
-    and a quaternion an array of four, x, y, z then w. A field of another type, such as a radian,
-    which holds a float, a flag and padding, becomes its raw bytes as `uint8`.
-
-    Args:
-        state: The bytes of a state, as for `gather`.
-        fields: Paths of `layout` or its `Field` values.
-        frame: `rest` or `pitch`, as for `gather`.
-
-    Returns:
-        One array per field, in the order of `fields`.
-
-    Raises:
-        ChoiceError, ArgumentError, StateError: As `gather` raises them.
-    """
+    """Loads a state and returns the value of each chosen field as a numpy array."""
     resolved = _resolve(fields)
     data = gather(state, resolved, frame)
     values, position = [], 0

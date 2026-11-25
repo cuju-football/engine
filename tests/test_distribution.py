@@ -56,7 +56,6 @@ def test_cpu_only_distribution_drops_only_the_cuda_backend(tmp_path):
     assert defines['CUJU_CUDA'] == 'OFF'
     assert 'CMAKE_CUDA_ARCHITECTURES' not in defines
     assert not [line for line in after['project']['classifiers'] if 'CUDA' in line]
-    # Everything else, the version and the dependencies among it, stays as it is.
     for table in (before, after):
         project = table['project']
         del project['name'], project['description']
@@ -104,7 +103,6 @@ def test_build_comparison_finds_what_differs(tmp_path, capsys):
     write_wheel(tmp_path / 'first' / 'cuju.whl', members)
     write_wheel(tmp_path / 'second' / 'cuju.whl', members)
     assert script.compare(str(tmp_path / 'first'), str(tmp_path / 'second'))
-    # A build dated by its own clock, or with other bytes, differs from the first.
     write_wheel(tmp_path / 'later' / 'cuju.whl', members, date_time=(2026, 1, 2, 0, 0, 0))
     write_wheel(tmp_path / 'other' / 'cuju.whl', {**members, 'cuju/__init__.py': b'#'})
     capsys.readouterr()
@@ -123,8 +121,6 @@ def test_image_builds_the_architectures_of_the_wheel():
 
 
 def test_wheel_holds_only_checked_architectures():
-    # A compute capability such as 7.0 (V100) builds on request, but the wheel holds machine code
-    # only for those checked on a GPU of their own, and no PTX that a driver would compile.
     with open(source_file('CMakeLists.txt'), encoding='utf-8') as handle:
         checked = re.search(r'set\(CUJU_CHECKED_CUDA_ARCHITECTURES ([0-9 ]+)\)', handle.read())
     with open(source_file('.github', 'workflows', 'release.yml'), encoding='utf-8') as handle:
@@ -133,8 +129,6 @@ def test_wheel_holds_only_checked_architectures():
 
 
 def test_publishing_needs_a_tag_that_names_the_version():
-    # The publish job runs only for a dispatch on a tag `v*`, and checks that the tag names
-    # `__version__` before anything reaches PyPI.
     with open(source_file('.github', 'workflows', 'release.yml'), encoding='utf-8') as handle:
         workflow = handle.read()
     publish = workflow[workflow.index('\n    publish:') :]
@@ -174,9 +168,6 @@ def test_each_trusted_publishing_job_checks_the_release_tag():
 
 
 def test_each_published_project_has_its_own_environment():
-    # PyPI holds one pending trusted publisher per repository, workflow and environment, and creates
-    # one new project per upload, so every project the release creates publishes from its own job
-    # and its own environment.
     with open(source_file('.github', 'workflows', 'release.yml'), encoding='utf-8') as handle:
         workflow = handle.read()
     environments = {}
@@ -199,8 +190,6 @@ def test_apptainer_takes_the_image_of_this_version():
 
 @pytest.mark.parametrize('threads', [1, 4])
 def test_a_caller_that_flushes_subnormals_changes_nothing(threads):
-    # The library sets the default floating point environment (MXCSR on x86-64, FPCR on aarch64)
-    # in every call and in every thread of its pool, which inherits the caller's.
     digests = os.path.join(os.path.dirname(os.path.abspath(cuju.__file__)), 'data', 'digests.json')
     with open(digests, encoding='utf-8') as handle:
         expected = json.load(handle)
@@ -235,8 +224,6 @@ def test_library_names_follow_the_system(monkeypatch):
 
 
 def test_windows_exports_every_function_that_the_package_calls():
-    # CMakeLists.txt writes the DLL's exports from the definitions that start a line of the C API
-    # headers, as this pattern finds them.
     directory = os.path.dirname(source_file('src', 'environment_api.h'))
     exports = set()
     for name in sorted(os.listdir(directory)):

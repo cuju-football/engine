@@ -7,7 +7,6 @@
 #include <algorithm>
 
 namespace cuju::render::scene {
-
 void AssignSurface(assets::Surface *dst, const overlay2d::Surface &src) {
     dst->w = src.w;
     dst->h = src.h;
@@ -97,7 +96,6 @@ ImageView::ImageView(Gui *g, const std::string &n, float x, float y, float w, fl
 void ImageView::LoadImage(const std::string &file) {
     overlay2d::SourceImage src;
     gui->LoadSourceImage(file, &src);
-    // CreateImage2D(name + "source", w, h, false): a surface with no texture.
     source = gui->scene().surface_manager().Fetch(name + "source", false, true);
     int px, py, pw, ph;
     gui->geometry().Coordinates(x_percent, y_percent, w_percent, h_percent, px, py, pw, ph);
@@ -129,7 +127,6 @@ Gui::Gui(Scene &scene, const overlay2d::GlyphAtlas &atlas, ImageLoader load_imag
     scene.MoveImage(*blackout_, 0, 0);
     blackout_->enabled = false;
     scene.images().push_back(blackout_);
-    // MenuTask shows the root.
     root_->visible = true;
 }
 
@@ -377,4 +374,4 @@ void Scoreboard::SetGoalCount(int team, int count) {
     goals[team]->SetCaption(overlay2d::GoalString(count));
 }
 
-}  // namespace cuju::render::scene
+}

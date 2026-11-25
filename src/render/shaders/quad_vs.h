@@ -13,8 +13,6 @@
 #include "../fpenv.h"
 
 namespace cuju::render::shaders {
-
-// V and P are column-major 4x4 matrices, pos and clip hold count * 4 floats.
 inline void OrthoQuadVertices(const float *V, const float *P, int count, const float *pos,
                               float *clip) {
     for (int i = 0; i < count; ++i) {
@@ -35,6 +33,6 @@ inline void OrthoQuadVertices(const float *V, const float *P, int count, const f
     }
 }
 
-}  // namespace cuju::render::shaders
+}
 
-#endif  // CUJU_RENDER_SHADERS_QUAD_VS_H
+#endif

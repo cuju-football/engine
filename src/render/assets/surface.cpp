@@ -14,7 +14,6 @@
 #include "pitch/bmp.h"
 
 namespace cuju::render::assets {
-
 bool LoadSurface(const std::string &path, Surface *surface, std::string *error) {
     const std::string name = path.substr(0, path.size() >= 4 ? path.size() - 4 : 0) + ".bmp";
     std::string bytes;
@@ -26,8 +25,6 @@ bool LoadSurface(const std::string &path, Surface *surface, std::string *error) 
         if (error) *error = name + ": " + reason;
         return false;
     }
-    // A 32-bit file without an alpha mask stays SDL_PIXELFORMAT_RGB888 in GRF, four bytes a
-    // pixel without alpha, which no GRF file is.
     const int bits = data[28] | data[29] << 8;
     if (bits == 32 && !image.hasAlpha) {
         if (error) *error = name + ": 32-bit BMP without an alpha mask";
@@ -55,4 +52,4 @@ bool LoadSurface(const std::string &path, Surface *surface, std::string *error) 
     return true;
 }
 
-}  // namespace cuju::render::assets
+}

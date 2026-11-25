@@ -1,9 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks GRF's render mode in cuju's engines, the matches a rendering GRF plays, and RenderState.
-
-The digests are of matches that equal the clean GRF build's rendered matches outside GRF's padding.
-"""
+"""Checks GRF's render mode in cuju's engines and `RenderState`."""
 
 import ctypes
 import hashlib
@@ -17,8 +14,6 @@ from cuju.gfootball_engine import _gameplayfootball, _native
 
 
 class _Session:
-    """A renderer that draws nothing, so render mode plays as GRF's rendering engine does."""
-
     def __init__(self, env):
         self.env = env
 
@@ -48,8 +43,6 @@ class _Provider:
         return _Session(env)
 
 
-# The RenderState and the count of saves and loads at each render. GRF keeps one rendering engine
-# per process and hands it to the next environment, so the renders gather here.
 _RENDERS = []
 
 
@@ -59,8 +52,7 @@ def renderer(monkeypatch):
 
     _RENDERS.clear()
     monkeypatch.setattr(hooks, 'provider', lambda: _Provider)
-    # GRF keeps a released rendering engine for the next environment of the process, which would
-    # hold another test's renderer, so each test starts a fresh one.
+    # GRF keeps a released rendering engine for the next environment, so each test starts anew.
     monkeypatch.setattr(football_env_core, '_unused_rendering_engine', None)
     monkeypatch.setattr(football_env_core, '_active_rendering', False)
     return _RENDERS
@@ -123,8 +115,7 @@ def test_without_render_mode_the_corner_differs(renderer, monkeypatch):
 
 
 def test_the_render_switch_loads_as_grf_does(renderer):
-    # GRF: the switch loads the state into a fresh engine, which mirrors the mental images' ball
-    # predictions once more under `reverse_team_processing`.
+    # GRF: the switch loads the state into a fresh engine, which mirrors the ball predictions again.
     states = play('11_vs_11_stochastic', 3, 40, 'mid:20', saves=False)
     assert match_digest(states[-1]) == '71ddab669a8bb93e'
 
@@ -154,8 +145,7 @@ def overlay(state):
 
 @pytest.mark.parametrize('disabled', [False, True])
 def test_a_goal_without_rendering_leaves_the_captions(renderer, disabled):
-    # GRF: a caption takes new text only while rendering, so a goal scored after `disable_render`
-    # leaves the scoreboard and the message caption as they were, while the message shows.
+    # GRF: a caption takes new text only while rendering, so a goal after `disable_render` has none.
     from cuju.gfootball.env import config, football_env
 
     values = {
@@ -186,7 +176,6 @@ def test_a_goal_without_rendering_leaves_the_captions(renderer, disabled):
 def test_saves_and_loads_count_for_the_nets(renderer):
     play('academy_empty_goal_close', 0, 3, 'switch')
     counts = [processed for _, processed in renderer]
-    # A save follows the reset and each step, and a render ends each step.
     assert counts[-3:] == [counts[-3], counts[-3] + 1, counts[-3] + 2]
 
 

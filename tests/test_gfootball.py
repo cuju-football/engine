@@ -134,7 +134,6 @@ def test_dump_reads_and_prints_as_grf(tmp_path):
     assert len(paths) == 1
     steps = script_helpers.ScriptHelpers().load_dump(paths[0])
     assert steps[0]['debug']['action'] == [football_action_set.action_right]
-    # cuju's reader takes the dump that GRF's Python wrote, and runs no code from it.
     assert len(dumps.read_dump(paths[0])) == len(steps)
     output = tmp_path / 'dump.txt'
     dump_command.main([paths[0], '-o', str(output)])

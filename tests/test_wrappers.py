@@ -199,7 +199,6 @@ def test_grf_wrapper_over_one_environment_equals_create_environment(scenario):
     assert type(wrapper) is grf_wrappers.MultiAgentToSingleAgent
     assert wrapper.action_space.n == 20
     wrapped = grf_wrappers.SingleAgentRewardWrapper(wrapper)
-    # Each reset draws its seed from Python's `random`, as GRF's does.
     random.seed(5)
     ours = wrapped.reset()
     random.seed(5)

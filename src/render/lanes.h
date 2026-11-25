@@ -32,7 +32,6 @@
 #endif
 
 namespace cuju::render::lanes {
-
 #if CUJU_RENDER_LANES_AVX2
 
 struct F8 {
@@ -75,17 +74,14 @@ inline F8 Uge(F8 a, F8 b) { return {_mm256_cmp_ps(a.v, b.v, _CMP_NLT_UQ)}; }
 inline F8 Ueq(F8 a, F8 b) { return {_mm256_cmp_ps(a.v, b.v, _CMP_EQ_UQ)}; }
 inline F8 IsNan(F8 a) { return {_mm256_cmp_ps(a.v, a.v, _CMP_UNORD_Q)}; }
 
-// Bitwise operations, which no FTZ or DAZ touches.
 inline F8 And(F8 a, F8 b) { return {_mm256_and_ps(a.v, b.v)}; }
-inline F8 AndNot(F8 a, F8 b) { return {_mm256_andnot_ps(a.v, b.v)}; }  // ~a & b
+inline F8 AndNot(F8 a, F8 b) { return {_mm256_andnot_ps(a.v, b.v)}; }
 inline F8 Or(F8 a, F8 b) { return {_mm256_or_ps(a.v, b.v)}; }
 inline F8 Xor(F8 a, F8 b) { return {_mm256_xor_ps(a.v, b.v)}; }
-// mask ? t : f, per lane.
 inline F8 Select(F8 mask, F8 t, F8 f) { return {_mm256_blendv_ps(f.v, t.v, mask.v)}; }
 
 inline I8 AsInt(F8 a) { return {_mm256_castps_si256(a.v)}; }
 inline F8 AsFloat(I8 a) { return {_mm256_castsi256_ps(a.v)}; }
-// vcvttps2dq and vcvtdq2ps.
 inline I8 CvttPs2Dq(F8 a) { return {_mm256_cvttps_epi32(a.v)}; }
 inline F8 ToFloat(I8 a) { return {_mm256_cvtepi32_ps(a.v)}; }
 inline I8 AddI(I8 a, I8 b) { return {_mm256_add_epi32(a.v, b.v)}; }
@@ -100,10 +96,7 @@ inline I8 SrlI(I8 a, int n) { return {_mm256_srli_epi32(a.v, n)}; }
 inline I8 SraI(I8 a, int n) { return {_mm256_srai_epi32(a.v, n)}; }
 inline I8 GtI(I8 a, I8 b) { return {_mm256_cmpgt_epi32(a.v, b.v)}; }
 inline I8 EqI(I8 a, I8 b) { return {_mm256_cmpeq_epi32(a.v, b.v)}; }
-// Lane i of the result is lane idx[i] of a.
 inline F8 Permute(F8 a, I8 idx) { return {_mm256_permutevar8x32_ps(a.v, idx.v)}; }
-// Gathers as loads inserted into the vector, which Zen 3 runs faster than vpgatherdd or a store and
-// reload.
 inline std::int32_t LoadAt(const void *base, std::int32_t offset) {
     std::int32_t x;
     std::memcpy(&x, static_cast<const std::uint8_t *>(base) + offset, 4);
@@ -118,7 +111,6 @@ inline __m128i Load64At(const void *base, std::int32_t offset) {
     return _mm_loadl_epi64(
         reinterpret_cast<const __m128i *>(static_cast<const std::uint8_t *>(base) + offset));
 }
-// The eight offsets of a vector, lane i at o[i].
 struct Offsets8 {
     std::int32_t o[8];
     explicit Offsets8(I8 v) {
@@ -134,7 +126,6 @@ struct Offsets8 {
         o[7] = _mm_extract_epi32(hi, 3);
     }
 };
-// The 32 bits at lo + offsets[i] bytes for lanes 0 to 3 and at hi + offsets[i] for lanes 4 to 7.
 inline I8 Gather32x2(const void *lo, const void *hi, I8 offsets) {
     const __m128i olo = _mm256_castsi256_si128(offsets.v);
     const __m128i ohi = _mm256_extracti128_si256(offsets.v, 1);
@@ -146,9 +137,7 @@ inline I8 Gather32x2(const void *lo, const void *hi, I8 offsets) {
         LoadAt(hi, _mm_extract_epi32(ohi, 2)), LoadAt(hi, _mm_extract_epi32(ohi, 3)));
     return {_mm256_inserti128_si256(_mm256_castsi128_si256(a), b, 1)};
 }
-// The 32 bits at base + offsets[i] bytes in each lane.
 inline I8 Gather32(const void *base, I8 offsets) { return Gather32x2(base, base, offsets); }
-// The 16 bits at base + offsets[i] bytes in each lane, zero extended.
 inline I8 Gather16(const void *base, I8 offsets) {
     const Offsets8 o(offsets);
     __m128i v = _mm_cvtsi32_si128(Load16At(base, o.o[0]));
@@ -162,15 +151,12 @@ inline I8 Gather16(const void *base, I8 offsets) {
     return {_mm256_cvtepu16_epi32(v)};
 }
 #if CUJU_RENDER_LANES_F16C
-// The four halves of the 64-bit texels at base + offsets[i] bytes as floats, one vector per
-// channel.
 inline void GatherHalves4(const void *base, I8 offsets, F8 *rgba) {
     const Offsets8 o(offsets);
     __m128i p[4];
     for (int i = 0; i < 4; ++i) {
         p[i] = _mm_unpacklo_epi64(Load64At(base, o.o[2 * i]), Load64At(base, o.o[2 * i + 1]));
     }
-    // p[i] holds lanes 2i and 2i + 1 as (r, g, b, a) halves.
     const __m128i t0 = _mm_unpacklo_epi16(p[0], p[1]);
     const __m128i t1 = _mm_unpackhi_epi16(p[0], p[1]);
     const __m128i t2 = _mm_unpacklo_epi16(p[2], p[3]);
@@ -185,9 +171,7 @@ inline void GatherHalves4(const void *base, I8 offsets, F8 *rgba) {
     rgba[3] = {_mm256_cvtph_ps(_mm_unpackhi_epi64(u1, v1))};
 }
 #endif
-// Bit i set when lane i of the mask is set.
 inline int MoveMask(F8 a) { return _mm256_movemask_ps(a.v); }
-// a in lanes 0 to 3, b in lanes 4 to 7.
 inline F8 Pair(float a, float b) {
     return {_mm256_insertf128_ps(_mm256_castps128_ps256(_mm_set1_ps(a)), _mm_set1_ps(b), 1)};
 }
@@ -196,7 +180,6 @@ inline I8 PairI(std::int32_t a, std::int32_t b) {
         _mm256_inserti128_si256(_mm256_castsi128_si256(_mm_set1_epi32(a)), _mm_set1_epi32(b), 1)};
 }
 
-// Eight halves to floats, exactly, a signaling NaN coming back quiet as vcvtph2ps does.
 inline F8 HalvesToFloat(const std::uint16_t *h) {
 #if CUJU_RENDER_LANES_F16C
     return {_mm256_cvtph_ps(_mm_loadu_si128(reinterpret_cast<const __m128i *>(h)))};
@@ -208,7 +191,6 @@ inline F8 HalvesToFloat(const std::uint16_t *h) {
     return Load(f);
 #endif
 }
-// The halves in the low 16 bits of each lane to floats, as HalvesToFloat.
 inline F8 HalvesToFloatI(I8 h) {
 #if CUJU_RENDER_LANES_F16C
     const __m256i packed = _mm256_permute4x64_epi64(_mm256_packus_epi32(h.v, h.v), 0x08);
@@ -353,17 +335,14 @@ inline F8 HalvesToFloatI(I8 h) { CUJU_LANES_MAP(HalfToFloat(static_cast<std::uin
 
 #endif
 
-// Lane operations shared by both builds.
 inline F8 Neg(F8 a) { return Xor(a, Splat(FromBits(0x80000000u))); }
 inline F8 Abs(F8 a) { return And(a, Splat(FromBits(0x7FFFFFFFu))); }
-// 1.0 in the lanes of the mask, +0 elsewhere, as the JIT code's and with 0x3F800000.
 inline F8 OneIf(F8 mask) { return And(mask, Splat(1.0f)); }
 inline I8 SelectI(I8 mask, I8 t, I8 f) {
     return AsInt(Select(AsFloat(mask), AsFloat(t), AsFloat(f)));
 }
 inline I8 XorI(I8 a, I8 b) { return AsInt(Xor(AsFloat(a), AsFloat(b))); }
 
-// The cosine of polynomials.h, lp_build_sin_or_cos, per lane.
 inline F8 Cos(F8 a) {
     const I8 a_bits = AsInt(a);
     const F8 x_abs = Abs(a);
@@ -395,14 +374,10 @@ inline F8 Cos(F8 a) {
     return Select(finite, clamped, Splat(FromBits(0x7FC00000u)));
 }
 
-// unorm16 of a channel already clamped to [0, 1], gl::Unorm16Ftz per lane, in the low 16 bits.
 inline I8 Unorm16(F8 c) {
     return AndI(AsInt(Add(Mul(c, Splat(FromBits(0x3F7FFF00u))), Splat(128.0f))), SplatI(0xFFFF));
 }
 
-// Texels of 16 bits at (x, y) of a level of width w >= 2 with rows of `stride` bytes: one 32-bit
-// gather of the pair at min(x, w - 2), which never reads past the row, and the half of it that
-// holds x. `next` is the texel at x + 1 clamped to the row, the pair's upper half.
 inline void Gather16Pair(const std::uint8_t *data, int stride, int w, I8 x, I8 y, I8 &at_x,
                          I8 &next) {
     const I8 xm = MinI(x, SplatI(w - 2));
@@ -412,7 +387,6 @@ inline void Gather16Pair(const std::uint8_t *data, int stride, int w, I8 x, I8 y
     at_x = SelectI(EqI(x, xm), lo, next);
 }
 
-// Level 0 of a texture for kNearestClamp fetches of eight lanes.
 struct NearestLevel {
     const Texture *texture;
     const std::uint8_t *data;
@@ -434,13 +408,10 @@ inline NearestLevel NearestLevelOf(const Texture &t) {
                         t.format};
 }
 
-// The texel index of NEAREST with CLAMP_TO_EDGE: s * size truncated, then clamped to the edge.
 inline I8 NearestIndex(F8 s, float fsize, int size) {
     return MaxI(MinI(CvttPs2Dq(Mul(s, Splat(fsize))), SplatI(size - 1)), SplatI(0));
 }
 
-// kNearestClamp for eight lanes, the four channels as SampleQuads returns them: Z16 as (d, d, d, 1)
-// with d = u16 * fl(1 / 65535), RGBA16F halves widened exactly, other formats through SampleQuads.
 inline void FetchNearest(const NearestLevel &l, F8 s, F8 t, F8 *rgba) {
     if (l.format != Format::Z16_UNORM && l.format != Format::R16G16B16A16_FLOAT) {
         float sv[8], tv[8], out[32];
@@ -475,6 +446,6 @@ inline void FetchNearest(const NearestLevel &l, F8 s, F8 t, F8 *rgba) {
 #endif
 }
 
-}  // namespace cuju::render::lanes
+}
 
-#endif  // CUJU_RENDER_LANES_H
+#endif

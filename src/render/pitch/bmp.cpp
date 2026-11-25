@@ -9,7 +9,6 @@
 
 namespace cuju::render::pitch {
 namespace {
-
 std::uint32_t Read16(const std::uint8_t *p) { return p[0] | (std::uint32_t)p[1] << 8; }
 std::uint32_t Read32(const std::uint8_t *p) {
     return p[0] | (std::uint32_t)p[1] << 8 | (std::uint32_t)p[2] << 16 | (std::uint32_t)p[3] << 24;
@@ -20,14 +19,13 @@ bool Fail(std::string *error, const char *message) {
     return false;
 }
 
-// The shift of an 8-bit mask, or -1 for any other mask.
 int ByteShift(std::uint32_t mask) {
     for (int shift = 0; shift <= 24; shift += 8)
         if (mask == 0xFFu << shift) return shift;
     return -1;
 }
 
-}  // namespace
+}
 
 bool DecodeBmp(const std::uint8_t *data, std::size_t size, Image *image, std::string *error) {
     if (size < 54 || data[0] != 'B' || data[1] != 'M') return Fail(error, "not a BMP file");
@@ -44,8 +42,6 @@ bool DecodeBmp(const std::uint8_t *data, std::size_t size, Image *image, std::st
     std::uint32_t rMask = 0, gMask = 0, bMask = 0, aMask = 0;
     bool correctAlpha = false;
     if (compression == 0) {
-        // SDL2's defaults. A 32-bit BI_RGB file may carry alpha, and if every alpha is 0 SDL makes
-        // it opaque.
         if (bits == 24) {
             rMask = 0x00FF0000u, gMask = 0x0000FF00u, bMask = 0x000000FFu;
         } else if (bits == 32) {
@@ -55,7 +51,6 @@ bool DecodeBmp(const std::uint8_t *data, std::size_t size, Image *image, std::st
             return Fail(error, "BMP bit depth");
         }
     } else if (compression == 3 && (bits == 32 || bits == 24)) {
-        // BI_BITFIELDS, whose masks follow a 40-byte header or sit inside a V2 to V5 header.
         const std::size_t at = 14 + 40;
         if (at + 12 > size) return Fail(error, "BMP masks");
         rMask = Read32(data + at), gMask = Read32(data + at + 4), bMask = Read32(data + at + 8);
@@ -116,4 +111,4 @@ bool LoadBmp(const std::string &path, Image *image, std::string *error) {
     return true;
 }
 
-}  // namespace cuju::render::pitch
+}

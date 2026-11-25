@@ -14,9 +14,7 @@
 #include "pipeline.h"
 
 namespace cuju::render::gl {
-
 namespace {
-
 struct FtzOps {
     static float Add(float a, float b) { return ftz::Add(a, b); }
     static float Sub(float a, float b) { return ftz::Sub(a, b); }
@@ -31,9 +29,6 @@ struct IeeeOps {
     static float Div(float a, float b) { return a / b; }
 };
 
-// The setup JIT: per slot a0, dadx and dady from the unsnapped vertices. Slot 0 is the position,
-// perspective slots are multiplied by 1/w first, linear slots are taken as they are. Every
-// operation rounds separately.
 template <class O>
 CUJU_GL_NOINLINE void SetupCoefficients(const float (*v0)[4], const float (*v1)[4],
                                         const float (*v2)[4], const RasterState *rs, int num_slots,
@@ -87,11 +82,8 @@ inline std::int32_t SubWrap(std::int32_t a, std::int32_t b) {
     return static_cast<std::int32_t>(static_cast<std::uint32_t>(a) - static_cast<std::uint32_t>(b));
 }
 
-// cvtps2dq((v - 0.5) * 256) under round to nearest even. Independent of FTZ and DAZ: v - 0.5 is
-// never subnormal and a subnormal v gives -128 either way.
 inline std::int32_t Snap(float v) { return CvtPs2Dq((v - 0.5f) * 256.0f); }
 
-// calc_fixed_position, SSE path. Returns the sign of the 64-bit area.
 int CalcFixedPosition(FixedPosition *p, const float (*v0)[4], const float (*v1)[4],
                       const float (*v2)[4]) {
     const std::int32_t X0 = Snap(v0[0][0]), Y0 = Snap(v0[0][1]);
@@ -138,7 +130,7 @@ bool RectIntersects(const Rect &a, const Rect &b) {
 
 inline std::int32_t AsrInt(std::int32_t v, int s) {
     return v >> s;
-}  // arithmetic on all targets used
+}
 
 std::uint32_t FloorPot(std::uint32_t n) {
     if (n == 0) {
@@ -260,7 +252,6 @@ void BinTriangle(const RasterState &rs, Scene &scene, std::uint32_t tri_index, b
     }
 }
 
-// do_triangle_ccw with the SSE plane code.
 void DoTriangleCcw(const RasterState &rs, const DrawState *state, Scene &scene, bool ieee,
                    const FixedPosition &pos, const float (*v0)[4], const float (*v1)[4],
                    const float (*v2)[4], bool frontfacing) {
@@ -355,11 +346,10 @@ void DoTriangleCcw(const RasterState &rs, const DrawState *state, Scene &scene, 
     BinTriangle(rs, scene, index, use_32bits, bbox, nr_planes);
 }
 
-}  // namespace
+}
 
 void SetupTriangle(const RasterState &rs, const DrawState *state, Scene &scene, bool ieee,
                    const float (*v0)[4], const float (*v1)[4], const float (*v2)[4]) {
-    // lp_setup_choose_triangle: none takes both windings, back and front keep one, both cull all.
     const std::uint32_t cull = rs.cull_face;
     if (cull == 3) {
         return;
@@ -385,4 +375,4 @@ void SetupTriangle(const RasterState &rs, const DrawState *state, Scene &scene, 
     }
 }
 
-}  // namespace cuju::render::gl
+}

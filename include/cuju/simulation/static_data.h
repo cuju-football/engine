@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The static data of a match, which a state does not hold, and its parser.
 #pragma once
 
 #include <cstring>
@@ -13,7 +12,6 @@
 
 namespace cuju {
 namespace simulation {
-
 constexpr int PLAYER_STATISTICS = 22;
 enum PlayerStatistic {
     e_Statistic_PhysicalBalance,
@@ -42,21 +40,19 @@ enum PlayerStatistic {
 
 struct PlayerData {
     float statistics[PLAYER_STATISTICS];
-    float velocityStatistic;  // The statistic that the maximum velocity of a player reads.
+    float velocityStatistic;
     float height;
     int32_t skinColor;
 };
 
 struct StaticFormation {
-    int32_t role;  // An `e_PlayerRole`.
+    int32_t role;
     Vector3 position, startPosition;
     bool lazy, controllable;
 };
 
 constexpr int MAXIMUM_STATIC_ENTRIES = 2 * state::MAXIMUM_TEAM_PLAYERS + 3;
 
-// The entries are the players in state order, then the referee and the two linesmen.
-// `formation` holds the players only.
 struct StaticData {
     int count = 0;
     PlayerData data[MAXIMUM_STATIC_ENTRIES];
@@ -66,9 +62,6 @@ struct StaticData {
     int32_t stableID[MAXIMUM_STATIC_ENTRIES] = {};
 };
 
-// The bytes are an `int32_t` count, the `PlayerData` of each entry, then the section `FORM` with
-// each player's formation, `MDUR` with `matchDurationFactor` and `SIDS` with `stableID`. Throws
-// `std::runtime_error` on bytes of any other shape.
 inline StaticData ParseStatic(const std::string &bytes) {
     StaticData staticData;
     if (bytes.size() < 4) throw std::runtime_error("static data: too short");
@@ -78,7 +71,6 @@ inline StaticData ParseStatic(const std::string &bytes) {
         throw std::runtime_error("static data: bad size");
     memcpy(staticData.data, bytes.data() + 4, staticData.count * sizeof(PlayerData));
     const int playerCount = staticData.count - 3;
-    // A role, a position, a start position and the two flags.
     const size_t entryBytes = 4 + 12 + 12 + 1 + 1;
     if (bytes.compare(offset, 4, "FORM") != 0 ||
         bytes.size() < offset + 4 + playerCount * entryBytes)
@@ -104,5 +96,5 @@ inline StaticData ParseStatic(const std::string &bytes) {
     return staticData;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

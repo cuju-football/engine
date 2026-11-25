@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Private command line helpers for the family contract."""
-
 from __future__ import annotations
 
 import argparse
@@ -31,17 +29,14 @@ def is_global(flag: str) -> bool:
 
 
 def options(arguments: Sequence[str]) -> Sequence[str]:
-    """Returns the arguments before the end of options."""
     return arguments[: arguments.index('--')] if '--' in arguments else arguments
 
 
 def emit(schema: str, payload: dict) -> None:
-    """Prints the JSON answer with its schema first."""
     print(json.dumps({'schema': schema, **payload}, indent=2))
 
 
 def quote_path(path: str | os.PathLike[str]) -> str:
-    """Quotes a path for an error or hint line."""
     text = os.fspath(path)
     if (
         "'" in text
@@ -62,7 +57,6 @@ def fail(
     error_id: str | None = None,
     values: dict | None = None,
 ) -> int:
-    """Prints an error and returns its status."""
     error = ' '.join(error.splitlines())
     print(f'{prog}: error: {error}', file=sys.stderr)
     if hint:
@@ -82,8 +76,6 @@ def fail(
 
 
 class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
-    """Wraps single-line descriptions and preserves the layout of examples."""
-
     def _fill_text(self, text, width, indent):
         if '\n' not in text:
             return argparse.HelpFormatter._fill_text(self, text, width, indent)
@@ -91,8 +83,6 @@ class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 
 class Parser(argparse.ArgumentParser):
-    """Prints usage errors in the family format."""
-
     def __init__(self, *args, **kwargs):
         kwargs.setdefault('formatter_class', _HelpFormatter)
         kwargs.setdefault('allow_abbrev', False)
@@ -155,7 +145,6 @@ class Parser(argparse.ArgumentParser):
 
 
 def add_globals(parser: argparse.ArgumentParser) -> None:
-    """Adds options that work at the root and on each command."""
     parser.add_argument(
         '-q',
         '--quiet',
@@ -183,7 +172,6 @@ def examples(*lines: str) -> str:
 
 
 def _close_output() -> None:
-    """Redirects standard output so the final flush can finish."""
     try:
         with open(os.devnull, 'wb') as sink:
             os.dup2(sink.fileno(), sys.stdout.fileno())
@@ -198,7 +186,6 @@ def _is_closed_pipe(error: BaseException) -> bool:
 
 
 def guarded(prog: str, function: Callable[[], int | None], arguments: Sequence[str]) -> int:
-    """Runs a command and converts exceptions to exit statuses."""
     flags = options(arguments)
     try:
         try:
@@ -240,5 +227,4 @@ def run_command(
 
 
 def subcommands(tree: argparse.ArgumentParser):
-    """Yields the subparser groups of a command."""
     return (action for action in tree._actions if isinstance(action, argparse._SubParsersAction))

@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Command queue of a player each tick, from the built-in AI or from the input of its agent.
-// Exact: an expression with a double literal runs in double, such as `3.7 * panic`.
 #pragma once
 
 #include "../profiling.h"
@@ -23,9 +21,6 @@
 
 namespace cuju {
 namespace simulation {
-
-// A dribble holds its force field and opponents inside the opponents of the commands on the ball,
-// and those inside the command queue of the humanoid.
 static_assert(
     WorkAreaRound(sizeof(CommandQueue)) + WorkAreaRound(sizeof(ImageList)) +
             WorkAreaRound(sizeof(ForceField)) +
@@ -53,7 +48,6 @@ CUJU_FUNCTION inline float ClampVelocity(float velocity) {
     return velocity;
 }
 
-// Exact: the operand orders of `std::max` and `std::min`, which decide the result for NaN.
 CUJU_FUNCTION inline float StandardMaximumFloat(float first, float second) {
     return (first < second) ? second : first;
 }
@@ -273,7 +267,6 @@ CUJU_FUNCTION_NO_INLINE inline Vector3 GetAdaptedFormationPosition(
             1.0f - clamp(fabsf(xFocus - position.coordinates[0]) / fabsf(backXBound - frontXBound),
                          0.0f, 1.0f);
         bias = -libm::cosf(bias * PI) * 0.5f + 0.5f;
-        // Exact: the power is in double.
         bias = (float)libm::pow((double)bias, 0.8);
         bias *= xFocusStrength;
         position.coordinates[0] = position.coordinates[0] * (1.0f - bias) + xFocus * bias;
@@ -462,13 +455,10 @@ struct AIController {
     const int player;
     state::MatchState &match;
     state::PlayerState &playerState;
-    // Null when an agent controls the player.
     state::AIControllerState *elizaState;
     state::PlayerControllerState &controller;
-    // `side` is the sign of the x coordinate of the own goal.
     const int teamID, opponentID, side;
     int mentalImageIndex = 0;
-    // In the order that the animation selection tries them.
     CommandQueue &queue;
 
     CUJU_FUNCTION AIController(World &world, const SimulationContext &context, int player,
@@ -856,12 +846,9 @@ struct AIController {
         Vector3 ballDirectionRough = ballMovementRough.GetNormalized(adaptedDesiredDirection);
 
         unsigned int timeStep = 1;
-        // Speed: the time needed at a grid time depends on that time alone, so a miss computes the
-        // next 32 grid times across the lanes.
         uint32_t usualTimes[32], optimisticTimes[32];
         unsigned int firstCachedTimeMilliseconds = 0, cachedCount = 0;
 #if !defined(__CUDA_ARCH__)
-        // Speed: the targets share the walk of the player when it moves, as in `PossessionScan`.
         TimeNeededWalk walk(playerPosition, Movement(), maximumVelocity);
 #endif
         auto TimeNeededAt = [&](unsigned int queryTimeMilliseconds) {
@@ -1682,7 +1669,6 @@ struct AIController {
             opponentPlayerImages.push_back(MentalPlayerImage(world, mentalImageIndex, opponent));
         float nearBackline =
             NormalizedClamp(fabsf(myPosition.coordinates[0]) / PITCH_HALF_LENGTH, 0.0f, 1.0f);
-        // Exact: equals GRF's `powf(x, 2.0f)`.
         float centerModifierInverse = 1.0f - nearBackline * nearBackline;
         centerModifierInverse *= 0.5f;
         Vector3 opponentGoalPosition = Vector3(
@@ -1742,14 +1728,12 @@ struct AIController {
         MentalTeamPlayerImages(world, mentalImageIndex, opponentID, opponentPlayerImages);
         float possessionTimeFactor =
             NormalizedClamp((float)playerState.possessionDurationMilliseconds, 0, 5000);
-        // Exact: equals GRF's `powf(x, 2.0f)`.
         float longPossessionFactor = possessionTimeFactor * possessionTimeFactor;
         const float mind = GetMindSet(DynamicRole());
         float forwardSpaceWeight = 0.4f, spaceWeight = 0.3f;
         float forwardWeight = 2.0f + mind * 6.0f;
         float totalTacticalWeight = forwardSpaceWeight + spaceWeight + forwardWeight;
         float tacticalImprovementThreshold = 0.06f * (1.0f - mind);
-        // Exact: equals GRF's `powf(x, 2.0f)`.
         float tacticalDifferenceWeight = 1.0f + (mind * mind) * 10.0f;
         float passWeight = 1.0f;
         float passMinimum = 0.2f * (1.0f - mind) - longPossessionFactor * 0.1f;
@@ -2502,8 +2486,7 @@ CUJU_FUNCTION inline bool PlayerRequestCommand(World &world, const SimulationCon
     return ElizaRequestCommand(world, context, player, queue);
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}
 
-// The team AI uses the controllers above, so its header comes last.
 #include "team_ai.h"

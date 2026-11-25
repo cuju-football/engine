@@ -37,7 +37,6 @@ def test_another_scenario(device):
     batch = started('academy_empty_goal_close_l1_r0', device)
     with pytest.raises(RuntimeError, match=r'found another: ball_position is \(') as raised:
         batch.set_state(0, state_of('academy_empty_goal_l1_r0', device))
-    # The hint of what must match follows the field.
     assert 'a state loads only into an environment of the same scenario' in str(raised.value)
 
 

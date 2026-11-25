@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""The pickle of a state in GRF's format, written by opcode and read back without GRF."""
-
 from __future__ import annotations
 
 import pickle
@@ -19,8 +17,6 @@ class _EpisodeState:
 
 
 class _StateUnpickler(pickle.Unpickler):
-    """Unpickles a state, resolving only GRF's episode logic and the globals of a stacked state."""
-
     stacked = False
 
     def find_class(self, module, name):
@@ -33,21 +29,15 @@ class _StateUnpickler(pickle.Unpickler):
 
 
 def _pickle_integer(value):
-    """Returns the pickle opcode of a signed 32-bit integer."""
     return b'J' + struct.pack('<i', value)
 
 
 def _pickle_string(value):
-    """Returns the pickle opcode of a string."""
     data = value.encode()
     return b'X' + struct.pack('<I', len(data)) + data
 
 
 def _pickle_episode(episode, collected, frames=None):
-    """Returns GRF's state pickle, written by opcode so that `EnvState` needs no import.
-
-    `frames` holds the opcodes of the `FrameStack` deque, or `None` without a stack.
-    """
     module, name = _EPISODE_CLASS
     logic = b''.join(
         _pickle_string(key) + _pickle_integer(value)

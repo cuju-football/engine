@@ -29,7 +29,6 @@
 #include <algorithm>
 
 namespace cuju::render::overlay2d {
-
 void FillRect(Surface &s, int x, int y, int w, int h, std::uint8_t r, std::uint8_t g,
               std::uint8_t b, std::uint8_t a) {
     const int x0 = std::max(x, 0), y0 = std::max(y, 0);
@@ -47,15 +46,13 @@ void FillRect(Surface &s, int x, int y, int w, int h, std::uint8_t r, std::uint8
 }
 
 namespace {
-
-// d + (s - d) * a / 256, rounded down.
 inline std::uint8_t Mix(int s, int d, int a) {
     const int t = (s - d) * a;
     const int q = t >= 0 ? t >> 8 : -((-t + 255) >> 8);
     return static_cast<std::uint8_t>(d + q);
 }
 
-}  // namespace
+}
 
 void BlitBlend(const Surface &src, Surface &dst, int x, int y) {
     const int sx0 = std::max(0, -x), sy0 = std::max(0, -y);
@@ -83,7 +80,6 @@ void BlitBlend(const Surface &src, Surface &dst, int x, int y) {
 }
 
 void SetSurfaceAlpha(Surface &s, int alpha) {
-    // p[3] = clamp((p[3] / 256.0f) * (alpha / 256.0f) * 256, 0, 255), in float.
     const float fa = static_cast<float>(alpha) / 256.0f;
     for (std::size_t i = 3; i < s.px.size(); i += 4) {
         float v = (static_cast<float>(s.px[i]) / 256.0f) * fa * 256.0f;
@@ -93,4 +89,4 @@ void SetSurfaceAlpha(Surface &s, int alpha) {
     }
 }
 
-}  // namespace cuju::render::overlay2d
+}

@@ -1,11 +1,7 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""GRF's frames for a batch in render mode: one renderer per environment, which draws the renders
-that each reset and step recorded, in GRF's order, and the `pixels` observations of the frames.
-
-The environments draw side by side on `render_workers` threads, each renderer with
-`render_threads` threads of its own, and every frame is the same for every split."""
+"""GRF's frames for a batch in render mode, one renderer per environment."""
 
 from __future__ import annotations
 
@@ -19,8 +15,6 @@ import torch
 from .. import _media, _pixels
 from ..errors import LibraryError, MissingFileError
 
-# The render events one call records per environment at most. A stoppage with a card renders
-# about 150 times before play restarts.
 CAPACITY = 512
 # GRF: `start_game` resets to `ScenarioConfig::make()`, whose seed is 42.
 INTERNAL_SEED = 42
@@ -40,12 +34,6 @@ def _cpus():
 
 
 def split(environments, cpus=None, workers=0, threads=0):
-    """Returns the renderers drawn at once and the threads of each for a batch of `environments`.
-
-    `workers` and `threads`, the `render_workers` and `render_threads` of the machine config, set
-    either; by default the workers take one environment each up to the processors there are, and
-    share the processors out.
-    """
     cpus = cpus or _cpus()
     workers, threads = workers or None, threads or None
     if workers is None:
@@ -57,13 +45,11 @@ def split(environments, cpus=None, workers=0, threads=0):
 
 
 class Frames:
-    """The renderers of a batch and their last frames."""
-
     def __init__(self, batch, kind, width, height, frame_size=(1280, 720), workers=0, threads=0):
         library = batch._library
         self._batch = batch
         self._library = library
-        self.kind = kind  # 'pixels', 'pixels_gray' or None for frames alone
+        self.kind = kind
         self.width, self.height = width, height
         self.frame_width, self.frame_height = frame_size
         self.event_size = library.cuju_environment_render_event_size()
@@ -107,7 +93,6 @@ class Frames:
         self.final_frame = torch.zeros_like(self.frame)
 
     def _each(self, work, environments):
-        """Runs `work(environment)` for each environment on the workers, raising the first error."""
         environments = list(environments)
         if self.workers <= 1 or len(environments) <= 1:
             for environment in environments:
@@ -127,8 +112,6 @@ class Frames:
 
     def _capture(self, environment, observation, frame):
         renderer = self.renderers[environment]
-        # The pixels go straight into the first agent's observation, and the others copy them.
-        # An environment without agents has no observation to fill.
         agents = observation.shape[1]
         if self.kind == 'pixels' and agents:
             renderer.pixels(self.width, self.height, out=observation[environment, 0].numpy())
@@ -141,7 +124,6 @@ class Frames:
         renderer.frame(top_down=True, out=frame[environment].numpy())
 
     def _events(self, environment):
-        """The render events of the last call of `environment`, as bytes."""
         count = ctypes.c_int()
         batch = self._batch
         batch._check(
@@ -156,7 +138,6 @@ class Frames:
         return count.value, self._buffer.raw[: count.value * self.event_size]
 
     def draw(self, environments):
-        """Draws the events of the last call of `environments` and keeps their frames."""
         environments = list(environments)
         events = {environment: self._events(environment) for environment in environments}
         self._each(lambda environment: self._draw(environment, *events[environment]), environments)
@@ -171,14 +152,11 @@ class Frames:
             state = data[at + 8 : at + 8 + state_size]
             if kinds[index] == _START:
                 if rendered:
-                    # The step ended the episode and the next began: its last frame is final.
                     self._capture(environment, self.final_observation, self.final_frame)
                 seed = int(np.frombuffer(data, '<u4', 1, at + 4)[0])
                 self._reset_steps(renderer, environment)
                 renderer.start_match(state, seed)
             else:
-                # Speed: only the last render before a capture is read, and the renderer
-                # rasterizes none of the others, whose pixels the next render draws again.
                 read = index + 1 == count or kinds[index + 1] == _START
                 renderer.render(state, read)
                 rendered = True

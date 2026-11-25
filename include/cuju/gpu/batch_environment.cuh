@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// GPU backend, with one environment per warp under `CUJU_WARP_ENVIRONMENT`, else one per thread.
 #pragma once
 
 #include <cuda_runtime.h>
@@ -15,7 +14,6 @@
 
 namespace cuju {
 namespace gpu {
-
 using namespace batch;
 
 #if defined(CUJU_WARP_ENVIRONMENT)
@@ -28,7 +26,6 @@ __device__ inline int EnvironmentIndex() {
     return (int)((blockIdx.x * blockDim.x + threadIdx.x) / ENVIRONMENT_THREADS);
 }
 
-// A null `mask` means every environment. `seeds` and `reverse` are as in `ResetEnvironment`.
 __global__ void CUJU_ENVIRONMENT_KERNEL_BOUNDS ResetKernel(EnvironmentBuffers buffers,
                                                            Variants variants, const uint8_t *mask,
                                                            const int64_t *seeds,
@@ -40,8 +37,6 @@ __global__ void CUJU_ENVIRONMENT_KERNEL_BOUNDS ResetKernel(EnvironmentBuffers bu
     ResetAndWriteEnvironment(buffers, variants, environment, seeds, reverse);
 }
 
-// With `autoReset`, an ended episode resets inside this kernel while the other warps keep
-// stepping, so a reset adds no wait to the batch. `actions` as in `StepEnvironment`.
 __global__ void CUJU_ENVIRONMENT_KERNEL_BOUNDS StepKernel(EnvironmentBuffers buffers,
                                                           Variants variants, const int32_t *actions,
                                                           bool autoReset) {
@@ -52,7 +47,6 @@ __global__ void CUJU_ENVIRONMENT_KERNEL_BOUNDS StepKernel(EnvironmentBuffers buf
     StepEnvironment(buffers, variants, environment, actions, autoReset);
 }
 
-// One thread per agent, not per environment. `mask` is as in `ResetKernel`.
 __global__ void OutputKernel(EnvironmentBuffers buffers, const uint8_t *mask, bool afterStep) {
     const int output = blockIdx.x * blockDim.x + threadIdx.x;
     if (output >= buffers.environmentCount * buffers.agents) return;
@@ -63,7 +57,6 @@ __global__ void OutputKernel(EnvironmentBuffers buffers, const uint8_t *mask, bo
     WriteAgentOutputs(buffers, environment, agent, afterStep);
 }
 
-// One thread per requested environment.
 __global__ void RenderStateKernel(EnvironmentBuffers buffers, Variants variants,
                                   RenderBuffers render) {
     const int output = blockIdx.x * blockDim.x + threadIdx.x;
@@ -71,7 +64,6 @@ __global__ void RenderStateKernel(EnvironmentBuffers buffers, Variants variants,
     WriteRenderState(buffers, variants, render, output);
 }
 
-// Device-memory buffers. `Reset` and `Step` launch on the caller's stream without waiting.
 class CudaBackend {
 public:
     using Stream = cudaStream_t;
@@ -111,7 +103,6 @@ public:
         CUJU_CUDA_CHECK(cudaMemset(pointer, 0, bytes));
         return pointer;
     }
-    // The bytes that `Allocate` and the tables requested. The driver rounds each up.
     size_t AllocatedBytes() const { return held_ + tables_.bytes; }
     DeviceTables &Tables() { return tables_; }
     void ToDevice(void *destination, const void *source, size_t bytes) const {
@@ -130,15 +121,12 @@ public:
     void Fill(void *destination, int value, size_t bytes) const {
         CUJU_CUDA_CHECK(cudaMemset(destination, value, bytes));
     }
-    // Launches both kernels on no environment so the driver reserves their local memory now. A
-    // batch that does not fit fails at its creation rather than at its first reset.
     void Reserve(const EnvironmentBuffers &buffers, const Variants &variants) {
         EnvironmentBuffers none = buffers;
         none.environmentCount = 0;
         ResetKernel<<<1, threadsPerBlock_>>>(none, variants, nullptr, nullptr, nullptr);
         StepKernel<<<1, threadsPerBlock_>>>(none, variants, nullptr, false);
         for (const cudaError_t status : {cudaGetLastError(), cudaDeviceSynchronize()}) {
-            // The driver reserves the local memory of every thread that the GPU runs at once.
             if (status == cudaErrorMemoryAllocation) {
                 cudaGetLastError();
                 const size_t perThread = KernelLocalBytes();
@@ -154,10 +142,6 @@ public:
             CheckCuda(status, "cannot launch the kernels of cuju");
         }
     }
-    // The local memory that the driver adds for the kernels on the current device at their first
-    // launch, which `Reserve` makes. The driver holds the stack limit for each thread that the GPU
-    // runs at once, from the creation of the context, and a launch raises the limit to the local
-    // memory of the kernel and keeps it, so this is 0 once a batch has launched on the device.
     static size_t LocalMemoryBytes() {
         RequireKernels();
         const size_t perThread = KernelLocalBytes();
@@ -165,7 +149,6 @@ public:
         CheckCuda(cudaDeviceGetLimit(&limit, cudaLimitStackSize), "cannot read the CUDA stack");
         return perThread > limit ? (perThread - limit) * ResidentThreads() : 0;
     }
-    // The local memory of one thread of the largest kernel.
     static size_t KernelLocalBytes() {
         size_t perThread = 0;
         for (const void *kernel :
@@ -204,7 +187,6 @@ public:
     }
 
 private:
-    // Without this, a library built for other GPUs fails only at its first launch, naming no cause.
     static void RequireKernels() {
         cudaFuncAttributes attributes;
         const cudaError_t found = cudaFuncGetAttributes(&attributes, StepKernel);
@@ -237,11 +219,10 @@ private:
     DeviceTables tables_;
     std::vector<void *> allocations_;
     int threadsPerBlock_ = 64;
-    size_t held_ = 0;  // The bytes of `allocations_`.
+    size_t held_ = 0;
 };
 
-// A step or a reset launches one kernel. The outputs stay in device buffers until the next call.
 using BatchEnvironment = batch::BackendBatchEnvironment<CudaBackend>;
 
-}  // namespace gpu
-}  // namespace cuju
+}
+}

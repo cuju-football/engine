@@ -11,13 +11,9 @@ import cuju
 from conftest import tensor_bytes
 from cuju._batch import Batch
 
-# Environment 28 of seed 1, whose left goalkeeper, an agent that chases the ball and slides at the
-# opponent who holds it, is sent off on step 243 and hands the role to player 1.
 SCENARIO = '11_vs_11_stochastic_l11_r0'
 OPTIONS = {'seed': 1, 'first_index': 28, 'representation': 'raw', 'auto_reset': False}
 SENT_OFF_STEP = 243
-# The directions of the action set by the angle from the goalkeeper to the ball, in eighths of a
-# turn from the right, where y grows downwards.
 DIRECTIONS = [5, 6, 7, 8, 1, 2, 3, 4]
 
 
@@ -62,22 +58,17 @@ def test_the_roles_follow_a_goalkeeper_sent_off_and_leave_every_output_as_it_is(
         actions = chase(raw, step)
         raw, _, _, _ = batch.step(actions)
         unread, _, _, _ = plain.step(actions)
-        # Reading the roles changes no output.
         assert all(tensor_bytes(raw[name]) == tensor_bytes(unread[name]) for name in raw)
         assert reported(batch) == raw_roles(raw)
         if not bool(raw['left_team_active'][0, 0, 0]):
             break
     assert step == SENT_OFF_STEP
     after = reported(batch)
-    # The first active player of the team takes the goalkeeper's formation entry and role.
     assert after[0] == [0, 0, *before[0][2:]] and after[1] == before[1]
     state = batch.get_state(0)
     assert state == plain.get_state(0)
-    # The hand-over lies outside the state, as in GRF, so the environment that loads the state
-    # keeps its own: this one its hand-over, and a fresh one none.
     batch.set_state(0, state)
-    # GRF: the observation right after the load already shows the hand-over, so every raw output
-    # equals that of the batch that loaded nothing, and the state keeps its bytes.
+    # GRF: the observation right after the load already shows the hand-over.
     loaded, unread = batch.raw(), plain.raw()
     assert reported(batch) == after == raw_roles(loaded)
     assert all(tensor_bytes(loaded[name]) == tensor_bytes(unread[name]) for name in loaded)

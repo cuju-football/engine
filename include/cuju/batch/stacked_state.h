@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Writes one environment's observation stack from the frames of GRF's `FrameStack` in a state.
 #pragma once
 
 #include <cstddef>
@@ -13,12 +12,6 @@
 
 namespace cuju {
 namespace batch {
-
-// `frames` is the stack of the environment's agents, oldest frame first, as GRF's `FrameStack`
-// concatenates it along the last axis, `[agents][115 * stack]` floats for `name` `simple115`, or
-// `[agents][smmHeight][smmWidth][4 * stack]` bytes for `smm`, whose marks it rebuilds. Synchronous.
-// Throws `std::invalid_argument` for another size, a batch without that stack, or a minimap cell
-// other than 0 and 255, GRF's mark.
 template <class Batch>
 void SetStackedFrames(Batch &batch, int environment, const std::string &name, const void *frames,
                       size_t size) {
@@ -52,8 +45,6 @@ void SetStackedFrames(Batch &batch, int environment, const std::string &name, co
     const size_t frameMarks = (size_t)buffers.smmWidth * buffers.smmHeight * LAYERS;
     const size_t agentBytes = frameMarks * stack;
     checkSize(agents * agentBytes);
-    // Each frame keeps its marks as indices into one frame, as `WriteAgentOutputs` does, so that
-    // the next step clears exactly the marked cells.
     const uint8_t *bytes = static_cast<const uint8_t *>(frames);
     std::vector<int32_t> marks(agents * stack * MARK_ROW, 0);
     for (size_t agent = 0; agent < agents; agent++)
@@ -78,5 +69,5 @@ void SetStackedFrames(Batch &batch, int environment, const std::string &name, co
                             marks.size() * sizeof(int32_t));
 }
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

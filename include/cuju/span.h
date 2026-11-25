@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// A read-only view of a contiguous array, through which the simulation reads the static tables.
 #pragma once
 
 #include <cstddef>
@@ -10,7 +9,6 @@
 #include "host_device.h"
 
 namespace cuju {
-
 template <class T>
 struct Span {
     const T *pointer = nullptr;
@@ -24,4 +22,4 @@ struct Span {
     CUJU_HOST_DEVICE const T &back() const { return pointer[count - 1]; }
 };
 
-}  // namespace cuju
+}

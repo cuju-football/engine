@@ -57,7 +57,6 @@ def test_dropped_batches_are_freed(device, without_collection):
     for _ in range(20):
         batch, native = play_and_drop(device)
         assert batch() is None and native() is None
-    # Twenty batches that each held their tables would take gigabytes.
     if resident is not None:
         assert resident_megabytes() - resident < 300
     if free is not None:
@@ -73,7 +72,6 @@ def test_a_kept_tensor_outlives_its_batch(device, without_collection):
     expected = observation.clone()
     references = weakref.ref(batch), weakref.ref(batch._native)
     del batch, reward, done, information
-    # The batch is gone, but the memory that the tensor views stays.
     assert references[0]() is None and references[1]() is not None
     assert torch.equal(observation, expected)
     del observation
@@ -96,7 +94,6 @@ def test_close_frees_at_once_and_a_dropped_batch_removes_its_bundles(
 ):
     drill = tmp_path / 'drill.py'
     drill.write_text(DRILL, encoding='utf-8')
-    # A cache that cannot be used makes each batch build its bundle in a folder of its own.
     (tmp_path / 'file').write_text('', encoding='utf-8')
     monkeypatch.setenv('XDG_CACHE_HOME', str(tmp_path / 'file'))
     monkeypatch.setenv('LOCALAPPDATA', str(tmp_path / 'file'))
@@ -107,7 +104,6 @@ def test_close_frees_at_once_and_a_dropped_batch_removes_its_bundles(
     assert os.path.isdir(directory)
     closed_directory = closed._native.scenario_directory.name
     closed.close()
-    # `close` frees at once.
     assert closed._native.environment is None and not os.path.exists(closed_directory)
     del batch
     assert not os.path.exists(directory)

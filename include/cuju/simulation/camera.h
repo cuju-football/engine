@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The camera of a match, which never affects play. Its pose is part of the state.
-// Exact: while it follows play, its shake draws two numbers a tick from the RNG that play uses.
 #pragma once
 
 #include "../profiling.h"
@@ -16,20 +14,16 @@
 
 namespace cuju {
 namespace simulation {
-
 constexpr float DEFAULT_CAMERA_ZOOM = 0.5f, DEFAULT_CAMERA_HEIGHT = 0.3f,
                 DEFAULT_CAMERA_FIELD_OF_VIEW = 0.4f, DEFAULT_CAMERA_ANGLE_FACTOR = 0.0f;
 constexpr unsigned int cameraPositionSize = 150;
 
-// Exact: `SimulationContext::cameraWeights` tabulates this, so its operation order fixes the table.
 CUJU_FUNCTION inline float CameraWeight(int index, int positionCount) {
     const float indexSize = positionCount;
     float weight = libm::sinf((index / indexSize - 0.3f) * 1.4f * PI) * 0.5f + 0.5f;
     weight *= libm::powf(1.0f - index / indexSize, 0.3f);
     return weight;
 }
-// The table holds `CameraWeight(index, count)` at `count * (count - 1) / 2 + index` for every
-// `count` from 1 to `cameraPositionSize`.
 constexpr int CAMERA_WEIGHTS = cameraPositionSize * (cameraPositionSize + 1) / 2;
 
 CUJU_FUNCTION_NO_INLINE inline void UpdateInGameCamera(World &world,
@@ -118,7 +112,6 @@ CUJU_FUNCTION_NO_INLINE inline void UpdateInGameCamera(World &world,
         match.cameraNearCap = match.cameraNodePosition.coordinates[2];
         match.cameraFarCap = 200;
     } else {
-        // `lastGoalScorer` is a player index, or -1 without a scorer.
         Vector3 targetPosition = BallPredict(match.ball, 0).Get2D();
         if (match.lastGoalScorer >= 0)
             targetPosition = Humanoid(world, match.lastGoalScorer).spatialState.position;
@@ -133,7 +126,6 @@ CUJU_FUNCTION_NO_INLINE inline void UpdateInGameCamera(World &world,
     }
 }
 
-// The camera works on the unmirrored pitch, so team 1 is mirrored around its update.
 CUJU_FUNCTION_NO_INLINE inline void UpdateCamera(World &world, const SimulationContext &context) {
     CUJU_PROFILE_SCOPE(UPDATE_CAMERA);
     state::MatchState &match = world.serialized.match;
@@ -166,5 +158,5 @@ CUJU_FUNCTION_NO_INLINE inline void UpdateCamera(World &world, const SimulationC
     }
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

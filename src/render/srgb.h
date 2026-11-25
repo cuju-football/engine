@@ -14,8 +14,6 @@
 #include "numerics.h"
 
 namespace cuju::render {
-
-// lp_build_srgb_to_linear on the raw byte as a float in [0, 255], evaluated in Estrin order.
 inline float SrgbDecode(float x) {
     const float lin = ftz::Mul(x, FromBits(0x39A32D56u));
     const float x2 = ftz::Mul(x, x);
@@ -27,14 +25,8 @@ inline float SrgbDecode(float x) {
 
 inline float SrgbDecodeByte(std::uint8_t v) { return SrgbDecode(static_cast<float>(v)); }
 
-// vrsqrtps of AMD Zen 3 cores, which the reference ran on. The result depends on the parity of
-// the exponent and the upper 12 bits of the mantissa only, and it carries 12 mantissa bits.
-// Defined in mipmap.cpp.
 float RsqrtZen3(float x);
 
-// lp_build_linear_to_srgb for an 8-bit destination: three chained reciprocal square roots with no
-// Newton step, then the rounding conversion. The input is the colour already clamped by the
-// fragment shader output.
 inline std::int32_t SrgbEncodeByte(float v) {
     const float x = ftz::MaxPs(ftz::MinPs(v, 1.0f), 0.0f);
     const float r1 = RsqrtZen3(x);
@@ -48,6 +40,6 @@ inline std::int32_t SrgbEncodeByte(float v) {
     return CvtPs2Dq(ftz::Ule(x, FromBits(0x3B4D2E1Cu)) ? lin : pw);
 }
 
-}  // namespace cuju::render
+}
 
-#endif  // CUJU_RENDER_SRGB_H
+#endif

@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""Dispatches the engine tools and installed family commands."""
-
 from __future__ import annotations
 
 import argparse
@@ -17,7 +15,6 @@ from ._version import __version__
 
 GROUP = 'cuju.commands'
 ENGINE = 'cuju-engine'
-# These family names have installation hints when their commands are absent.
 FAMILY = {'arena': 'cuju-arena', 'render': 'cuju-render'}
 _MODULES = {'check': '.check', 'replay': '._replay_command', 'dump': '._dump_command'}
 
@@ -31,7 +28,6 @@ def _entries() -> dict[str, metadata.EntryPoint]:
 
 
 def version_lines() -> list[str]:
-    """Lists the installed distributions of the family."""
     for name in (ENGINE, 'cuju-engine-cpu'):
         try:
             engine = f'{name} {metadata.version(name)}'
@@ -67,7 +63,6 @@ class _Version(argparse.Action):
 
 
 def parser() -> contract.Parser:
-    """Builds the parser of the engine without loading any command."""
     root = contract.Parser(
         prog='cuju',
         description='Run the engine tools and the commands of installed packages.',
@@ -90,7 +85,6 @@ def _package_parser(entry: metadata.EntryPoint) -> argparse.ArgumentParser | Non
 
 
 def package_parsers(entries):
-    """Yields each package with the parser it makes available."""
     for name, entry in entries.items():
         try:
             tree = _package_parser(entry)
@@ -246,7 +240,6 @@ def _dispatch(arguments: list[str], command_index: int) -> int | None:
 
 
 def main(arguments: list[str] | None = None) -> int:
-    """Runs the command and returns its exit status."""
     arguments = sys.argv[1:] if arguments is None else arguments
     index = 0
     for flag in arguments:

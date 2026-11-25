@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The tick of a player's humanoid, covering the next frame, the next animation and ball touches.
 #pragma once
 
 #include "../profiling.h"
@@ -21,7 +20,6 @@
 
 namespace cuju {
 namespace simulation {
-
 CUJU_FUNCTION_NO_INLINE inline state::PlayerCommand DefaultPlayerCommand() {
     state::PlayerCommand command{};
     command.desiredFunctionType = e_FunctionType_Movement;
@@ -82,7 +80,6 @@ CUJU_FUNCTION inline state::PlayerCommand GetBasicMovementCommand(const Humanoid
     return command;
 }
 
-// Defined in `ai_controller.h`.
 CUJU_FUNCTION inline bool PlayerRequestCommand(World &world, const SimulationContext &context,
                                                int player, CommandQueue &queue);
 
@@ -572,8 +569,6 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidProcess(
 
     const int effectiveFrameCount = animationData.frameCount - 1;
 
-    // A smuggle spreads over the frames the offset to the position, movement or rotation that the
-    // selection planned.
     if (currentAnimation.touchFrame != -1 &&
         currentAnimation.frameNumber <= currentAnimation.touchFrame) {
         float value =
@@ -657,7 +652,6 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidProcess(
                     -side * 0.4f);
     }
 
-    // A frame without a stored position leaves it to the animation, with `noPosition` false.
     humanoid.animationApplyBuffer.frameNumber = currentAnimation.frameNumber;
     if ((uint32_t)currentAnimation.positions.count > (uint32_t)currentAnimation.frameNumber) {
         humanoid.animationApplyBuffer.position =
@@ -678,5 +672,5 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidProcess(
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

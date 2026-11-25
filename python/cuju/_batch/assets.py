@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""The asset bundles that the package ships, and the bundle that a name or path asks for."""
-
 from __future__ import annotations
 
 import os
@@ -12,7 +10,6 @@ from ..errors import MissingFileError
 
 
 def _resolve_asset(asset: str) -> tuple[str, tuple[int, int]]:
-    """Returns the bundle path of a path or name, and the agents per side it asks for (-1 keeps)."""
     if callable(asset):
         raise TypeError(
             'expected the path of a scenario file or of a bundle, found a function; pass the path '
@@ -32,7 +29,6 @@ def _resolve_asset(asset: str) -> tuple[str, tuple[int, int]]:
         split = (asset, 1, 0)
     if split:
         scenario, left, right = split
-        # The bundle with the fewest agents serves any counts; the library sets up the agents anew.
         bases = [name for name in bundled_assets() if (_split_name(name) or ('',))[0] == scenario]
         if bases:
             base = min(bases, key=lambda name: sum(_split_name(name)[1:]))

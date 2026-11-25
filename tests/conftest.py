@@ -15,7 +15,6 @@ from cuju._batch import Batch
 from cuju._library_path import library_path
 
 DEVICES = ['cpu', 'cuda']
-# A CPU-only installation, such as the wheels for macOS and Linux on Arm, has no CUDA library.
 CUDA_LIBRARY = os.path.isfile(library_path('cuda'))
 CUDA = torch.cuda.is_available() and CUDA_LIBRARY
 
@@ -81,11 +80,7 @@ def actions_at(step, environments, agents, action_count):
 
 
 def play_digest(assets, device, steps, seed=7, environments=4, **options):
-    """Plays a batch with the actions of `actions_at` and returns the SHA-256 of its outputs.
-
-    The digest covers every observation, reward and done flag of every step, then the state of
-    every environment at the end (unless the batch stacks its observations).
-    """
+    """Plays a batch with the actions of `actions_at` and returns the SHA-256 of its outputs."""
     batch = Batch(assets, environment_count=environments, device=device, seed=seed, **options)
     digest = hashlib.sha256()
 

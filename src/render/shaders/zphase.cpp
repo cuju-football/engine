@@ -9,17 +9,12 @@
 #include "../gl/fragment.h"
 
 namespace cuju::render::shaders {
-
 ZphaseProgram::ZphaseProgram()
     : gl::Program({{"modelMatrix", gl::kMat4, 1},
                    {"viewMatrix", gl::kMat4, 1},
                    {"projectionMatrix", gl::kMat4, 1}},
                   {{"position", 0}}, {}) {}
 
-// gl_Position = projectionMatrix * viewMatrix * modelMatrix * position, which NIR evaluates as
-// (P * V) * (M * pos): the uniform-only product per call, element (j, r) the column-major
-// ((P0r * Vj0 + P1r * Vj1) + P2r * Vj2) + P3r * Vj3, then M * pos with w = 1 folded away and the
-// product applied to it, all separate roundings under FTZ and DAZ.
 void ZphaseProgram::RunVertices(const gl::DrawState &state, int count, const float *const *attribs,
                                 float *clip, float *) const {
     const float *M = state.UniformPtr(kModelMatrix);
@@ -55,7 +50,6 @@ void ZphaseProgram::RunVertices(const gl::DrawState &state, int count, const flo
     }
 }
 
-// fs160: depth from the plane, D16 through the +128 trick, LESS on the stored value, masked store.
 void ZphaseProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     float X[16], Y[16], z[16];
     std::uint16_t d16[16];
@@ -69,4 +63,4 @@ void ZphaseProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kZphase, ZphaseProgram);
 
-}  // namespace cuju::render::shaders
+}

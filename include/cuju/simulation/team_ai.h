@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Team AI for tactics, offside trap, danger ranking, attacking runs, dynamic roles and man marking.
 #pragma once
 
 #include "../profiling.h"
@@ -18,15 +17,12 @@
 
 namespace cuju {
 namespace simulation {
-
 // GRF: a property passes through a string with six decimals, so a read returns the round trip.
 CUJU_FUNCTION inline void PropertiesSet(state::PropertiesState &properties, int id, float value) {
     properties.present |= 1u << id;
     properties.value[id] = RoundTripSixDecimals(value);
 }
 
-// The state holds the goals and the possession of the last 60 s in processing order. These
-// return them by team ID.
 CUJU_FUNCTION inline int MatchGoalCount(const World &world, int teamID) {
     return world.serialized.match.goalCount[teamID == world.FirstTeamID() ? 0 : 1];
 }
@@ -37,18 +33,16 @@ CUJU_FUNCTION inline float MatchPossessionLastMinute(const World &world) {
 
 // GRF: every team uses the same user tactics, kept in the alphabetical order of their names.
 struct UserTactic {
-    // The base tactic, or -1 for a dribble tactic, which the update skips.
     int id;
     float value;
-    // 0 when the tactic has no modifier.
     float modifierMultiplier;
 };
 constexpr int USER_TACTICS = 12;
 CUJU_FUNCTION_NO_INLINE inline const UserTactic &UserTacticAt(int index) {
     using namespace state;
     static const UserTactic tactics[USER_TACTICS] = {
-        {-1, 0.72f, 0.0f},  // dribble_centermagnet
-        {-1, 0.5f, 0.0f},   // dribble_offensiveness
+        {-1, 0.72f, 0.0f},
+        {-1, 0.5f, 0.0f},
         {DEFENSE_DEPTH, 0.3f, 0.1f},
         {DEFENSE_MICRO_FOCUS_STRENGTH, 0.96f, 0.15f},
         {DEFENSE_MIDFIELD_FOCUS, 0.96f, 0.3f},
@@ -97,7 +91,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamUpdateTactics(World &world, int teamID) 
     return true;
 }
 
-// Only players without a gamer qualify. Returns -1 when none does.
 CUJU_FUNCTION inline int SelectAttackingRunPlayer(const World &world,
                                                   const SimulationContext &context, int teamID) {
     int possessionPlayer = TeamByID(world, teamID).designatedTeamPossessionPlayer;
@@ -187,7 +180,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamAIProcess(World &world, const Simulation
         information.push_back(entry);
     }
     // GRF: `std::sort` is an insertion sort up to 16 elements, so equal ratings keep their order.
-    // This insertion sort matches it.
     if (information.size() > 16) return Unsupported("the team AI ranks more than 16 opponents");
     for (size_t next = 1; next < information.size(); next++) {
         state::TacticalOpponentInformation moving = information[next];
@@ -245,8 +237,7 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamAIProcess(World &world, const Simulation
 using HungarianRow = InlineVector<int, state::MAXIMUM_TEAM_PLAYERS>;
 using HungarianMatrix =
     InlineVector<int, state::MAXIMUM_TEAM_PLAYERS * state::MAXIMUM_TEAM_PLAYERS>;
-// GRF: libhungarian, step for step. Reduces `cost` in place and returns the total cost, or -1 when
-// the reduced costs fail to prove the result optimal. Writes `assignedColumns` only on success.
+// GRF: libhungarian, step for step.
 CUJU_FUNCTION_NO_INLINE inline int HungarianSolve(HungarianMatrix &cost, int size,
                                                   HungarianRow &assignedColumns) {
     const int INT_INFINITY = 0x7FFFFFFF;
@@ -387,8 +378,7 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamCalculateDynamicRoles(World &world,
                                                               int teamID) {
     PlayerList players = TeamActivePlayers(world, teamID);
     if (!players.empty()) {
-        // GRF: removes the first goalkeeper. Only one that comes first among the active players is
-        // supported, and any other order has no defined result.
+        // GRF: removes the first goalkeeper.
         if (Formation(world, context, players[0]).role != e_PlayerRole_Goalkeeper)
             return Unsupported("the dynamic roles need the goalkeeper as the first active player");
         players.erase(players.begin());
@@ -410,7 +400,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamCalculateDynamicRoles(World &world,
     for (unsigned int playerIndex = 0; playerIndex < playerCount; playerIndex++)
         for (unsigned int slotIndex = 0; slotIndex < playerCount; slotIndex++)
             distances.push_back(integerCost(playerIndex, slotIndex));
-    // Exact: every sort of integers gives the same order as GRF's `std::sort`.
     for (int unsorted = 1; unsorted < distances.count; unsorted++)
         for (int slot = unsorted; slot > 0 && distances[slot] < distances[slot - 1]; slot--) {
             int swapped = distances[slot];
@@ -419,7 +408,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamCalculateDynamicRoles(World &world,
         }
 
     for (unsigned int cutoff = playerCount; cutoff < distances.size(); cutoff += 5) {
-        // A row is a formation slot and a column a player.
         HungarianMatrix cost;
         cost.resize(playerCount * playerCount);
         for (unsigned int playerIndex = 0; playerIndex < playerCount; playerIndex++)
@@ -526,8 +514,7 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamCalculateManMarking(World &world,
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}
 
-// The referee needs the team AI above.
 #include "referee.h"

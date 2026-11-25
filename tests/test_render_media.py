@@ -1,10 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks GRF's media for the renderer: the locator, the converter, the pinned list and the wheel.
-
-The converter runs on a small tree laid out as GRF's, so these checks need no GRF checkout. The
-checks of the installed package run where cuju-grf-media is installed.
-"""
+"""Checks GRF's media for the renderer."""
 
 import hashlib
 import importlib.util
@@ -48,7 +44,6 @@ def write(path, data):
     path.write_bytes(data)
 
 
-# A tree laid out as GRF's, with one file of each kind, and the bytes of each.
 FAKE_FILES = {
     'data/media/objects/balls/generic.object': (b'<object></object>\n', 'Unlicense', 'scene'),
     'data/media/objects/balls/generic.ase': (b'*3DSMAX_ASCIIEXPORT 200\n', 'Unlicense', 'model'),
@@ -75,8 +70,7 @@ def fake(tmp_path, converter):
         lines.append(f'{sha256(data)}  {license_name}  {role}  {name}\n')
     sources = tmp_path / 'sources.txt'
     sources.write_text('# the pinned files\n' + ''.join(lines), encoding='ascii')
-    # GRF's two license files, rebuilt from the repository's texts. Their pins hold only if the
-    # repository's texts are GRF's.
+    # GRF's two license files, rebuilt from the repository's texts.
     unlicense = open(source_file('LICENSES', 'Unlicense.txt'), 'rb').read()
     write(tree / converter.GRF_UNLICENSE[0], unlicense)
     ofl = open(source_file('LICENSES', 'OFL-1.1.txt'), 'rb').read().decode('ascii')
@@ -90,7 +84,6 @@ def fake(tmp_path, converter):
 
 def convert(converter, fake, **options):
     tree, sources, project = fake
-    # The fake tree has none of the real generated files unless a test names its own.
     options.setdefault('generated_files', ())
     return converter.convert(
         str(tree), project=str(project), root=ROOT, sources=str(sources), **options
@@ -124,7 +117,6 @@ def test_the_formats_agree(converter):
 
 def test_the_license_texts_are_grfs(converter, fake):
     tree, _, _ = fake
-    # The fixture rebuilt GRF's files from the repository's texts, so their pins hold.
     assert converter.tree_problems(str(tree), []) == []
     assert converter.license_problems(str(tree), ROOT) == []
 
@@ -176,7 +168,6 @@ def test_the_converter_copies_every_file_unchanged(converter, fake):
     assert json.loads((package / 'manifest.json').read_text()) == manifest
     for name in converter.LICENSE_TEXTS.values():
         assert (project / name).read_bytes() == open(source_file(*name.split('/')), 'rb').read()
-    # The locator reads what the converter writes, and the lists agree with the files.
     assert _media.manifest(package) == manifest
     assert _media.problems(package) == []
     assert _media.path('fonts/AlegreyaSansSC-ExtraBold.ttf', package).read_bytes().endswith(b'font')
@@ -318,7 +309,6 @@ def test_wheel_check_reads_the_media_wheel(converter, fake, tmp_path):
     assert check.media_problems(str(path)) == [
         'data/databases/logo.bmp differs from its manifest entry'
     ]
-    # A wheel of cuju holds none of the media.
     cuju_wheel = tmp_path / 'cuju-0.3.0-py3-none-manylinux_2_28_x86_64.whl'
     with zipfile.ZipFile(cuju_wheel, 'w') as wheel:
         for name in check.LICENSES:

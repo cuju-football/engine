@@ -3,14 +3,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // GRF's `SharedInfo`, which `GameEnv::get_info` returns, with the raw vectors that GRF's `Position`
-// holds. `EnvironmentGetState` gives the same values in the coordinates of the environment.
+// holds.
 #pragma once
 
 #include "../simulation/environment.h"
 
 namespace cuju {
 namespace engine {
-
 struct PlayerInfo {
     Vector3 position, direction;
     float tiredFactor;
@@ -21,7 +20,6 @@ struct TeamInfo {
     int count = 0;
     PlayerInfo players[state::MAXIMUM_TEAM_PLAYERS];
 };
-// `team[0]` is the left team. A controller holds the index of its player within the team, or -1.
 struct EngineInfo {
     Vector3 ballPosition, ballDirection, ballRotation;
     TeamInfo team[2];
@@ -91,5 +89,5 @@ inline void EnvironmentGetInfo(const simulation::World &world,
     info.step = world.serialized.step;
 }
 
-}  // namespace engine
-}  // namespace cuju
+}
+}

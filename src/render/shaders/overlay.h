@@ -12,10 +12,8 @@
 #include "../gl/program.h"
 
 namespace cuju::render::shaders {
-
 class OverlayProgram : public gl::Program {
 public:
-    // Uniform locations, as GL assigns them.
     static constexpr int kModel = 0;
     static constexpr int kProjection = 1;
     static constexpr int kOurTexture = 2;
@@ -27,6 +25,6 @@ public:
     void ShadeBlock(const gl::FragmentBlock &block) const override;
 };
 
-}  // namespace cuju::render::shaders
+}
 
-#endif  // CUJU_RENDER_SHADERS_OVERLAY_H
+#endif

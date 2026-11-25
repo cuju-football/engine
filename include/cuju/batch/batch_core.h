@@ -2,7 +2,6 @@
 // Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura
 // SPDX-License-Identifier: Apache-2.0 AND BSD-3-Clause
 
-// The batch buffers and the work on one environment, shared by the CUDA and the CPU backends.
 #pragma once
 
 #include <cstring>
@@ -24,7 +23,6 @@
 #include "../work_area.h"
 #include "agent_setup.h"
 
-// Threads per environment. A loop from `Lane()` with this stride runs each index once.
 #if CUJU_WARP_LANES
 #define CUJU_ENVIRONMENT_LANES 32
 #else
@@ -33,11 +31,9 @@
 
 namespace cuju {
 namespace batch {
-
 constexpr int MAXIMUM_AGENTS = 2 * simulation::MAXIMUM_TEAM_CONTROLLERS;
 constexpr int SIMPLE115 = 115;
 
-// A barrier that makes the writes of an environment's threads visible, a no-op with one thread.
 CUJU_HOST_DEVICE void EnvironmentSync() {
 #if CUJU_WARP_LANES
     __syncwarp();
@@ -51,8 +47,6 @@ enum ObservationFlags : int {
     OBSERVATION_RAW = 8
 };
 
-// Each `raw` field is one array `[environmentCount][agents][dimensions]`, in this order.
-// GRF: an agent sees its own team as the left team.
 enum RawField : int {
     RAW_BALL,
     RAW_BALL_DIRECTION,
@@ -108,18 +102,17 @@ CUJU_HOST_DEVICE int RawTypeBytes(int type) {
 }
 
 struct RawArray {
-    int type;           // A `RawType`.
-    int dimensions[2];  // The shape after the agent axis, with 0 for an absent dimension.
+    int type;
+    int dimensions[2];
     int elements;
-    size_t offset;  // In bytes.
+    size_t offset;
 };
 struct RawLayout {
-    int players;  // The length of each team array, that of the larger team.
+    int players;
     RawArray arrays[RAW_FIELD_COUNT];
     size_t bytes;
 };
 
-// Places the raw arrays of `outputs` agent views in one buffer, each at a multiple of 256 bytes.
 inline RawLayout MakeRawLayout(size_t outputs, int players, int stickyActions) {
     RawLayout layout{};
     layout.players = players;
@@ -156,7 +149,6 @@ inline RawLayout MakeRawLayout(size_t outputs, int players, int stickyActions) {
     return layout;
 }
 
-// `output` is `environment * agents + agent`. A team smaller than `layout.players` pads with zeros.
 CUJU_FUNCTION inline void WriteRaw(const simulation::AgentView &view, int stepsLeft,
                                    const RawLayout &layout, uint8_t *buffer, size_t output) {
     auto element = [&](int field, int index) {
@@ -213,52 +205,33 @@ CUJU_FUNCTION inline void WriteRaw(const simulation::AgentView &view, int stepsL
 
 struct BatchEnvironmentConfiguration {
     std::vector<std::string> assets;
-    // The index into `assets` of each environment's bundle, or empty for the first bundle.
     std::vector<int32_t> assignment;
-    std::string animations;  // The path of `animations.bin`.
+    std::string animations;
     int environmentCount = 1;
-    // GRF: environment `i` plays as `create_environment` after
-    // `random.seed(seed * 2**32 + firstIndex + i)`.
+    // GRF: environment `i` plays as `create_environment` after `random.seed(seed * 2**32 +
+    // firstIndex + i)`.
     uint64_t seed = 0;
-    int actionSet = 0;  // 0 `default`, 1 `v2`, 2 `full`.
-    // `ObservationFlags`, with at most one of `simple115` and `simple115v2`.
+    int actionSet = 0;
     int observation = OBSERVATION_SIMPLE115_VERSION2;
-    bool checkpoints = false;  // Adds the checkpoint reward to the scoring reward.
-    bool numpyLegacy = true;   // The checkpoint reward adds as numpy before 2.0 does.
-    // Without it, an ended episode stays at its end until a reset.
+    bool checkpoints = false;
+    bool numpyLegacy = true;
     bool autoReset = true;
-    int ticksPerStep = 10;  // GRF `physics_steps_per_frame`.
-    // The SMM size in cells, GRF `channel_dimensions`.
+    int ticksPerStep = 10;
     int smmWidth = simulation::SMM_WIDTH, smmHeight = simulation::SMM_HEIGHT;
-    int stack = 1;  // 4 for GRF `stacked`, else 1.
-    // Per environment, GRF `game_engine_random_seed` for every episode, -1 to draw, empty for none.
+    int stack = 1;
     std::vector<int64_t> fixedSeeds;
-    // `[assets.size()][2]` left and right agents, -1 for the bundle's. Empty keeps every bundle's.
     std::vector<int32_t> agentCounts;
     // GRF `episode_number`, the episode before the first, whose parity picks each later variant.
     int episodeNumber = 0;
-    int threadsPerBlock = 64;  // CUDA only.
-    // CUDA thread stack, or 0 for the driver's choice. The driver reserves it for every thread the
-    // device holds, so a larger stack leaves less memory for environments.
+    int threadsPerBlock = 64;
     size_t stackBytes = 0;
-    // CPU threads, the caller included, or 0 for one per processor the process may run on.
     int threads = 0;
-    // The seed rule's index of the first environment, so environment `i` plays as index
-    // `firstIndex + i`. Every index stays below 2**32.
     int64_t firstIndex = 0;
-    // On CUDA the device memory of the batch comes from `allocate(bytes, context)`, which
-    // returns null when it has none, and goes back through `release(pointer, context)` once the
-    // device is idle. Null takes `cudaMalloc` and `cudaFree`.
     void *(*allocate)(size_t bytes, void *context) = nullptr;
     void (*release)(void *pointer, void *context) = nullptr;
     void *allocatorContext = nullptr;
-    // On the CPU `pinThreads` pins each thread of the batch to a processor of the affinity mask,
-    // and `numa` groups the threads by NUMA node, each group stepping a fixed range of
-    // environments whose memory its threads touch first.
     bool pinThreads = false, numa = false;
-    // On the CPU every buffer takes whole pages of its own, which `cudaHostRegister` can pin.
     bool pageAligned = false;
-    // The render mode and the referee animations of every environment until `SetRender`.
     int renderMode = 0;
     bool refereeAnimations = false;
 };
@@ -267,11 +240,9 @@ struct BatchEnvironmentConfiguration {
 struct EpisodeGenerator {
     static constexpr int WORDS = 624;
     uint32_t state[WORDS];
-    int32_t next;  // `WORDS` when the state must turn over.
+    int32_t next;
 };
 
-// As `random.seed(key)` for `key` with 32-bit words `words[0]`, the lowest, to `words[count - 1]`.
-// CPython passes `init_by_array` the words of `abs(key)`, as few as it needs and at least one.
 CUJU_FUNCTION inline void SeedEpisodeGenerator(EpisodeGenerator &generator, const uint32_t *words,
                                                int count) {
     constexpr int WORDS = EpisodeGenerator::WORDS;
@@ -314,7 +285,6 @@ CUJU_FUNCTION inline void SeedEpisodeGenerator(EpisodeGenerator &generator, uint
     SeedEpisodeGenerator(generator, words, count);
 }
 
-// As CPython's `genrand_uint32`.
 CUJU_FUNCTION inline uint32_t NextEpisodeWord(EpisodeGenerator &generator) {
     constexpr int WORDS = EpisodeGenerator::WORDS, SHIFT = 397;
     uint32_t *state = generator.state;
@@ -347,50 +317,40 @@ CUJU_FUNCTION inline uint32_t DrawEpisodeSeed(EpisodeGenerator &generator) {
 
 struct EnvironmentSlot {
     EpisodeGenerator generator;
-    int32_t episode;  // The resets so far.
-    int32_t reverse;  // The run's `reverseTeamProcessing`.
+    int32_t episode;
+    int32_t reverse;
     uint32_t seed;
-    int32_t variant;  // The index into `Variants`.
+    int32_t variant;
     int32_t bundle;
     int32_t leftAgents, rightAgents;
-    int32_t collected[MAXIMUM_AGENTS];  // The checkpoints each agent collected.
+    int32_t collected[MAXIMUM_AGENTS];
     uint8_t stickyActions[MAXIMUM_AGENTS][simulation::MAXIMUM_STICKY_ACTIONS];
-    int64_t fixedSeed;      // GRF `game_engine_random_seed`, or -1 to draw.
-    int32_t episodeOffset;  // GRF `episode_number`, which shifts the parity of every episode.
-    // Each team's designated player in the observation that ended the last episode, which an
-    // automatic reset replaces. GRF's dumps hold it for a team without agents too.
+    int64_t fixedSeed;
+    int32_t episodeOffset;
     int32_t finalDesignated[2];
     // GRF's render mode, kept for the renderer, and the `animations` flag of each later reset.
     int32_t renderMode, refereeAnimations;
 };
 
-// The templates in backend memory, indexed by `bundle * 4 + reverse * 2 + parity`.
 struct Variants {
     const simulation::SimulationContext *contexts;
     const simulation::World *const *templates;
 };
 
-// The renders of a batch in render mode, in the order GRF's GameEnv makes them, for a renderer that
-// draws them after the call: the start of each match and each render, with the RenderState of each.
 constexpr int32_t RENDER_EVENT_START = 1, RENDER_EVENT_RENDER = 2;
 struct RenderEvent {
     int32_t kind;
-    uint32_t seed;  // GRF's `game_engine_random_seed` of the match.
+    uint32_t seed;
     render::RenderState state;
 };
-// Backend memory. A reset or a step appends to each environment's events until the host moves
-// them out. A count of -1 says more than `capacity` events came, which were lost.
 struct RenderEvents {
-    RenderEvent *events;  // `[environmentCount][capacity]`
-    int32_t *counts;      // `[environmentCount]`
-    // `[environmentCount]`, what GRF's widgets carry from render to render.
+    RenderEvent *events;
+    int32_t *counts;
     render::RenderState *states;
-    const uint8_t *animationMirrored;  // One byte per animation, nonzero for a "mirror" name.
+    const uint8_t *animationMirrored;
     int capacity;
 };
 
-// The batch buffers, in backend memory. Each environment has `agents` agent slots, the most agents
-// of any bundle. `agentMask` marks the agents that exist.
 struct EnvironmentBuffers {
     simulation::World *worlds;
     simulation::EnvironmentCore *cores;
@@ -400,37 +360,28 @@ struct EnvironmentBuffers {
     int actionSet, observation;
     bool checkpoints, numpyLegacy;
     int stack;
-    float *simple115;  // `[environmentCount][agents][115 * stack]`
-    uint8_t *smm;      // `[environmentCount][agents][smmHeight][smmWidth][4 * stack]`
+    float *simple115;
+    uint8_t *smm;
     int smmWidth, smmHeight;
-    uint8_t *raw;   // As `rawLayout` places it.
-    float *reward;  // `[environmentCount][agents]`
-    uint8_t *done;  // `[environmentCount]`
-    // `[environmentCount]`, GRF `info['score_reward']`, the left team's before checkpoints and
-    // sign.
+    uint8_t *raw;
+    float *reward;
+    uint8_t *done;
     int32_t *scoreReward;
-    // The outputs of the step that ended an episode, which an automatic reset replaces.
     float *finalSimple115;
     uint8_t *finalSmm;
-    // `[environmentCount][agents][stack][1 + SMM_MARKS]`, per frame the mark count and then the
-    // marks as indices into one frame.
     int32_t *smmMarks, *finalSmmMarks;
     uint8_t *finalRaw;
     RawLayout rawLayout;
-    uint8_t *agentMask;  // `[environmentCount][agents]`
-    // `[environmentCount][2]` from 0 to 1, set on every reset, negative or null for the scenario's.
+    uint8_t *agentMask;
     const float *teamDifficulty;
-    // Null `events` records none.
     RenderEvents renderEvents;
-    WorkArea *workAreas;  // `[environmentCount]` on the device, null on the host.
+    WorkArea *workAreas;
 };
 
-// The engine's last message as the renderer reads it.
 CUJU_FUNCTION inline void MakeRenderMessage(const simulation::World &world,
                                             render::RenderMessage &message) {
     message.spammed = world.message.spammed;
     message.removeTimeMilliseconds = world.message.removeTimeMilliseconds;
-    // The caption's text, empty when no message reached it.
     message.text[0] = 0;
     if (world.message.drawn) {
         simulation::MatchMessage shown;
@@ -448,8 +399,6 @@ CUJU_FUNCTION inline render::RenderMatchDraws MakeRenderDraws(const simulation::
     return draws;
 }
 
-// Records GRF's `StartMatch` of a new match, or a render, of an environment in render mode.
-// Speed: out of line, so that its locals stay off the stack of the simulation.
 CUJU_FUNCTION_NO_INLINE inline void PushRenderEvent(const EnvironmentBuffers &buffers,
                                                     const Variants &variants, int environment,
                                                     bool start) {
@@ -489,7 +438,6 @@ CUJU_HOST_DEVICE int SideNegation(bool right) {
 }
 
 // GRF: some paths are undefined, such as a set piece without a taker reading a missing player.
-// The host throws `std::runtime_error`. The device traps, and the next CUDA call reports it.
 CUJU_FUNCTION inline void StopAtUndefinedPath(int environment) {
 #if defined(__CUDA_ARCH__)
     __trap();
@@ -530,11 +478,7 @@ CUJU_FUNCTION inline void UpdateStickyActions(const EnvironmentBuffers &buffers,
     }
 }
 
-// GRF: each scenario built draws `random.randint(0, 2000000000)`. `create_environment` builds
-// three, two configurations then the core's reset, and the second's parity sets the run's
-// `reverseTeamProcessing`. A seed, from `seeds` or fixed, replaces every draw as
-// `game_engine_random_seed` does. A negative entry of `seeds` draws, as null `seeds` does. Only the
-// first reset reads `reverse`, and null follows the seeds.
+// GRF: each scenario built draws `random.randint(0, 2000000000)`.
 CUJU_FUNCTION inline void ResetEnvironment(const EnvironmentBuffers &buffers,
                                            const Variants &variants, int environment,
                                            const int64_t *seeds, const int32_t *reverse) {
@@ -573,7 +517,6 @@ CUJU_FUNCTION inline void ResetEnvironment(const EnvironmentBuffers &buffers,
         world.renderMode =
             slot.renderMode != 0 ? simulation::e_Render_On : simulation::e_Render_Off;
     }
-    // The difficulty goes in before the ticks that bring the match into play, which read it.
     if (buffers.teamDifficulty && Lane() == 0) {
         state::ScenarioState &scenario = world.serialized.scenario;
         const float left = buffers.teamDifficulty[environment * 2],
@@ -593,8 +536,6 @@ CUJU_FUNCTION inline void ResetEnvironment(const EnvironmentBuffers &buffers,
     UpdateStickyActions(buffers, world, slot);
 }
 
-// Runs on one thread for one agent. A step that ends an episode also writes the `final*` buffers.
-// Speed: out of line, so that its view stays off the stack of the simulation.
 CUJU_FUNCTION_NO_INLINE inline void WriteAgentOutputs(const EnvironmentBuffers &buffers,
                                                       int environment, int agent, bool afterStep) {
     const size_t output = (size_t)environment * buffers.agents + agent;
@@ -608,8 +549,7 @@ CUJU_FUNCTION_NO_INLINE inline void WriteAgentOutputs(const EnvironmentBuffers &
         buffers.reward[output] = simulation::CheckpointReward(
             view, buffers.reward[output], slot.collected[agent], buffers.numpyLegacy);
     const bool finished = afterStep && buffers.done[environment];
-    // GRF: as `FrameStack`, the last `stack` observations along the last axis, the oldest first. A
-    // reset fills every frame with its observation.
+    // GRF: as `FrameStack`, the last `stack` observations along the last axis, the oldest first.
     const int stack = buffers.stack;
     if (buffers.observation & (OBSERVATION_SIMPLE115 | OBSERVATION_SIMPLE115_VERSION2)) {
         const int width = SIMPLE115 * stack;
@@ -628,8 +568,6 @@ CUJU_FUNCTION_NO_INLINE inline void WriteAgentOutputs(const EnvironmentBuffers &
                 buffers.finalSimple115[output * width + index] = stacked[index];
     }
     if (buffers.observation & OBSERVATION_SMM) {
-        // An SMM is zero but for a few marks, so an update rewrites only those. Each frame of a
-        // stack keeps its marks as indices into one frame and lies at its own channels.
         const int markRow = 1 + simulation::SMM_MARKS;
         const size_t frameBytes =
             (size_t)buffers.smmWidth * buffers.smmHeight * simulation::SMM_LAYERS;
@@ -672,7 +610,6 @@ CUJU_FUNCTION_NO_INLINE inline void WriteAgentOutputs(const EnvironmentBuffers &
     }
 }
 
-// One agent per lane, and the lanes diverge inside.
 CUJU_FUNCTION inline void WriteEnvironmentOutputs(const EnvironmentBuffers &buffers,
                                                   int environment, bool afterStep) {
     EnvironmentSync();
@@ -691,9 +628,6 @@ CUJU_HOST_DEVICE void ResetAndWriteEnvironment(const EnvironmentBuffers &buffers
     WriteEnvironmentOutputs(buffers, environment, false);
 }
 
-// With `autoReset`, an ended episode resets in the same call, done still set. Without it, the
-// environment keeps its outputs and done flag until a reset, as GRF steps no episode past its end.
-// `actions` is `[environmentCount][agents]`, left agents first. Out of range means idle.
 CUJU_HOST_DEVICE void StepEnvironment(const EnvironmentBuffers &buffers, const Variants &variants,
                                       int environment, const int32_t *actions, bool autoReset) {
     EnvironmentSlot &slot = buffers.slots[environment];
@@ -747,17 +681,16 @@ CUJU_HOST_DEVICE void StepEnvironment(const EnvironmentBuffers &buffers, const V
 
 struct AssetVariant {
     int reverse = 0, parity = 0;
-    // The keyboards no gamer owns, which the codec needs to save a state of this variant.
     int freeControllerCount = 0;
     simulation::StaticData staticData;
-    std::unique_ptr<simulation::World> world;  // After a reset, in the rest frame.
-    std::string scenario;  // `SaveScenario(*world)`, which identifies the variant of a state.
+    std::unique_ptr<simulation::World> world;
+    std::string scenario;
     std::vector<animation::Skeleton> skeletons;
 };
 struct Assets {
     std::string scenario;
     int leftAgents = 0, rightAgents = 0;
-    AssetVariant variants[4];  // Indexed by `reverse * 2 + parity`.
+    AssetVariant variants[4];
 };
 
 inline std::string ReadFileBytes(const std::string &path) {
@@ -768,7 +701,6 @@ inline std::string ReadFileBytes(const std::string &path) {
     return stream.str();
 }
 
-// The scenario bytes of a state without the per-episode seed and the batch-set difficulties.
 inline std::string SaveScenario(const simulation::World &world) {
     state::ScenarioState scenario = world.serialized.scenario;
     scenario.gameEngineRandomSeed = 0;
@@ -779,9 +711,6 @@ inline std::string SaveScenario(const simulation::World &world) {
     return archive.data();
 }
 
-// One variant from its static data, reset state and skeletons, the parts of a bundle. With `setup`,
-// `SetupAgents` gives it `left` and `right` agents, and `name` names it in errors. `codec` keeps
-// the controller count of the variants loaded before.
 inline AssetVariant LoadVariant(const std::string &staticBlob, const std::string &stateBlob,
                                 const std::string &skeletonBlob, int reverse, int parity,
                                 bool setup, int left, int right, const std::string &name,
@@ -800,7 +729,6 @@ inline AssetVariant LoadVariant(const std::string &staticBlob, const std::string
     }
     variant.scenario = SaveScenario(*variant.world);
     variant.skeletons = animation::ParseSkeletons(skeletonBlob);
-    // The simulation reads one skeleton per player and per official.
     if (variant.skeletons.size() != (size_t)variant.staticData.count)
         throw std::runtime_error("asset bundle: expected " +
                                  std::to_string(variant.staticData.count) + " skeletons, found " +
@@ -808,10 +736,6 @@ inline AssetVariant LoadVariant(const std::string &staticBlob, const std::string
     return variant;
 }
 
-// `CUJASSET1`, the scenario name, the two agent counts, the variant count, then 4 variants of flag,
-// parity, static data, reset state and skeletons. Integers are `int32_t`, blocks length-prefixed.
-// `SetupAgents` handles other agent counts, where -1 keeps the bundle's. Static data and skeletons
-// do not depend on the agents.
 inline Assets LoadAssets(const std::string &path, int leftAgents = -1, int rightAgents = -1) {
     const std::string bytes = ReadFileBytes(path);
     size_t offset = 0;
@@ -862,5 +786,5 @@ inline Assets LoadAssets(const std::string &path, int leftAgents = -1, int right
     return assets;
 }
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

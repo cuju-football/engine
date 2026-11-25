@@ -1,13 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""The long self-check of full matches and many episode ends, opt-in with `CUJU_LONG=1`.
-
-    CUJU_LONG=1 pytest tests/test_long.py
-
-Each case plays thousands of steps, so it reaches what the short digests can't, such as the seeds
-of later episodes, Kaggle's second half, the end of a match and the checkpoint reward across
-episode ends. It takes a few minutes on the CPU and as long again on a GPU.
-"""
+"""The long self-check of full matches and many episode ends, opt-in with `CUJU_LONG=1`."""
 
 import json
 import os
@@ -44,11 +37,9 @@ def digest(case, device):
 
 
 def test_the_long_cases_play_beyond_the_short_ones():
-    # A full match of 3,000 steps ends within each case of a match scenario.
     assert all(entry['steps'] > EXPECTED['steps'] for entry in LONG.values())
     assert all(entry['steps'] > 3000 for name, entry in LONG.items() if 'full_match' in name)
     for entry in LONG.values():
-        # The assets and options are valid, at the cost of one environment and one step.
         batch = Batch(entry['assets'], environment_count=1, device='cpu', **entry['options'])
         batch.reset()
         batch.step(torch.zeros((1, batch.agents), dtype=torch.int32))

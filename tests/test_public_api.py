@@ -275,8 +275,6 @@ def test_errors_of_the_design():
 def test_reset_takes_seeds_a_mask_and_reverse_flags(device):
     with cuju.BatchEnvironment('5_vs_5', environment_count=3, device=device) as batch:
         first = tensor_bytes(batch.reset(seeds=[1, 2, 3]))
-        # The teams alternate the kickoff from one episode to the next, so the same seeds repeat
-        # every second reset.
         batch.reset(seeds=[1, 2, 3])
         assert tensor_bytes(batch.reset(seeds=[1, 2, 3])) == first
         batch.step(torch.zeros((3, 1), dtype=torch.int32).to(device))

@@ -13,19 +13,12 @@
 #include "texture.h"
 
 namespace cuju::render {
-
-// The number of levels of a full chain, floor(log2(max(width, height))) + 1.
 int MipLevelCount(int width, int height);
 
-// Whether GenerateMipmaps handles the format and size: one of the four 8-bit formats GRF mipmaps,
-// with power-of-two sizes, where every blit weight is exactly one half.
 bool CanGenerateMipmaps(Format format, int width, int height);
 
-// Replaces levels 1 and up of `texture` with the full chain filtered from level 0. Runs its own
-// FTZ and DAZ scope. The X byte of R8G8B8X8 levels is 255 for UNORM and 0 for SRGB, as llvmpipe
-// stores it; no sampler reads it.
 void GenerateMipmaps(Texture &texture);
 
-}  // namespace cuju::render
+}
 
-#endif  // CUJU_RENDER_MIPMAP_H
+#endif

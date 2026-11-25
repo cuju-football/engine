@@ -8,7 +8,6 @@
 #include "host_device.h"
 
 namespace cuju {
-
 constexpr float PI = 3.1415926535897932384626433832795028841972f;
 
 CUJU_HOST_DEVICE float clamp(float value, float min, float max) {
@@ -25,11 +24,9 @@ CUJU_HOST_DEVICE float NormalizedClamp(float value, float min, float max) {
 
 CUJU_HOST_DEVICE int SignSide(float value) { return value >= 0 ? 1 : -1; }
 
-}  // namespace cuju
+}
 
 namespace cuju {
-
-// Exact: one span per step, so the result carries the rounding of each step.
 CUJU_HOST_DEVICE float ModulateIntoRange(float min, float max, float value) {
     float step = max - min;
     float newValue = value;
@@ -38,4 +35,4 @@ CUJU_HOST_DEVICE float ModulateIntoRange(float min, float max, float value) {
     return newValue;
 }
 
-}  // namespace cuju
+}

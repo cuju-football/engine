@@ -15,7 +15,6 @@
 
 namespace cuju::render::assets {
 namespace {
-
 struct Tree;
 struct TreeEntry {
     std::string name;
@@ -40,7 +39,6 @@ std::unique_ptr<Tree> ReadBlock(const std::string &data, std::size_t &pos) {
         while (pos < data.size() && data[pos] != '\n') pos++;
         std::string line = data.substr(start, pos - start);
         if (pos < data.size()) pos++;
-        // tmp[l] = 0 ends the C string at the first NUL.
         const std::size_t nul = line.find('\0');
         if (nul != std::string::npos) line.resize(nul);
         if (line.length() > 1 && line[line.length() - 1] == '\r') line.pop_back();
@@ -71,7 +69,6 @@ const TreeEntry *FindEntry(const Tree *tree, const char *needle) {
     return nullptr;
 }
 
-// tree_find: the subtree of the first entry with the name, null when that entry has none.
 const Tree *FindTree(const Tree *tree, const char *needle) {
     for (const TreeEntry &entry : tree->entries)
         if (entry.name == needle) return entry.subtree.get();
@@ -102,7 +99,7 @@ struct Tri {
     cuju::Vector3 vertices[3];
     cuju::Vector3 tangents[3];
     cuju::Vector3 bitangents[3];
-    cuju::Vector3 texcoords[3];  // texture unit 0, the only one read
+    cuju::Vector3 texcoords[3];
     cuju::Vector3 normals[3];
 
     void CalculateTangents() {
@@ -346,7 +343,7 @@ void Build(const Tree *data, GeometryData *geometry) {
     }
 }
 
-}  // namespace
+}
 
 bool LoadAse(const std::string &data_dir, const std::string &path, GeometryData *data,
              std::string *error) {
@@ -365,4 +362,4 @@ bool LoadAse(const std::string &data_dir, const std::string &path, GeometryData 
     return true;
 }
 
-}  // namespace cuju::render::assets
+}

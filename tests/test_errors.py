@@ -39,7 +39,6 @@ def test_an_unknown_device_is_a_value_error():
         with pytest.raises(cuju.errors.ChoiceError) as raised:
             Batch('5_vs_5_l1_r0', environment_count=1, **options)
         assert isinstance(raised.value, ValueError) and isinstance(raised.value, KeyError)
-        # Unlike a `KeyError`, the message prints without quotes.
         assert str(raised.value).startswith('expected the ')
     with pytest.raises(ValueError):
         library_path('tpu')
@@ -62,7 +61,6 @@ def test_states(batch):
     assert isinstance(raised.value, ValueError) and isinstance(raised.value, RuntimeError)
     other = Batch('academy_empty_goal_close', environment_count=1, device='cpu')
     other.reset()
-    # The library refuses a state of another scenario.
     with pytest.raises(cuju.errors.StateError, match='found another'):
         batch.set_state(0, other.get_state(0))
     other.close()

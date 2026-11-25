@@ -2,8 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""`Batch`, the batch of environments that the public `BatchEnvironment` wraps."""
-
 from __future__ import annotations
 
 import contextlib
@@ -56,37 +54,23 @@ from .state import _pickle_episode, _StateUnpickler
 _REPRESENTATIONS = {'simple115': 1, 'simple115v2': 2, 'extracted': 4, 'raw': 8}
 # GRF's frames, which the renderer draws, beside the cheapest representation of the library.
 _PIXEL_REPRESENTATIONS = ('pixels', 'pixels_gray')
-# By the type code of `cuju_environment_raw_field`.
 _RAW_TYPES = (torch.float32, torch.int32, torch.bool, torch.uint8)
-# `MAXIMUM_AGENTS` of the library.
 _MAXIMUM_AGENTS = 22
 _TYPE_STRINGS = {torch.float32: '<f4', torch.int32: '<i4', torch.bool: '|b1', torch.uint8: '|u1'}
 _ACTION_SETS = {'default': 0, 'v2': 1, 'full': 2}
 _ACTION_COUNTS = {'default': 19, 'v2': 20, 'full': 33}
-# Whether this PyTorch has `torch.library.custom_op` (2.4 and later), which `torch.compile` traces
-# a step through.
 _CUSTOM_OPERATORS = hasattr(torch.library, 'custom_op')
 
 
 class _Native:
-    """The library's handle of a batch and the files it built, which the views of its buffers keep.
-
-    A tensor that views a buffer holds this object through its storage, where Python's cycle
-    collector cannot see it, so this object never refers to the batch. The batch goes when the
-    caller drops it, and the memory when the last view of it goes.
-    """
-
     def __init__(self, library, device):
         self.library, self.device = library, device
         self.environment = None
         self.scenario_directory = None
-        # The allocator whose functions the library calls, kept until the batch is freed.
         self.allocator = None
-        # The page-locked output buffers of a CPU batch, released before the batch.
         self.pinned = None
 
     def free(self):
-        """Frees the batch and its buffers and removes the bundles it built, at most once."""
         if self.pinned:
             from . import pinned as _pinned
 
@@ -101,25 +85,19 @@ class _Native:
             with context:
                 self.library.cuju_environment_destroy(self.environment)
             self.environment = None
-            # The library released its memory through the allocator inside the call.
             self.allocator = None
         if self.scenario_directory is not None:
             self.scenario_directory.cleanup()
             self.scenario_directory = None
 
     def __del__(self, _finalizing=sys.is_finalizing):
-        # At interpreter exit the modules that `free` uses may already be torn down, and the
-        # process frees the batch with everything else. The default argument outlives them.
         if _finalizing():
             return
         self.free()
 
 
 class _CudaArray:
-    """A device buffer that `torch.as_tensor` reads through `__cuda_array_interface__`."""
-
     def __init__(self, pointer, shape, dtype, owner):
-        # The tensor holds this object, and this object the owner of the memory it views.
         self.owner = owner
         self.__cuda_array_interface__ = {
             'data': (pointer, False),
@@ -131,12 +109,6 @@ class _CudaArray:
 
 
 def _view(pointer, shape, dtype, device, owner):
-    """Returns a tensor that views the batch memory at `pointer` on `device` without a copy.
-
-    The tensor keeps `owner`, the `_Native` of the batch, alive, so the memory outlives the batch
-    while a tensor views it. The owner must not refer to the batch, or the two form a cycle that
-    nothing collects.
-    """
     shape = tuple(shape)
     if not all(shape):
         return torch.zeros(shape, dtype=dtype, device=device)
@@ -151,7 +123,6 @@ def _view(pointer, shape, dtype, device, owner):
 
 
 def _spaces():
-    """Returns the spaces of gymnasium, or of gym without it, and their `batch_space`."""
     try:
         import gymnasium as gym
     except ImportError:
@@ -165,12 +136,10 @@ def _spaces():
 
 
 def _host(values, dtype):
-    """Returns `values` as a contiguous CPU tensor of `dtype`, which the library reads."""
     return torch.as_tensor(values, dtype=dtype).to('cpu').contiguous()
 
 
 def _observer_failed(observer, error):
-    """Warns that a step observer raised and was removed, while the batch goes on."""
     _log.LOGGER.warning(
         'cuju: removed the step observer %r, which raised %s: %s',
         observer,
@@ -180,7 +149,6 @@ def _observer_failed(observer, error):
 
 
 def _per_environment(values, dtype, name, count, error=ConfigurationError):
-    """Returns `values` as one host value per environment; a single value serves every one."""
     array = _host(values, dtype)
     if array.dim() == 0:
         array = array.repeat(count)
@@ -193,7 +161,6 @@ def _per_environment(values, dtype, name, count, error=ConfigurationError):
 
 
 def _integers(values, dtype, name, count, error):
-    """Returns integer `values` as one host value per environment, and refuses floating ones."""
     array = torch.as_tensor(values)
     # GRF: the seed of a scenario is a C++ `unsigned int`, which refuses a float, 5.0 included.
     if array.is_floating_point() or array.is_complex():
@@ -202,13 +169,11 @@ def _integers(values, dtype, name, count, error):
 
 
 def _is_pair(value):
-    """Returns whether `value` is a `(left, right)` pair."""
     return isinstance(value, (tuple, list)) and len(value) == 2
 
 
 @contextlib.contextmanager
 def _node_map(nodes):
-    """Sets `CUJU_NUMA_NODES` for the library's creation call, which reads it, and restores it."""
     if nodes is None:
         yield
         return
@@ -224,7 +189,6 @@ def _node_map(nodes):
 
 
 def _choice(kind, value, choices, hints=None):
-    """Returns `choices[value]`, or raises `ChoiceError` naming the valid values and any hint."""
     if value in choices:
         return choices[value]
     hint = (hints or {}).get(value, '')
@@ -235,60 +199,8 @@ def _choice(kind, value, choices, hints=None):
 
 
 class Batch:
-    """A batch of football environments on the GPU or the CPU, with every option of the library.
-
-    `cuju.BatchEnvironment` is the public class, which maps onto this one. The engine's own
-    commands and the family's packages create batches through this class directly.
-
-    Every tensor that a method returns views a buffer of the batch on its device, without a copy,
-    and the next `reset` or `step` overwrites it, so a caller clones what it keeps. The tensor
-    attributes live on the CPU.
-
-    Attributes:
-        device: `cuda` or `cpu`, the backend that runs the batch.
-        torch_device: The `torch.device` that holds the buffers of the batch, such as `cuda:0`, and
-            on which every call runs.
-        threads: The CPU threads that run the environments, the caller included, or 0 on the GPU.
-        environment_count: The number of environments.
-        left_agents: The agents of the left team of each environment, `[environment_count]` `int32`.
-        right_agents: The agents of the right team of each environment, `[environment_count]`
-            `int32`.
-        agents: The size of the agent axis, the largest number of agents of any bundle.
-        agent_mask: `[environment_count, agents]`, true for each agent that exists.
-        left_players: The players of the left team of each environment, `[environment_count]`
-            `int32`, as GRF's `len(observation['left_team'])` for a left agent.
-        right_players: The players of the right team of each environment, `[environment_count]`
-            `int32`. A right agent sees its own team as the left team, so its counts swap.
-        players: The size of each team array of `raw`, the largest team of any bundle; the array
-            holds the players of its team first and zeros after them.
-        single_observation_space, single_action_space, observation_space, action_space: The spaces
-            of one environment and of the batch, as gymnasium describes them.
-        squeeze, stacked, channel_dimensions, auto_reset, check_actions, debug: The options of
-            the batch.
-        action_count: The number of actions: 19 for `default`, 20 for `v2` and 33 for `full`.
-        difficulty: `[environment_count, 2]`, the difficulty of the left and of the right team of
-            each environment. It is the one that `difficulty` sets, else the scenario's, and for a
-            scenario whose difficulty follows the parity of the episode, that of its first episode.
-
-    Examples:
-        >>> import torch
-        >>> import cuju
-        >>> from cuju._batch import Batch
-        >>> batch = Batch('5_vs_5_l4_r0', environment_count=1024, device='cpu')
-        >>> observation = batch.reset()
-        >>> tuple(observation.shape)
-        (1024, 4, 115)
-        >>> actions = torch.zeros((1024, 4), dtype=torch.int32)
-        >>> observation, reward, done, information = batch.step(actions)
-        >>> tuple(reward.shape), tuple(done.shape)
-        ((1024, 4), (1024,))
-    """
-
-    # The step observers, in the order they were added. A batch without any pays one check per step.
     _observers: tuple[Any, ...] = ()
-    # Whether `close` has begun, after which the batch takes no observer and removes none.
     _closing = False
-    # The actions of the step in flight, which `step_wait` hands the observers.
     _async_actions = None
 
     def __init__(
@@ -330,122 +242,6 @@ class Batch:
         render_workers: int = 0,
         log: bool | None = None,
     ) -> None:
-        """Creates the batch and allocates its buffers.
-
-        Args:
-            assets: A bundle or a list of bundles, each a bundle path, a shipped name
-                `<scenario>_l<left>_r<right>` with any agent counts, a bare shipped scenario such as
-                `5_vs_5`, or a GRF scenario file; the last two take one left agent, as in GRF.
-            animations: The path of `animations.bin`. `None` takes the shipped tables.
-            environment_count: The number of environments.
-            representation: `simple115`, `simple115v2`, `extracted` (the SMM), `raw` (a dictionary
-                of named tensors), or `pixels` and `pixels_gray`, GRF's frames shrunk to
-                `channel_dimensions`, `[environment_count, agents, height, width, 3]` and
-                `[..., 1]` `uint8`, which play every environment as a rendering GRF does and
-                draw each render with cuju's renderer.
-            rewards: `scoring`, or `scoring,checkpoints` to add the checkpoint reward.
-            action_set: `default`, `v2` or `full`.
-            seed: The seed of the batch, from 0 to 2**64 - 1. Environment `index` plays as GRF's
-                `create_environment` after `random.seed(seed * 2**32 + first_index + index)`.
-            numpy_legacy: Whether the checkpoint reward adds in the precision of numpy before 2, as
-                GRF does with such a numpy. `False` follows numpy 2.
-            auto_reset: Whether a step resets every environment whose episode ended. `False` leaves
-                each such environment at its end until `reset_done` or `reset`.
-            library: The path of the library of `device`. `None` takes `library_path(device)`.
-            assignment: The index into `assets` of the bundle of each environment,
-                `[environment_count]`. `None` gives every environment the first bundle.
-            with_raw: Whether the batch also writes the `raw` representation, which `raw` and
-                `final_raw` return.
-            difficulty: One `(left, right)` pair of team difficulties per bundle, each from 0 to 1
-                or `None` for the scenario's; every reset writes them. `None` keeps the scenarios'
-                own.
-            device: `cuda` for the current CUDA device through `libcuju_cuda.so`, `cuda:N` or a
-                `torch.device` for GPU N, or `cpu` for the CPU through `libcuju_cpu.so`. Both give
-                the same outputs bit for bit, and the device decides only where the batch runs.
-                `auto` takes PyTorch's current CUDA device where PyTorch sees a GPU and the CUDA
-                library is installed, else `cpu`, and `batch.torch_device` says which. Only an
-                explicit `auto` picks, never the default.
-            threads: The CPU threads, the caller included, or 0 for one per logical processor that
-                the process may run on. The GPU ignores it.
-            physics_steps_per_frame: The ticks of 10 milliseconds in a step, as GRF's option.
-            channel_dimensions: The width and the height of the SMM in cells, as GRF's option.
-            stacked: Whether the observation stacks the last 4 along its last axis, the oldest
-                first, as GRF's `stacked`; a reset fills the stack. `raw` has no stack.
-            game_engine_random_seed: The seed of every episode, as GRF's option: an integer for
-                every environment, or one per environment with -1 to draw. `None` draws every seed.
-            squeeze: Whether the observation (except `raw`) and the reward drop the agent axis and
-                `step` takes `[environment_count]` actions, as GRF for one agent. Needs one agent
-                each.
-            agent_counts: One `(left, right)` pair of agent counts per bundle, each `None` for what
-                the name or the bundle gives. `None` keeps the agents of every bundle.
-            episode_number: GRF's `episode_number`, the episode before the first; its parity picks
-                the even or the odd form of a scenario.
-            first_index: The index of environment 0 in the seed rule, so the batch plays the
-                environments `first_index` to `first_index + environment_count - 1` of `seed`, as a
-                larger batch plays them. Every index stays below 2**32.
-            allocator: Where the GPU buffers come from, `cuda` from `cudaMalloc`, or `torch` from
-                PyTorch's caching allocator, so that `torch.cuda.memory_allocated`, its statistics
-                and its limits count them. The outputs are the same bit for bit. The local memory
-                that the driver reserves for the kernels stays outside either. The CPU ignores it.
-            pin_threads: Whether each CPU thread that the batch starts stays on a processor of its
-                own, taken in order from those that `os.sched_setaffinity` allows. The calling
-                thread stays where it is. The GPU ignores it.
-            numa: Whether the CPU threads form a group per NUMA node, on that node's processors,
-                each stepping a fixed range of environments whose memory its threads touch first.
-                With one node it changes nothing. A string of the node of each processor, such as
-                `0,0,1,1`, turns it on with those nodes in place of what the system reports. The
-                GPU ignores it.
-            pin_memory: Whether the output buffers of a CPU batch are page-locked, so that
-                `tensor.to('cuda', non_blocking=True)` copies them without waiting. Needs CUDA. The
-                GPU ignores it.
-            check_actions: Whether a GPU batch also checks actions in GPU memory against
-                `[-action_count, action_count)`, as it checks actions in host memory, so that `step`
-                raises `ArgumentError` before any environment steps. The check waits for the
-                device at every step. Without it, such an action steps as the idle action. The CPU
-                checks every action anyway.
-            debug: Whether every `step`, `step_async`, `reset_done` and masked `reset` of a GPU
-                batch waits for the device, so that a failure on the device raises at the call that
-                caused it. It checks the actions as `check_actions` does, and costs the waits. A
-                CUDA graph capture never waits. The CPU, which waits anyway, ignores it.
-            render_frames: Whether every environment plays as a rendering GRF does and `step`
-                adds GRF's frame of each to the information, `information['frame']`,
-                `[environment_count, render_resolution_y, render_resolution_x, 3]` `uint8` with
-                rows from the top, as GRF's observation `frame` holds them, and `final_frame` for
-                the ends of episodes.
-            render_resolution_x: The width of GRF's frames in pixels, as GRF's option, a multiple
-                of 4 up to 16384. `pixels` and `pixels_gray` shrink the whole frame, as GRF's
-                wrapper does. Only a batch that renders reads it.
-            render_resolution_y: The height of GRF's frames in pixels, as GRF's option, up to
-                16384. GRF's `Config` sets it to 720 before it reads the caller's options, so it
-                stays 720 when only the width changes, here as there.
-            signed_actions: Whether an action from `-action_count` to `-1` counts from the end, as
-                in GRF. `False` takes only the actions from 0 to `action_count - 1`, and refuses
-                the others in host memory and, with `check_actions` or `debug`, in GPU memory.
-            render_threads: The threads of each renderer, or 0 to share the processors out.
-            render_workers: The renderers that draw at once, or 0 for one per environment up to
-                the processors there are.
-            log: Whether to log a line for this batch, or `None` for the `log` key of the machine
-                config.
-
-        Raises:
-            TypeError: If `game_engine_random_seed` holds floating-point values, which GRF refuses.
-            ChoiceError: If `representation`, `action_set` or `device` names no known value. It is a
-                `ValueError` and a `KeyError`.
-            ConfigurationError: If `difficulty` or `agent_counts` lacks a pair per bundle,
-                `squeeze` meets an environment without exactly one agent, `stacked` meets `raw`,
-                `rewards` lacks `scoring`, `seed` lies outside `[0, 2**64)` or `first_index`
-                outside its range. It is a `ValueError`, and its subclass
-                `scenarios.ScenarioError` reports a refused scenario file.
-            MissingFileError: If an asset names no bundle or the library is missing. It is a
-                `FileNotFoundError`.
-            DeviceError: If `device` names a CUDA GPU and PyTorch sees none or fewer, or the CPU
-                lacks AVX2, BMI2 or FMA. It is a `RuntimeError`.
-            LibraryError: If the library fails to create the batch, for example on an `assignment`
-                outside `assets`, or if the library runs another backend. It is a `RuntimeError`.
-                A team with fewer players than agents, and a scenario with `control_all_players`
-                and agents that switch players, which GRF asserts against, raise
-                `ConfigurationError`.
-        """
         device = _automatic(device)
         backend = _backend(device)
         pixel_kind = representation if representation in _PIXEL_REPRESENTATIONS else None
@@ -484,14 +280,11 @@ class Batch:
                     raise ConfigurationError(
                         f'expected render_resolution_{name} from 1 to 16384, found {value}'
                     )
-            # The renderer reads frames back in rows of whole words, as GRF's glReadPixels packs
-            # them for a width that is a multiple of 4.
             if render_resolution_x % 4:
                 raise ConfigurationError(
                     'expected render_resolution_x to be a multiple of 4, found '
                     f'{render_resolution_x}'
                 )
-        # The library holds the seed in 64 bits, where a larger or negative one would wrap.
         if not 0 <= seed < 2**64:
             raise ConfigurationError(f'expected a seed from 0 to 2**64 - 1, found {seed}')
         if environment_count < 1:
@@ -513,15 +306,12 @@ class Batch:
             raise DeviceError(
                 'expected a CUDA GPU for pin_memory=True, found none that PyTorch can use'
             )
-        # A string of nodes stands in for what the system reports, and turns `numa` on.
         numa_nodes = numa if isinstance(numa, str) else None
         numa = bool(numa)
         self.device = backend
-        # A GPU batch stays on its CUDA device, and every call runs there.
         self._torch_device = _placement(device)
         logged = _log.start(backend, self._torch_device, log)
         self._library = _load_library(library, backend)
-        # What the views of the buffers keep alive, without the batch.
         self._native = _Native(self._library, self._torch_device)
         requested = [assets] if isinstance(assets, str) or callable(assets) else list(assets)
         self._requested = requested
@@ -529,13 +319,10 @@ class Batch:
         paths = [path for path, _ in resolved]
         if animations is None:
             animations = os.path.join(_DATA_DIRECTORY, 'animations.bin')
-        # A scenario file becomes a bundle without agents, which the batch reads at its creation,
-        # built with the batch's animation tables.
         for index, path in enumerate(paths):
             if path.endswith('.py'):
                 from .. import scenarios
 
-                # A file builds once and later batches load its bundle from the cache.
                 cached = scenarios._batch_bundle(path, backend, library, animations)
                 if cached is not None:
                     paths[index] = cached
@@ -636,13 +423,11 @@ class Batch:
             numa=int(numa),
             page_aligned=int(pin_memory and backend == 'cpu'),
         )
-        # The functions must outlive the batch, which calls them until it is freed.
         if allocator == 'torch' and backend == 'cuda':
             from .allocator import TorchAllocator
 
             self._native.allocator = TorchAllocator(self._torch_device)
             configuration.allocate, configuration.release = self._native.allocator.pointers()
-        # The query loads the kernels, so the free memory that follows leaves their code out.
         local_memory = _local_memory_bytes(self._library, self._torch_device)
         free_memory = None
         if backend == 'cuda':
@@ -651,7 +436,6 @@ class Batch:
             environment = self._library.cuju_environment_create(ctypes.byref(configuration))
         if not environment:
             message = self._library.cuju_last_error().decode()
-            # The library names the bundle it read; name what the caller passed instead.
             for path, asset in zip(paths, requested, strict=True):
                 message = message.replace(path, repr(asset))
             if self._native.allocator is not None and self._native.allocator.errors:
@@ -663,7 +447,6 @@ class Batch:
                 )
             raise error
         self._native.environment = environment
-        # The creation launched the kernels, and the driver holds their local memory from then on.
         if backend == 'cuda':
             _LOCAL_MEMORY_HELD.add(self._torch_device.index)
         if free_memory is not None:
@@ -703,7 +486,6 @@ class Batch:
             for side, value in enumerate(pair):
                 if value is not None:
                     chosen[bundles == bundle, side] = value
-        # The difficulty that each environment is set to, NaN for the scenario's.
         self._chosen_difficulty = chosen
         if not torch.isnan(chosen).all():
             self._apply_difficulty(chosen)
@@ -738,11 +520,9 @@ class Batch:
                 (environment_count, self.agents, 115 * stack),
                 torch.float32,
             )
-        # The tensors share the buffers, which never move, so they are made once.
         self._cached_outputs = None
         self._score_reward = None
         _log.created(self, requested, library or library_path(backend), logged)
-        # The key of the batch for the operators of `torch.compile`, and the outputs they mutate.
         self._operator_key = None
         self._operator_outputs = None
         self._operator_static = False
@@ -776,15 +556,12 @@ class Batch:
                 self.close()
                 raise
         if os.environ.get('CUJU_BATCH_HOOKS'):
-            # The hooks read states and never write one, so every output stays as it is.
             from .. import _plugins
 
             _plugins.on_batch_created(self)
 
     @property
     def scenario_name(self) -> str:
-        """The scenarios that the batch was created with, as their names without folders or
-        suffixes, joined by commas, such as `5_vs_5_l4_r0` or `academy_corner, my_scenario`."""
         names = []
         for asset in self._requested:
             name = os.path.basename(os.fspath(asset))
@@ -796,49 +573,9 @@ class Batch:
 
     @property
     def observers(self) -> tuple[Any, ...]:
-        """The step observers of the batch, in the order that they are called."""
         return self._observers
 
     def add_observer(self, observer: Any) -> Any:
-        """Calls `observer` after every `reset` and step of the batch, and when the batch closes.
-
-        The batch calls `observer(batch, done, information)`. After `step` and `step_wait`, `done`
-        is the done flags that the step returns, and `information` holds the entries of the
-        dictionary that the step returns, the step's rewards under `reward`, the tensor that the
-        step returns, and the step's actions under `actions`, in a dictionary of its own, so the
-        step's own dictionary stays as it is. The actions are the `[environment_count, agents]`
-        `int32` indices that the step played, as the caller gave them, on the batch's device. They
-        are the caller's own tensor when it was already such a tensor, which the observer reads and
-        leaves as it is, and clones to keep past its call. After `step_async` they are a copy taken
-        when the step started, since the caller may change its tensor while the step runs. After
-        `reset` and `reset_done`, `done` is `None` and `information` maps `reset` to the
-        `[environment_count]` booleans of the environments that started an episode, or to `None`
-        when every environment did. When the batch closes, `done` is `None` and `information`
-        maps `close` to `True`, and the batch drops its observers after that call. Observers run
-        in the order that they were added, after the outputs are written, and they may read the
-        batch, such as its states, but must leave its outputs as they are. An observer that closes
-        the batch during a reset or a step makes that call raise `ClosedError`, since the outputs
-        view the freed buffers.
-
-        A batch dropped without `close` makes no close call. An observer that keeps the batch in an
-        attribute forms a cycle with it, which holds the batch's memory until Python collects the
-        cycle, so an observer that needs the batch between its calls holds it through a `weakref`.
-
-        An observer that raises an `Exception` is removed, with one warning through the logger
-        `cuju`, and the batch goes on. A step or reset captured into a CUDA graph, or run by a
-        function that `torch.compile` compiled, calls no observer, since it runs without Python.
-
-        Args:
-            observer: The callable.
-
-        Returns:
-            The observer, so that a call can add and keep it at once.
-
-        Raises:
-            ArgumentError: If the observer is not callable or was already added. It is a
-                `ValueError`.
-            ClosedError: If the batch is closed or closing. It is a `RuntimeError`.
-        """
         self._handle()
         if self._closing:
             raise ClosedError('the batch is closing')
@@ -850,38 +587,25 @@ class Batch:
         return observer
 
     def remove_observer(self, observer: Any) -> None:
-        """Stops calling an observer that `add_observer` added.
-
-        Once `close` begins the batch drops every observer, so the call then does nothing, as for
-        an observer that removes itself during its close call.
-
-        Raises:
-            ArgumentError: If the open batch has no such observer. It is a `ValueError`.
-        """
         if not self._discard_observer(observer) and not self._closing:
             raise ArgumentError(f'expected an observer of the batch, found {observer!r}')
 
     def _discard_observer(self, observer):
-        """Removes an observer, and returns whether the batch had it."""
         kept = tuple(added for added in self._observers if added is not observer)
         found = len(kept) != len(self._observers)
         self._observers = kept
         return found
 
     def _capturing(self):
-        """Returns whether the batch's stream is capturing a CUDA graph, which runs without Python
-        when it replays, so that a call under capture is not observed."""
         if self.device == 'cpu':
             return False
         with self._on_device():
             return torch.cuda.is_current_stream_capturing()
 
     def _notify(self, done, information):
-        """Calls every observer, and removes one that raises with a warning, sparing the call."""
         if self._capturing():
             return
         for observer in self._observers:
-            # An observer may remove another, which then misses the call.
             if not any(added is observer for added in self._observers):
                 continue
             try:
@@ -889,13 +613,10 @@ class Batch:
             except Exception as error:
                 self._discard_observer(observer)
                 _observer_failed(observer, error)
-        # An observer that closed the batch freed the buffers that the outputs view, so the call
-        # raises rather than return them.
         if self._closing:
             raise ClosedError('an observer closed the batch during the call')
 
     def _output_ranges(self):
-        """Returns the address and the size in bytes of every output buffer of the batch."""
         count, agents = self.environment_count, self.agents
         sizes = {'reward': count * agents * 4, 'done': count, 'score_reward': count * 4}
         if self._observation_shape is not None:
@@ -919,23 +640,11 @@ class Batch:
         ]
 
     def close(self) -> None:
-        """Frees the batch and its buffers at once. A second call does nothing.
-
-        The tensors that the batch returned view those buffers, so none may be used after it, and
-        every later call on the batch raises `ClosedError`, a `RuntimeError`. A batch dropped
-        without `close` frees them once no tensor that it returned remains, and makes no close call
-        to its observers.
-
-        The observers receive their close call in order, and one may remove itself or another
-        during it. A call of `close` from an observer's close call returns at once, and the first
-        call frees the batch once every observer has had its call.
-        """
         if self._closing:
             return
         self._closing = True
         try:
             for observer in self._observers:
-                # An observer may remove another, which then misses the call.
                 if not any(added is observer for added in self._observers):
                     continue
                 try:
@@ -956,30 +665,18 @@ class Batch:
         return self
 
     def __exit__(self, *exception: object) -> None:
-        # `with` frees the batch at the end of its block, an exception included.
         self.close()
 
     def __reduce__(self):
-        # A batch owns device memory and threads, which no pickle can carry to another process.
         raise TypeError(
             'a batch cannot be pickled; create it inside the worker process that uses it'
         )
 
     @property
     def memory_bytes(self) -> int:
-        """The bytes of memory that the batch has requested so far, its tables included.
-
-        It counts device memory on the GPU and host memory on the CPU. The allocators round each
-        request up. The first batch of the process on a GPU also makes the driver reserve the local
-        memory of the kernels, which this count leaves out. A few later calls add a small buffer
-        each, on the GPU the first `reset` with seeds, with a reverse flag or with a host mask,
-        and on the CPU the first `step_async`.
-        """
         return int(self._library.cuju_environment_memory_bytes(self._handle()))
 
     def _out_of_memory(self, message, configuration, free, local):
-        """Returns the message of a device that ran out of memory, with the bytes it was asked
-        for and the bytes that were free before the creation."""
         needed = ctypes.c_ulonglong()
         status = self._library.cuju_memory_estimate(
             ctypes.byref(configuration), ctypes.byref(needed)
@@ -989,27 +686,16 @@ class Batch:
         return f'{message}; the batch needed {requested} and the device had {found} free'
 
     def _handle(self):
-        """Returns the library's handle of the batch, or raises `ClosedError` once it is closed."""
         environment = getattr(getattr(self, '_native', None), 'environment', None)
         if not environment:
             raise ClosedError('the batch is closed')
         return environment
 
     def _check(self, status):
-        """Raises the error of the library if `status` reports a failure."""
         if status != 0:
             raise _from_library(self._library.cuju_last_error().decode())
 
     def _set_render(self, mask=None, render_mode=0, referee_animations=False):
-        """Sets GRF's render mode and referee animations of later resets, for the renderer.
-
-        Args:
-            mask: A sequence of `environment_count` truth values that picks the environments, or
-                `None` for every environment.
-            render_mode: GRF's render mode, stored for the renderer.
-            referee_animations: GRF's `animations` flag of `GameEnv::reset`, which plays every
-                stoppage in full.
-        """
         pointer = None
         if mask is not None:
             values = (ctypes.c_ubyte * self.environment_count)(*(1 if flag else 0 for flag in mask))
@@ -1021,19 +707,6 @@ class Batch:
         )
 
     def _render_states(self, indices):
-        """Returns the RenderState of each environment of `indices`, for the renderer.
-
-        Each environment carries its RenderState from call to call, as GRF's graphics side does,
-        so the renderer calls this after every step it draws.
-
-        Args:
-            indices: A sequence of environment indices.
-
-        Returns:
-            The bytes of the RenderStates, one after another in the layout of
-            `include/cuju/render/render_state.h`, and a list of each environment's count of state
-            saves and loads, after each of which GRF draws the nets afresh.
-        """
         count = len(indices)
         size = self._library.cuju_engine_render_state_size()
         environments = (ctypes.c_int * max(count, 1))(*indices)
@@ -1052,7 +725,6 @@ class Batch:
         return states.raw[: count * size], list(processed)[:count]
 
     def _describe_raw(self):
-        """Returns the name, the type, the shape and the offset of each raw array."""
         fields = []
         element_type, offset = ctypes.c_int(), ctypes.c_ulonglong()
         dimensions = (ctypes.c_int * 2)()
@@ -1075,7 +747,6 @@ class Batch:
         return fields
 
     def _raw(self, name):
-        """Returns the raw arrays of a buffer as tensors that share it."""
         pointer = self._library.cuju_environment_buffer(self._handle(), name.encode())
         return {
             field: _view(pointer + offset, shape, dtype, self._torch_device, self._native)
@@ -1083,13 +754,10 @@ class Batch:
         }
 
     def _buffer(self, name, shape, dtype):
-        """Returns a named output buffer as a tensor that shares it."""
         pointer = self._library.cuju_environment_buffer(self._handle(), name.encode())
         return _view(pointer, shape, dtype, self._torch_device, self._native)
 
     def _outputs(self):
-        """Returns the observation, the reward, the done flags and the final observation."""
-        # The cached tensors view the buffers, which a closed batch has freed.
         self._handle()
         if self._cached_outputs is None:
             reward = self._buffer('reward', (self.environment_count, self.agents), torch.float32)
@@ -1112,8 +780,6 @@ class Batch:
                 reward = reward.squeeze(1)
             self._cached_outputs = observation, reward, done, final
             self._prepare_operators()
-        # The buffers never move, so the compiler's CUDA graphs may write them in place. The
-        # compiler takes seconds to load, so a batch marks them only once something else loaded it.
         if not self._operator_static and 'torch._dynamo' in sys.modules:
             for tensor in self._operator_outputs:
                 torch._dynamo.mark_static_address(tensor)
@@ -1122,11 +788,9 @@ class Batch:
 
     @property
     def torch_device(self) -> torch.device:
-        """The `torch.device` of the buffers of the batch, such as `cuda:0` or `cpu`."""
         return self._torch_device
 
     def _prepare_operators(self):
-        """Registers the batch with the operators of `torch.compile` and lists what they mutate."""
         from . import operators as _operators
 
         if self._score_reward is None:
@@ -1141,7 +805,6 @@ class Batch:
         self._operator_key = _operators.register(self)
 
     def _operator_step(self, actions, outputs):
-        """Runs `cuju::step`, then fills each of `outputs` that copies a tensor of the batch."""
         if self._checks_device_actions:
             self._check_device_actions(actions)
         with self._on_device():
@@ -1155,20 +818,17 @@ class Batch:
         self._copy_operator_outputs(outputs)
 
     def _operator_reset_done(self, outputs):
-        """Runs `cuju::reset_done`, then fills `outputs` as `_operator_step` does."""
         with self._on_device():
             self._check(self._library.cuju_environment_reset_done(self._handle(), self._stream()))
         self._wait_in_debug()
         self._copy_operator_outputs(outputs)
 
     def _copy_operator_outputs(self, outputs):
-        """Copies each output into the tensor of `outputs` in its place, unless it is the same."""
         for given, own in zip(outputs, self._operator_outputs, strict=True):
             if given.data_ptr() != own.data_ptr():
                 given.copy_(own)
 
     def _compiled_step(self, actions):
-        """`step` under `torch.compile`, through the operator `cuju::step`."""
         shape = (self.environment_count, self.agents)
         if not isinstance(actions, torch.Tensor):
             actions = torch.as_tensor(actions)
@@ -1182,7 +842,6 @@ class Batch:
                 f'{tuple(actions.shape)}'
             )
         actions = actions.to(self._torch_device, torch.int32).reshape(shape).contiguous()
-        # Before the first reset this is a graph break, and the step then raises as `step` does.
         if self._operator_outputs is None:
             self._outputs()
         torch.ops.cuju.step(self._operator_key, actions, self._operator_outputs)
@@ -1195,73 +854,29 @@ class Batch:
         )
 
     def _compiled_reset_done(self):
-        """`reset_done` under `torch.compile`, through the operator `cuju::reset_done`."""
         if self._operator_outputs is None:
             self._outputs()
         torch.ops.cuju.reset_done(self._operator_key, self._operator_outputs)
 
     def _stream(self):
-        """Returns PyTorch's current CUDA stream on the batch's device, or `None` on the CPU."""
         if self.device == 'cpu':
             return None
         return torch.cuda.current_stream(self._torch_device).cuda_stream
 
     def _on_device(self):
-        """Returns a context that runs the calls of the library on the batch's CUDA device."""
         if self.device == 'cpu':
             return contextlib.nullcontext()
         return torch.cuda.device(self._torch_device)
 
     def _per_environment(self, values, dtype, name):
-        """Returns `values` as one host value per environment of the batch."""
         return _per_environment(values, dtype, name, self.environment_count, ArgumentError)
 
     def _staged(self, array):
-        """Returns a host input of a GPU batch that the caller may reuse once the call returns.
-
-        The library copies host inputs to the device with `cudaMemcpyAsync`, which reads pinned
-        memory later, when the stream reaches the copy, and stages pageable memory before it
-        returns. So a pinned input becomes a pageable clone, and any other stays as it is.
-        """
         if array is not None and self.device == 'cuda' and array.is_pinned():
             return array.clone()
         return array
 
     def reset(self, seeds: Any = None, reverse: Any = None, mask: Any = None) -> Any:
-        """Starts the next episode of every environment, or of those that `mask` selects.
-
-        Args:
-            seeds: One seed per environment for this episode, as `game_engine_random_seed` in the
-                configuration of GRF, or one seed for every environment. A seed of -1 draws that
-                environment's seed exactly as `None` does, the draws of its first reset included.
-                `None` draws every seed.
-            reverse: One `reverse_team_processing` flag per environment, or one for every
-                environment. `None` follows the seeds, as GRF does. Only the first reset of an
-                environment reads it.
-            mask: `[environment_count]` booleans. Each environment where it is true starts its next
-                episode as GRF's `reset()` does, with its seed draw, and the others keep their
-                episode, outputs and done flags. A mask on the batch's device takes no copy, and
-                the call then waits for nothing, so a CUDA graph can capture it once every
-                environment has had its first reset. `None` resets every environment and waits.
-                Host arguments, pinned or not, may be reused as soon as the call returns.
-
-        Returns:
-            The observation of every agent: `[environment_count, agents, 115]` for `simple115` and
-            `simple115v2`, `[environment_count, agents, height, width, 4]` for `extracted`, or a
-            dictionary of `[environment_count, agents, ...]` tensors for `raw`. A stack multiplies
-            the last axis by 4, and `squeeze` drops the agent axis except for `raw`.
-
-        Raises:
-            TypeError: If `seeds`, `reverse` or `mask` holds floating-point values, which GRF
-                refuses for a seed, 5.0 included.
-            ArgumentError: If `seeds`, `reverse` or `mask` holds neither one value nor one per
-                environment, a seed lies outside `[0, 4294967295]` and is not -1, or a reverse flag
-                is neither 0 nor 1. It is a `ValueError`.
-            LibraryError: If the library fails to reset the batch. It is a `RuntimeError`.
-            UndefinedPathError: If an environment reaches a path that GRF leaves undefined. It is a
-                `RuntimeError`.
-            DeviceError: If the device fails in a `debug` batch. It is a `RuntimeError`.
-        """
         seed_array = None
         if seeds is not None:
             seed_array = _integers(
@@ -1286,7 +901,6 @@ class Batch:
         if mask is not None:
             return self._reset_masked(mask, seed_array, reverse_array)
         if seed_array is not None and bool((seed_array == -1).any()):
-            # Only the masked entry takes seeds that draw.
             return self._reset_masked(None, seed_array, reverse_array, synchronize=True)
         if seed_array is not None:
             seed_array = seed_array.to(torch.int32)
@@ -1306,7 +920,6 @@ class Batch:
         return observation
 
     def _reset_masked(self, mask, seed_array, reverse_array, synchronize=False):
-        """Resets the environments of `mask`, or all for `None`, through the masked entry."""
         mask_array, on_device = None, 0
         if mask is not None:
             if not isinstance(mask, torch.Tensor):
@@ -1344,8 +957,6 @@ class Batch:
         return observation
 
     def _apply_difficulty(self, chosen):
-        """Hands the library the difficulty of each environment, NaN for the scenario's."""
-        # The library takes a negative difficulty for that of the scenario.
         values = torch.nan_to_num(chosen, nan=-1.0).contiguous()
         with self._on_device():
             self._check(
@@ -1353,19 +964,6 @@ class Batch:
             )
 
     def set_difficulty(self, values: Any, mask: Any = None) -> None:
-        """Sets the difficulty that each selected environment plays from its next reset.
-
-        Args:
-            values: A `(left, right)` pair for the selected environments, each from 0 to 1 or
-                `None` for the scenario's, or `[environment_count, 2]` values with NaN for the
-                scenario's.
-            mask: `[environment_count]` booleans that select the environments, or `None` for
-                all. The others keep their difficulty.
-
-        Raises:
-            ConfigurationError: If a value lies outside 0 to 1.
-            ArgumentError: If `values` or `mask` has another shape.
-        """
         count = self.environment_count
         if _is_pair(values):
             table = torch.tensor(
@@ -1394,22 +992,8 @@ class Batch:
         self._library.cuju_environment_difficulty(self._handle(), self.difficulty.data_ptr())
 
     def reset_done(self) -> None:
-        """Starts the next episode of every environment whose episode ended.
-
-        A batch with `auto_reset=False` leaves such environments at their end. The reset reads the
-        done flags in the batch's memory, so on the GPU it does not wait for the device; it writes
-        the new observations and clears the done flags of the environments it resets.
-
-        Raises:
-            LibraryError: If the library fails to run the reset. It is a `RuntimeError`.
-            UndefinedPathError: If an environment reaches a path that GRF leaves undefined. It is a
-                `RuntimeError`.
-            DeviceError: If the device fails in a `debug` batch. It is a `RuntimeError`.
-        """
-        # Under `torch.compile` the call goes through the operator `cuju::reset_done`.
         if _CUSTOM_OPERATORS and torch.compiler.is_compiling():
             return self._compiled_reset_done()
-        # The reset clears the done flags, so the observers receive a copy of them from before.
         ended = self._outputs()[2].bool() if self._observers and not self._capturing() else None
         with self._on_device():
             self._check(self._library.cuju_environment_reset_done(self._handle(), self._stream()))
@@ -1419,20 +1003,9 @@ class Batch:
             self._notify(None, {'reset': ended})
 
     def observation(self) -> Any:
-        """Returns the observation of every agent that the last `reset` or `step` returned."""
         return self._observation_of(self._outputs()[0])
 
     def frame(self) -> torch.Tensor:
-        """Returns GRF's frame of every environment after the last `reset` or `step`.
-
-        Returns:
-            `[environment_count, height, width, 3]` `uint8`, rows from the top, as GRF's observation
-            `frame` holds them.
-
-        Raises:
-            ConfigurationError: If the batch renders nothing, without `pixels`, `pixels_gray` or
-                `render_frames`. It is a `ValueError`.
-        """
         if self._frames is None:
             raise ConfigurationError(
                 "expected a batch that renders, with representation='pixels' or render_frames=True"
@@ -1440,7 +1013,6 @@ class Batch:
         return self._frames.frame.to(self._torch_device)
 
     def _observation_of(self, native, final=False):
-        """The observation that the batch returns: the frames' for pixels, else the library's."""
         frames = self._frames
         if frames is None or frames.kind is None:
             return native
@@ -1449,14 +1021,11 @@ class Batch:
         return observation.squeeze(1) if self.squeeze else observation
 
     def _draw(self):
-        """Draws the renders of the last call, which the frames and pixels then show."""
         if self._frames is not None:
             self._frames.draw(range(self.environment_count))
 
     @property
     def single_observation_space(self) -> Any:
-        """The observation space of one environment, as GRF's with the same options, or `None` for
-        `raw`, which has none in GRF. The spaces need gymnasium or gym."""
         if self._representation == 'raw':
             return None
         spaces, _ = _spaces()
@@ -1472,8 +1041,6 @@ class Batch:
 
     @property
     def single_action_space(self) -> Any:
-        """The action space of one environment, `Discrete` with `squeeze` and `MultiDiscrete` over
-        the agents without, as in GRF for one agent and for several."""
         spaces, _ = _spaces()
         if self.squeeze:
             return spaces.Discrete(self.action_count)
@@ -1481,73 +1048,25 @@ class Batch:
 
     @property
     def observation_space(self) -> Any:
-        """The observation space of the batch, `single_observation_space` for each environment, or
-        `None` for `raw`."""
         single = self.single_observation_space
         return None if single is None else _spaces()[1](single, self.environment_count)
 
     @property
     def action_space(self) -> Any:
-        """The action space of the batch, `single_action_space` for each environment."""
         return _spaces()[1](self.single_action_space, self.environment_count)
 
     def _raw_of(self, name):
-        """Returns the raw tensors of a buffer, as `raw` returns them."""
         if self._raw_fields is None:
             raise ConfigurationError('expected a batch with the raw representation or `with_raw`')
         return self._raw(name)
 
     def raw(self) -> dict[str, torch.Tensor]:
-        """Returns the `raw` representation of the last observation of every agent.
-
-        The tensors view buffers of the batch, which the next call to `reset` or `step` overwrites.
-
-        Raises:
-            ConfigurationError: If the batch writes no raw representation. It is a `ValueError`.
-        """
         return self._raw_of('raw')
 
     def final_raw(self) -> dict[str, torch.Tensor]:
-        """Returns the `raw` representation of the step that ended each episode, as `raw` does.
-
-        Raises:
-            ConfigurationError: If the batch writes no raw representation. It is a `ValueError`.
-        """
         return self._raw_of('final_raw')
 
     def step(self, actions: Any) -> tuple[Any, Any, Any, dict[str, Any]]:
-        """Runs one step of every environment.
-
-        On the GPU the step runs on the current stream of PyTorch and does not wait for the device.
-        Under `torch.compile` it traces as the operator `cuju::step`, so a compiled function that
-        steps the batch needs no graph break, and `mode='reduce-overhead'` may capture it.
-
-        Args:
-            actions: `[environment_count, agents]` indices into the action set. As in GRF, an index
-                from `-action_count` to `-1` counts from the end. A tensor on the batch's device
-                takes no copy. Actions in host memory, pinned or not, may be reused as soon as
-                the call returns, since a GPU batch copies pinned ones first.
-
-        Returns:
-            The observation, the reward `[environment_count, agents]`, the done flags
-            `[environment_count]` and the information, which maps `final_observation` to the
-            observation of the step that ended each episode and `score_reward` to GRF's
-            `info['score_reward']`, the left team's scoring reward, `[environment_count]` `int32`.
-
-        Raises:
-            TypeError: If the actions are not integers.
-            ArgumentError: If the actions are not `[environment_count, agents]`, or
-                `[environment_count]` for one agent, or an action in host memory, or with
-                `check_actions` or `debug` in GPU memory, lies outside `[-action_count,
-                action_count)`, or `[0, action_count)` without `signed_actions`, and then no
-                environment steps. It is a `ValueError` and an `IndexError`.
-            DeviceError: If the device fails in a `debug` batch. It is a `RuntimeError`.
-            UndefinedPathError: If an environment reaches a path that GRF leaves undefined. It is a
-                `RuntimeError`. On the GPU the device traps, which ends the CUDA context of the
-                process, so the next CUDA call reports it and the process must restart.
-            LibraryError: If the library fails to run the step. It is a `RuntimeError`.
-        """
-        # Under `torch.compile` the step goes through the operator `cuju::step`, without a break.
         if _CUSTOM_OPERATORS and torch.compiler.is_compiling():
             if self._frames is not None:
                 raise ConfigurationError('a batch that renders steps outside torch.compile')
@@ -1555,13 +1074,11 @@ class Batch:
         shape = (self.environment_count, self.agents)
         if not isinstance(actions, torch.Tensor):
             actions = torch.as_tensor(actions)
-            # An empty list, the actions of environments without agents, holds no type.
             if actions.numel() == 0:
                 actions = actions.to(torch.int32)
         # GRF: an action must be an integer.
         if actions.is_floating_point() or actions.is_complex():
             raise TypeError(f'expected integer action indices, found {actions.dtype}')
-        # With one agent, `[environment_count]` actions serve as well, as `squeeze` returns them.
         if tuple(actions.shape) != shape and not (
             self.agents == 1 and tuple(actions.shape) == (self.environment_count,)
         ):
@@ -1578,8 +1095,7 @@ class Batch:
             contiguous_actions = self._staged(_host(actions, torch.int32).reshape(shape))
             on_device = int(self.device == 'cpu')
         self._check_unsigned(contiguous_actions)
-        # GRF: an action indexes a Python list, so one outside `[-action_count, action_count)`
-        # raises. The library checks host actions only, since a check on the GPU would wait for it.
+        # GRF: an action indexes a Python list, so one outside the action set raises.
         with self._on_device():
             status = self._library.cuju_environment_step(
                 self._handle(), contiguous_actions.data_ptr(), on_device, self._stream(), 0
@@ -1605,19 +1121,11 @@ class Batch:
         return observation, reward, done, information
 
     def _on_batch_device(self, actions, copy=False):
-        """Returns the actions of a step on the batch's device for the observers, a copy with
-        `copy`, else the tensor itself where it already lies there."""
         if actions.device != self._torch_device:
             return actions.to(self._torch_device)
         return actions.clone() if copy else actions
 
     def _check_unsigned(self, actions):
-        """Raises `ArgumentError` for an action in host memory outside `[0, action_count)`
-        without `signed_actions`.
-
-        The library counts a negative action from the end, so a batch that takes only the
-        actions from 0 refuses the others here, before it steps.
-        """
         if self.signed_actions or actions.device.type != 'cpu':
             return
         count = self.action_count
@@ -1631,13 +1139,9 @@ class Batch:
         )
 
     def _check_device_actions(self, actions):
-        """Raises `ArgumentError` for an action in GPU memory outside the set, before a step."""
         with self._on_device():
-            # The check reads its result on the host, which a CUDA graph capture cannot wait for.
             if torch.cuda.is_current_stream_capturing():
                 return
-            # As the library's check of host actions, the agent slots past an environment's agents
-            # go unchecked.
             if self._agent_mask_on_device is None:
                 self._agent_mask_on_device = self.agent_mask.to(self._torch_device)
             count = self.action_count
@@ -1653,7 +1157,6 @@ class Batch:
             )
 
     def _wait_in_debug(self):
-        """Waits for the device in a `debug` GPU batch, so that a failure raises at its call."""
         if not self.debug or self.device == 'cpu':
             return
         with self._on_device():
@@ -1662,7 +1165,6 @@ class Batch:
             self._check(self._library.cuju_environment_synchronize(self._handle(), self._stream()))
 
     def _environment_index(self, index):
-        """Returns `index` as an integer, or raises `ArgumentError` outside the batch."""
         index = operator.index(index)
         if not 0 <= index < self.environment_count:
             raise ArgumentError(
@@ -1671,7 +1173,6 @@ class Batch:
         return index
 
     def _check_stack(self, stacked):
-        """Raises `StateError` unless `stacked` matches the batch, as GRF pickles its stack."""
         if self.stacked and not stacked:
             raise StateError(
                 'expected stacked=True for the state of a batch that stacks its observations, '
@@ -1681,26 +1182,11 @@ class Batch:
             raise StateError('expected a batch with stacked=True for a stacked state')
 
     def _frame_shape(self):
-        """Returns the shape of one agent's frame of the stack and its type."""
         shape = self._observation_shape[2:]
         dtype = 'uint8' if self._observation_type == torch.uint8 else 'float32'
         return (*shape[:-1], shape[-1] // _frame_stack.FRAMES), dtype
 
     def step_async(self, actions: Any) -> None:
-        """Starts a step of every environment and returns at once. `step_wait` ends the step.
-
-        On the CPU the batch steps in a thread of its own, with a copy of the actions, while the
-        caller goes on, for example to run a policy on the GPU. On the GPU the step runs on the
-        current stream, as `step` does. Until `step_wait` returns, the outputs are not ready, and
-        any other call on the batch waits for the step first.
-
-        Args:
-            actions: As for `step`, and the caller may reuse them at once.
-
-        Raises:
-            TypeError, ArgumentError: As `step` raises them, before the step starts.
-            RuntimeError: If a step is already in flight, or the library fails to start the step.
-        """
         if self._step_in_flight:
             raise RuntimeError('a step is in flight; call step_wait before the next step_async')
         if self._frames is not None:
@@ -1734,9 +1220,6 @@ class Batch:
             raise ArgumentError(self._library.cuju_last_error().decode())
         self._check(status)
         self._wait_in_debug()
-        # The caller may change its actions once this returns, so the observers of `step_wait`
-        # read a copy taken now. Without observers the batch keeps the tensor alone, which costs
-        # nothing.
         self._async_actions = (
             self._on_batch_device(contiguous_actions, copy=True)
             if self._observers
@@ -1745,11 +1228,6 @@ class Batch:
         self._step_in_flight = True
 
     def step_wait(self) -> tuple[Any, Any, Any, dict[str, Any]]:
-        """Waits for the step that `step_async` started and returns what `step` returns.
-
-        Raises:
-            RuntimeError: If no step is in flight, or the step failed as `step` would.
-        """
         if not self._step_in_flight:
             raise RuntimeError('no step is in flight; call step_async first')
         self._step_in_flight = False
@@ -1763,32 +1241,10 @@ class Batch:
         return observation, reward, done, information
 
     def _wait_for_device(self):
-        """Waits for every stream of the device, since state copies bypass PyTorch's streams."""
         if self.device == 'cuda':
             torch.cuda.synchronize(self._torch_device)
 
     def get_state(self, index: int, stacked: bool = False) -> bytes:
-        """Returns the state of one environment in the byte format of GRF.
-
-        The bytes hold the length of a pickle as `int32`, the pickle of the episode logic and the
-        serialized match.
-
-        Args:
-            index: The index of the environment.
-            stacked: Whether the pickle also holds GRF's `FrameStack`, as the state of GRF with
-                `stacked=True` does. It is a `deque` of the last four observations as numpy arrays,
-                each as GRF's wrappers return it, such as `[agents, 115]` or `[115]` for one agent.
-                It needs numpy, and a batch with `stacked=True`.
-
-        Returns:
-            The bytes, which `set_state` here or in GRF reads.
-
-        Raises:
-            ArgumentError: If the index is out of range. It is a `ValueError` and an
-                `IndexError`.
-            StateError: If `stacked` differs from the batch's `stacked`. It is a `ValueError` and a
-                `RuntimeError`.
-        """
         index = self._environment_index(index)
         self._check_stack(stacked)
         state = self._state(index, stacked)
@@ -1797,11 +1253,6 @@ class Batch:
         return state
 
     def _state(self, index, stacked=False):
-        """Returns the state of a valid environment index, with the stack only when `stacked`.
-
-        The renderer reads states through this, so a batch that stacks its observations shows as
-        well, since a match needs no stack.
-        """
         episode = (ctypes.c_int * (3 + _MAXIMUM_AGENTS))()
         size = ctypes.c_ulonglong()
         self._wait_for_device()
@@ -1824,26 +1275,6 @@ class Batch:
         return struct.pack('<i', len(data)) + data + match
 
     def set_state(self, index: int, state: bytes, stacked: bool = False) -> None:
-        """Sets one environment to a state in the byte format of GRF.
-
-        The observation and the sticky actions follow from the state. The reward is 0 and the done
-        flag is clear until the next step.
-
-        Args:
-            index: The index of the environment.
-            state: The bytes that `get_state` of this package or of GRF returned.
-            stacked: Whether the state holds GRF's `FrameStack`, as `get_state(stacked=True)` here
-                or a GRF with `stacked=True` writes it, and its four frames become the observation
-                stack. It needs numpy, and a batch with `stacked=True`.
-
-        Raises:
-            ArgumentError: If the index is out of range. It is a `ValueError` and an
-                `IndexError`.
-            StateError: If the bytes hold no pickle of the episode logic or do not load, the
-                state belongs to another scenario or to other difficulties, `stacked` differs from
-                the batch's, or a stacked state holds no four frames of the batch's observation.
-                It is a `ValueError` and a `RuntimeError`.
-        """
         index = self._environment_index(index)
         self._check_stack(stacked)
         if len(state) < 4 or not 0 < struct.unpack_from('<i', state)[0] <= len(state) - 4:
@@ -1907,27 +1338,6 @@ class Batch:
                 )
 
     def roles(self, index: int) -> dict[str, torch.Tensor]:
-        """Returns the role that each player of one environment plays now.
-
-        A role is GRF's `e_PlayerRole` as a number, from 0 for the goalkeeper to 9 for the centre
-        forward, as the raw observation gives it. When a goalkeeper is sent off, GRF hands the
-        keeper's formation entry, and with it the role of goalkeeper, to the first active player of
-        the team. That hand-over lives in the team data of the environment rather than in its
-        state, so `get_state` leaves it out, and the roles here follow it. A state loaded with
-        `set_state` keeps the hand-over of the environment that loads it, as in GRF.
-
-        Args:
-            index: The index of the environment.
-
-        Returns:
-            `left_team_roles` and `right_team_roles`, each `[players]` `int32` on the CPU with one
-            entry per player of the team, in the order of the raw observation of a left agent, so
-            they equal the raw arrays of the same names without their padding.
-
-        Raises:
-            ArgumentError: If the index is out of range. It is a `ValueError` and an
-                `IndexError`.
-        """
         index = self._environment_index(index)
         left = int(self.left_players[index])
         roles = torch.empty(left + int(self.right_players[index]), dtype=torch.int32)

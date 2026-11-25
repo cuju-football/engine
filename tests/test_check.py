@@ -118,7 +118,6 @@ def test_the_log_measures_the_memory_of_the_batch_gpu(monkeypatch):
         asked.append(device)
         return 1024, 2048
 
-    # A batch on GPU 3, which is not the current device, reads the free memory of GPU 3.
     monkeypatch.setattr(torch.cuda, 'is_available', lambda: True)
     monkeypatch.setattr(torch.cuda, 'mem_get_info', free_memory)
     _, free = log.start('cuda', torch.device('cuda', 3), True)

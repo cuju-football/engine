@@ -69,7 +69,6 @@ def test_gymnasium_interface_plays_the_same_match():
 
 
 def test_episodes_follow_the_seed_rule():
-    # Environment 0 of a batch with seed 5 plays GRF's environment after random.seed(5 * 2**32).
     random.seed(5 * 2**32)
     env = cuju_env.create_environment('academy_run_to_score', representation='simple115v2')
     batch = Batch(
@@ -98,8 +97,7 @@ def test_a_step_before_reset_plays_the_creation_episode():
         '5_vs_5', representation='simple115v2', number_of_left_players_agent_controls=2
     )
     draws = grf_draws(9, 3)
-    # GRF: the creation plays episode 1, the odd form, from the third draw, and the second draw
-    # sets the team order.
+    # GRF: the creation plays episode 1 from the third draw, and the second draw sets the order.
     batch = Batch(
         '5_vs_5_l2_r0', environment_count=1, device='cpu', auto_reset=False, episode_number=1
     )
@@ -161,7 +159,6 @@ def test_raw_observations_have_grf_types():
     assert left['left_team_roles'].dtype == np.int64
     assert left['sticky_actions'].dtype == np.uint8 and left['sticky_actions'].shape == (10,)
     assert isinstance(left['score'], list) and isinstance(left['game_mode'], int)
-    # A right agent sees the match turned by 180 degrees.
     assert np.array_equal(right['ball'][:2], -left['ball'][:2])
     raw = env.batch.raw()
     assert np.array_equal(left['right_team'], raw['right_team'][0, 0, :5].double().numpy())
@@ -214,8 +211,7 @@ def test_dump_options(tmp_path):
         _, _, terminated, info = env.step(12)
         if terminated:
             break
-    # GRF: a dictionary for each dump that the step finished, its path and its kind, and the
-    # name `<logdir>/<kind>_<date>-<time>.dump` with microseconds.
+    # GRF: a dictionary for each finished dump, with its path and kind.
     assert [list(dump) for dump in info['dumps']] == [['dump', 'name']]
     (dump,) = info['dumps']
     assert dump['name'] == 'episode_done' and os.path.isfile(dump['dump'])
@@ -269,8 +265,6 @@ def test_a_stacked_state_with_a_scripted_player_loads(extra):
     assert env._observe().tobytes() == stack.tobytes()
     replayed = [env.step(step % 19)[0] for step in range(10, 20)]
     if extra.startswith('lazy'):
-        # The lazy player keeps nothing between steps, so the match plays again as it did. The
-        # bot keeps its last action, which no state holds, in GRF too.
         assert [frame.tobytes() for frame in replayed] == [frame.tobytes() for frame in later]
     env.close()
 
@@ -334,7 +328,6 @@ def test_gpu_equals_cpu():
 
 
 def test_cuju_env_leaves_gym_to_cuju_gfootball(monkeypatch):
-    # gym gets GRF's own environments under the ids from `cuju.gfootball`, as from `gfootball`.
     def refuse(name):
         raise AssertionError(f'imported {name}')
 

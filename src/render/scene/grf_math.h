@@ -16,12 +16,11 @@
 #include "cuju/vector3.h"
 
 namespace cuju::render::scene {
-
 using cuju::Quaternion;
 using cuju::Vector3;
 
-constexpr float kPi = 3.14159265358979323846f;  // GRF's `pi`
-constexpr float kEpsilon = 0.000001f;           // GRF's EPSILON
+constexpr float kPi = 3.14159265358979323846f;
+constexpr float kEpsilon = 0.000001f;
 
 struct Matrix3 {
     float e[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -35,7 +34,6 @@ struct Matrix3 {
     }
 };
 
-// Quaternion::ConstructMatrix.
 inline Matrix3 RotationMatrix(const Quaternion &q) {
     const float *el = q.elements;
     float xx = el[0] * el[0], xy = el[0] * el[1], xz = el[0] * el[2], xw = el[0] * el[3];
@@ -54,7 +52,6 @@ inline Matrix3 RotationMatrix(const Quaternion &q) {
     return r;
 }
 
-// Vector3::ConstructMatrix on a zero matrix.
 inline Matrix3 ScaleMatrix(const Vector3 &s) {
     Matrix3 r;
     r.e[0] = s.coordinates[0];
@@ -63,7 +60,6 @@ inline Matrix3 ScaleMatrix(const Vector3 &s) {
     return r;
 }
 
-// Quaternion::Set(const Matrix3&).
 inline Quaternion QuaternionFromMatrix(const Matrix3 &m) {
     const float *t = m.e;
     Quaternion q;
@@ -86,7 +82,6 @@ inline Quaternion QuaternionFromMatrix(const Matrix3 &m) {
     return q;
 }
 
-// Quaternion::operator=(const Vector3&): the rotation that looks along `vec`.
 inline Quaternion QuaternionFromDirection(const Vector3 &vec) {
     Vector3 z = vec;
     z.Normalize();
@@ -151,8 +146,6 @@ struct Matrix4 {
             for (int c = 0; c < 4; ++c) m.e[r * 4 + c] = e[c * 4 + r];
         return m;
     }
-    // Construct(position, (1,1,1), rotation) and ConstructInverse, as GRF builds model and view
-    // matrices.
     void Construct(const Vector3 &position, const Vector3 &scale, const Quaternion &rotation) {
         Assign3(RotationMatrix(rotation) * ScaleMatrix(scale));
         SetTranslation(position);
@@ -241,12 +234,11 @@ struct Plane {
 struct Aabb {
     Vector3 min, max;
     void Reset() {
-        const float min_v = 1.17549435e-38f / 100;  // numeric_limits<float>::min() / 100
+        const float min_v = 1.17549435e-38f / 100;
         const float max_v = 3.40282347e+38f / 100;
         min.Set(max_v, max_v, max_v);
         max.Set(min_v, min_v, min_v);
     }
-    // AABB::operator+=.
     void Add(const Aabb &a) {
         for (int i = 0; i < 3; ++i) {
             if (min.coordinates[i] > a.min.coordinates[i])
@@ -265,6 +257,6 @@ struct Aabb {
     bool Intersects(const std::vector<Plane> &planes) const;
 };
 
-}  // namespace cuju::render::scene
+}
 
-#endif  // CUJU_RENDER_SCENE_GRF_MATH_H
+#endif

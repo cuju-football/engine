@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// A batch of environments on any backend. The host keeps the books, the backend does the work.
 #pragma once
 
 #include <algorithm>
@@ -20,20 +19,11 @@
 
 namespace cuju {
 namespace batch {
-
-// A backend owns the buffers and provides `Stream`. `HOST_MEMORY` is true when the caller reads
-// and writes the buffers directly. It provides `Configure`, called first, `Reserve`, `Threads`,
-// `Allocate<T>(count)`, zeroed and at least one value, `Tables()` for `UploadTables`, `ToDevice`,
-// `ToHost`, `Copy` and `Fill`, which wait, `ToDeviceAsync`, `Synchronize(stream)`,
-// `SynchronizeAll()`, and `Reset`, `Step` and `Outputs`, which run `batch_core.h` over the batch.
-// A step and a reset run on the caller's stream. Outputs stay in the buffers until the next call.
 template <class Backend>
 class BackendBatchEnvironment {
 public:
     using Stream = typename Backend::Stream;
 
-    // Throws `std::invalid_argument` for a configuration out of range and `std::runtime_error` for
-    // a file that does not open or parse.
     explicit BackendBatchEnvironment(const BatchEnvironmentConfiguration &configuration)
         : configuration_(configuration) {
         if ((configuration.observation & OBSERVATION_SIMPLE115) &&
@@ -107,8 +97,6 @@ public:
                                             std::to_string(animation.frameCount));
         derived_ = animation::DeriveAll(*store_);
         backend_.Configure(configuration);
-        // Shared animation tables. Each variant uploads its own static data, skeletons and
-        // template.
         auto &tables = backend_.Tables();
         UploadTables(tables, *store_, derived_, bundles_[0].variants[0].skeletons,
                      bundles_[0].variants[0].staticData);
@@ -116,7 +104,6 @@ public:
         std::vector<const simulation::World *> templates;
         int agents = 0, players = 0;
         for (const Assets &bundle : bundles_) {
-            // A bundle without agents plays the built-in AI on both sides.
             if (bundle.leftAgents < 0 || bundle.rightAgents < 0 ||
                 bundle.leftAgents + bundle.rightAgents > MAXIMUM_AGENTS)
                 throw std::runtime_error("expected at most " + std::to_string(MAXIMUM_AGENTS) +
@@ -236,11 +223,9 @@ public:
     BackendBatchEnvironment &operator=(const BackendBatchEnvironment &) = delete;
 
     int EnvironmentCount() const { return buffers_.environmentCount; }
-    // The agent slots of each environment, the most agents of any bundle.
     int Agents() const { return buffers_.agents; }
     int LeftAgents(int environment) const { return hostSlots_[environment].leftAgents; }
     int RightAgents(int environment) const { return hostSlots_[environment].rightAgents; }
-    // The length of each raw team array, that of the largest team of any bundle.
     int Players() const { return players_; }
     int LeftPlayers(int environment) const { return Scenario(environment).leftTeamSize; }
     int RightPlayers(int environment) const { return Scenario(environment).rightTeamSize; }
@@ -248,13 +233,9 @@ public:
     const std::vector<Assets> &Bundles() const { return bundles_; }
     const EnvironmentBuffers &Buffers() const { return buffers_; }
     Backend &Device() { return backend_; }
-    // The CPU threads, the caller included, or 0 on the GPU.
     int Threads() const { return backend_.Threads(); }
-    // The bytes of backend memory that the batch has requested so far, its tables included.
     size_t MemoryBytes() const { return backend_.AllocatedBytes(); }
 
-    // Waits. `seeds` and `reverse` are host arrays, one entry per environment, or null to draw the
-    // seeds and follow them. Only a first reset reads `reverse`, which must be 0 or 1.
     void Reset(const uint32_t *seeds = nullptr, const int32_t *reverse = nullptr,
                Stream stream = Stream()) {
         const int64_t *deviceSeeds = nullptr;
@@ -275,12 +256,6 @@ public:
         unstarted_ = 0;
     }
 
-    // Starts the next episode of each environment whose `mask` entry is nonzero, each as GRF's
-    // `reset()` with its seed draw, and leaves the others untouched. A null `mask` takes every
-    // environment. `mask` is `[environmentCount]`, in backend memory if `maskOnDevice`. `seeds`,
-    // where a negative entry draws, and `reverse` are host arrays as in `Reset`, or null. Runs on
-    // `stream` without waiting, so a CUDA graph can capture it with a device mask and no seeds,
-    // once every environment has started. Until then it reads a device mask back.
     void ResetMasked(const uint8_t *mask, bool maskOnDevice, const int64_t *seeds,
                      const int32_t *reverse, Stream stream = Stream()) {
         const int count = buffers_.environmentCount;
@@ -295,7 +270,6 @@ public:
         if (unstarted_ > 0) {
             std::vector<uint8_t> started(count, 1);
             if (mask && maskOnDevice && !Backend::HOST_MEMORY) {
-                // The caller's stream may still be writing the mask.
                 backend_.Synchronize(stream);
                 backend_.ToHost(started.data(), mask, count);
             } else if (mask) {
@@ -310,8 +284,6 @@ public:
         backend_.Reset(buffers_, variants_, deviceMask, deviceSeeds, deviceReverse, stream);
     }
 
-    // `actions` is `[environmentCount][agents]`, in backend memory if `actionsOnDevice`. Then it
-    // takes no copy, so on the GPU a CUDA graph can capture the call without `synchronize`.
     void Step(const int32_t *actions, bool actionsOnDevice, Stream stream = Stream(),
               bool synchronize = true) {
         CheckStarted();
@@ -326,16 +298,11 @@ public:
         if (synchronize) backend_.Synchronize(stream);
     }
 
-    // Resets the environments whose done flag is set and clears it. It reads the flags in backend
-    // memory, so on the GPU it does not wait for the device.
     void ResetDone(Stream stream = Stream()) {
         CheckStarted();
         backend_.Reset(buffers_, variants_, buffers_.done, nullptr, nullptr, stream);
     }
 
-    // `Step` without the wait. The CPU steps in a thread of the batch, with a copy of `actions`,
-    // while the caller goes on, and every later call waits for it. The GPU steps on `stream` as
-    // `Step` does. Checks the actions before it returns, and `StepWait` throws what the step threw.
     void StepAsync(const int32_t *actions, bool actionsOnDevice, Stream stream = Stream()) {
         if constexpr (Backend::HOST_MEMORY) {
             CheckStarted();
@@ -343,7 +310,6 @@ public:
             const size_t count = (size_t)buffers_.environmentCount * Agents();
             if (!asyncActions_) asyncActions_ = Allocate<int32_t>(count);
             backend_.Copy(asyncActions_, actions, sizeof(int32_t) * count);
-            // The copies outlive the batch's members, which its destruction frees first.
             backend_.Launch([this, buffers = buffers_, variants = variants_,
                              autoReset = configuration_.autoReset, copied = asyncActions_] {
                 backend_.Step(buffers, variants, copied, autoReset, Stream());
@@ -356,9 +322,6 @@ public:
         if constexpr (Backend::HOST_MEMORY) backend_.Wait();
     }
 
-    // Every later reset of each environment whose `mask` entry is nonzero, or of all for a null
-    // `mask`, a host array `[environmentCount]`, plays with these flags. `renderMode` is stored for
-    // the renderer. GRF: `refereeAnimations` is the `animations` flag of `GameEnv::reset`.
     void SetRender(const uint8_t *mask, int renderMode, bool refereeAnimations) {
         const int count = buffers_.environmentCount;
         std::vector<EnvironmentSlot> slots(count);
@@ -371,9 +334,6 @@ public:
         backend_.ToDevice(buffers_.slots, slots.data(), sizeof(EnvironmentSlot) * count);
     }
 
-    // Every later reset writes `difficulty`, a host array `[environmentCount][2]`, left then right,
-    // from 0 to 1, or negative for the scenario's. Above 1 or NaN throws `std::invalid_argument`.
-    // GRF: difficulty scales a team's statistics and, as it falls, slows its AI players' reactions.
     void SetDifficulty(const float *difficulty) {
         const size_t count = (size_t)buffers_.environmentCount * 2;
         for (size_t index = 0; index < count; index++)
@@ -386,9 +346,6 @@ public:
         hostDifficulty_.assign(difficulty, difficulty + count);
     }
 
-    // The difficulty of `side`, 0 left and 1 right, that the episodes of `environment` play, the
-    // one `SetDifficulty` set, else the scenario's. A scenario whose difficulty changes with the
-    // parity of the episode gives the one of the environment's first episode.
     float Difficulty(int environment, int side) const {
         if (!hostDifficulty_.empty() && hostDifficulty_[environment * 2 + side] >= 0.0f)
             return hostDifficulty_[environment * 2 + side];
@@ -399,10 +356,6 @@ public:
         return side == 0 ? scenario.leftTeamDifficulty : scenario.rightTeamDifficulty;
     }
 
-    // Synchronous. Writes the `e_PlayerRole` that each player of `environment` plays, the left
-    // team's then the right team's, each in state order as the observation lists them, and returns
-    // their count. GRF: the formation entry of a goalkeeper sent off passes to a teammate in team
-    // data outside the state, so the role follows that hand-over.
     int Roles(int environment, int32_t *roles) {
         CheckEnvironment(environment);
         const simulation::World &world = buffers_.worlds[environment];
@@ -425,11 +378,6 @@ public:
         return count;
     }
 
-    // Synchronous. Fills `out`, a host array of `count` RenderStates, with the environments of
-    // `indices`, a host array, as GRF's graphics side reads them at a render, and `processed`,
-    // a host array of `count`, with each one's count of saves and loads, which redraw the nets.
-    // Each environment carries its RenderState from call to call and starts it afresh at each
-    // reset, so a call follows every step that GRF renders.
     void RenderStates(const int32_t *indices, int count, render::RenderState *out,
                       uint32_t *processed) {
         const int environments = buffers_.environmentCount;
@@ -458,8 +406,6 @@ public:
         backend_.ToHost(processed, renderProcessed_, sizeof(uint32_t) * count);
     }
 
-    // From the next reset on, records every environment's renders in render mode, at most
-    // `capacity` events a call, for a renderer that draws them in order after each call.
     void EnableRenderEvents(int capacity) {
         if (capacity < 1)
             throw std::invalid_argument("expected a capacity of at least one render event, found " +
@@ -477,8 +423,6 @@ public:
         events.capacity = capacity;
         buffers_.renderEvents = events;
     }
-    // Synchronous. Moves the render events of `environment` since the last move into `out`, room
-    // for `capacity`, and returns their count, or -1 when a call made more than the batch records.
     int RenderEventsOf(int environment, RenderEvent *out, int capacity) {
         CheckEnvironment(environment);
         const RenderEvents &events = buffers_.renderEvents;
@@ -498,7 +442,6 @@ public:
     }
     int RenderEventCapacity() const { return buffers_.renderEvents.capacity; }
 
-    // Synchronous. Also copies out `core` and `slot`.
     std::string GetState(int environment, simulation::EnvironmentCore &core,
                          EnvironmentSlot &slot) {
         CheckEnvironment(environment);
@@ -520,9 +463,6 @@ public:
         return bytes;
     }
 
-    // Synchronous. The state's scenario and the reset's parity pick the variant to continue from.
-    // The reward is 0 and done clear until the next step. `collected` may be null. Bytes of no
-    // state, or of another scenario or difficulty, throw `std::invalid_argument`.
     void SetState(int environment, const std::string &bytes, int previousScoreDifference,
                   int previousGameMode, int previousBallOwnedTeam, const int32_t *collected) {
         CheckEnvironment(environment);
@@ -593,8 +533,6 @@ public:
         // GRF: the referee's flag, fixed at the match's reset, carries over as well.
         backend_.ToHost(&world->refereeAnimations, &buffers_.worlds[environment].refereeAnimations,
                         sizeof(world->refereeAnimations));
-        // So do its render mode, its message caption, its scoreboard, the bodies it hid and its
-        // light, and the load marks every root cache to compute afresh.
         backend_.ToHost(&world->renderMode, &buffers_.worlds[environment].renderMode,
                         sizeof(world->renderMode));
         backend_.ToHost(&world->message, &buffers_.worlds[environment].message,
@@ -624,8 +562,6 @@ public:
         }
     }
 
-    // The host tables of `variant`, `bundle * 4 + reverse * 2 + parity`, valid until the next
-    // call.
     const simulation::SimulationContext &HostContext(int variant) {
         hostContext_ = simulation::SimulationContext{&Variant(variant).staticData, &store_->view,
                                                      derived_.data(),
@@ -646,13 +582,11 @@ private:
         backend_.ToDevice(slot, host, sizeof(T) * count);
         return slot;
     }
-    // As `Scratch`, ordered on `stream`. The host array may go once this returns.
     template <class T>
     const T *AsyncScratch(const T *host, int count, T *&slot, Stream stream) {
         if (Backend::HOST_MEMORY) return host;
         if (!slot) {
             slot = Allocate<T>(count);
-            // The zeroing of a new buffer orders on no stream of the caller's, so it ends first.
             backend_.SynchronizeAll();
         }
         backend_.ToDeviceAsync(slot, host, sizeof(T) * count, stream);
@@ -677,8 +611,6 @@ private:
     const AssetVariant &Variant(int variant) const {
         return bundles_[variant / 4].variants[variant % 4];
     }
-    // The variant without `reverseTeamProcessing`, whose teams come in the order of the
-    // observation.
     const state::ScenarioState &Scenario(int environment) const {
         return Variant(Bundle(environment) * 4).world->serialized.scenario;
     }
@@ -713,8 +645,6 @@ private:
             scenarios.push_back(&variant.world->serialized.scenario);
         return scenarios;
     }
-    // Why `bytes` do not load as a state of `bundle`, another scenario or the field where they
-    // stop holding one.
     std::string LoadFailure(int bundle, const std::string &bytes) const {
         auto environment = std::make_unique<state::EnvironmentStateFull>();
         try {
@@ -741,18 +671,14 @@ private:
         return ": a player, team, gamer, keyboard or animation index lies out of range";
     }
 
-    // Declared first, so it frees its memory after every other member is gone.
     Backend backend_;
     BatchEnvironmentConfiguration configuration_;
     std::vector<Assets> bundles_;
-    // The slots as created, used only for their bundle and agent counts.
     std::vector<EnvironmentSlot> hostSlots_;
-    // `[environmentCount][2]`, negative for the bundle's, or empty when the batch sets none.
     std::vector<float> hostDifficulty_;
     std::unique_ptr<animation::AnimationStore> store_;
     std::vector<animation::AnimationDerived> derived_;
     Variants variants_{};
-    // The RenderStates, made at the first call of `RenderStates`.
     render::RenderState *renderStates_ = nullptr, *renderOut_ = nullptr;
     int32_t *renderEpisodes_ = nullptr, *renderIndices_ = nullptr;
     uint32_t *renderProcessed_ = nullptr;
@@ -763,16 +689,15 @@ private:
     int unstarted_ = 0;
     EnvironmentBuffers buffers_{};
     int32_t *actions_ = nullptr;
-    uint8_t *outputMask_ = nullptr;  // The environment that `SetState` writes.
+    uint8_t *outputMask_ = nullptr;
     int64_t *scratchSeeds_ = nullptr;
     int32_t *scratchReverse_ = nullptr;
-    // `ResetMasked` copies on the caller's stream, so it keeps buffers apart from `Reset`'s.
     uint8_t *maskedMask_ = nullptr;
     int64_t *maskedSeeds_ = nullptr;
     int32_t *maskedReverse_ = nullptr;
-    int32_t *asyncActions_ = nullptr;  // The CPU's copy of the actions of `StepAsync`.
+    int32_t *asyncActions_ = nullptr;
     simulation::SimulationContext hostContext_{};
 };
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

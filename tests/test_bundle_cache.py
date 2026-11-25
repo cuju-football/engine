@@ -83,7 +83,6 @@ def test_a_cached_file_builds_once_and_plays_the_same(tmp_path, cache, builds):
     path = scenario_file(tmp_path)
     expected = play_digest(path, 'cpu', 30, environments=2)
     assert play_digest(path, 'cpu', 30, environments=2) == expected
-    # One build for both batches.
     assert len(builds) == 1
     (cached,) = cache.iterdir()
     scenarios.build_bundle(path, str(tmp_path / 'direct.cjb'))
@@ -96,7 +95,6 @@ def test_a_scenario_file_builds_with_the_batch_animations(tmp_path, cache, monke
     from cuju._batch.assets import _DATA_DIRECTORY
 
     path = scenario_file(tmp_path)
-    # A copy of the shipped tables, which the batch names by a path of its own.
     tables = tmp_path / 'animations.bin'
     tables.write_bytes((Path(_DATA_DIRECTORY) / 'animations.bin').read_bytes())
     seen = []
@@ -108,7 +106,6 @@ def test_a_scenario_file_builds_with_the_batch_animations(tmp_path, cache, monke
 
     monkeypatch.setattr(scenarios, 'build_bundle', spied)
     Batch(path, animations=str(tables), environment_count=1, device='cpu').close()
-    # The bundle and its key in the cache take the tables that the batch plays with.
     assert seen == [str(tables)]
     (cached,) = cache.iterdir()
     found = scenarios.cached_bundle(path, animations=str(tables))
@@ -145,7 +142,6 @@ def test_both_backends_cache_the_same_bytes(tmp_path):
 
 
 def test_a_scenario_too_long_for_10_ticks_warns(tmp_path):
-    # A batch holds 512 seconds of play: 5,119 steps of 10 ticks, or 5,120 steps of 9.
     longest = scenario_file(tmp_path, duration=5119, name='longest')
     with warnings.catch_warnings():
         warnings.simplefilter('error')

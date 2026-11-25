@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-"""The engine functions of the CPU library and their C structures, loaded without PyTorch."""
-
 from __future__ import annotations
 
 import ctypes
@@ -12,15 +10,11 @@ import threading
 from .._library_path import _check_processor, library_path
 from ..errors import LibraryError, MissingFileError
 
-# `CUJU_ENGINE_VERSION` of the C API.
 VERSION = 2
-# The players that GRF's team holds at most.
 TEAM_PLAYERS = 11
 
 
 class Entry(ctypes.Structure):
-    """`cuju_engine_entry`, a formation entry as `ScenarioConfig` stores it."""
-
     _fields_ = [
         ('position', ctypes.c_float * 3),
         ('start_position', ctypes.c_float * 3),
@@ -31,8 +25,6 @@ class Entry(ctypes.Structure):
 
 
 class Scenario(ctypes.Structure):
-    """`cuju_engine_scenario`, every field of GRF's `ScenarioConfig` and its cache."""
-
     _fields_ = [
         ('version', ctypes.c_int),
         ('ball_position', ctypes.c_float * 3),
@@ -64,8 +56,6 @@ class Scenario(ctypes.Structure):
 
 
 class Player(ctypes.Structure):
-    """`cuju_engine_player`, one `PlayerInfo` with the raw vectors of GRF's `Position`."""
-
     _fields_ = [
         ('position', ctypes.c_float * 3),
         ('direction', ctypes.c_float * 3),
@@ -78,8 +68,6 @@ class Player(ctypes.Structure):
 
 
 class Info(ctypes.Structure):
-    """`cuju_engine_info`, GRF's `SharedInfo`."""
-
     _fields_ = [
         ('version', ctypes.c_int),
         ('ball_position', ctypes.c_float * 3),
@@ -106,7 +94,6 @@ _LIBRARY = None
 
 
 def library():
-    """Returns the CPU library with the engine's signatures declared, loaded once."""
     global _LIBRARY
     with _LOCK:
         if _LIBRARY is None:
@@ -189,5 +176,4 @@ def _load():
 
 
 def last_error():
-    """Returns the message of the library's last failure on this thread."""
     return library().cuju_last_error().decode('utf-8', 'replace')

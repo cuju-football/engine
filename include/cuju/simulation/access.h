@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Accessors for the teams, players and ball predictions of a world.
 #pragma once
 
 #include "../possession.h"
@@ -10,9 +9,6 @@
 
 namespace cuju {
 namespace simulation {
-
-// A team has an ID, 0 or 1, and a slot, its place in processing order. `teams[0]` holds the team
-// processed first, whose ID is `World::FirstTeamID`.
 CUJU_FUNCTION inline int TeamSlot(const World &world, int teamID) {
     return teamID == world.FirstTeamID() ? 0 : 1;
 }
@@ -41,7 +37,6 @@ CUJU_FUNCTION inline Vector3 BallPredict(const state::BallSerialized &ball,
     return prediction;
 }
 
-// The `builtin_ai` action disables a controller, so this can be below `humanGamers.count`.
 CUJU_FUNCTION inline int HumanGamerCount(const state::TeamState &team) {
     int count = 0;
     for (int gamer = 0; gamer < team.humanGamers.count; gamer++)
@@ -49,8 +44,6 @@ CUJU_FUNCTION inline int HumanGamerCount(const state::TeamState &team) {
     return count;
 }
 
-// A loaded state lacks both fields. Team 0 is the scenario's left team, and the players of the
-// team processed first come first in state order.
 CUJU_FUNCTION inline void InitializePlayerTeams(World &world) {
     int firstTeamID = world.FirstTeamID();
     int firstTeamSize = firstTeamID == 0 ? world.serialized.scenario.leftTeamSize
@@ -61,5 +54,5 @@ CUJU_FUNCTION inline void InitializePlayerTeams(World &world) {
         world.formationOverride[player] = 0;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

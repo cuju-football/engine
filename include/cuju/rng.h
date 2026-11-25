@@ -12,7 +12,6 @@
 #include "host_device.h"
 
 namespace cuju {
-
 constexpr int RNG_BYTES = 2512;
 
 struct RNGView {
@@ -43,8 +42,7 @@ struct RNGView {
         return value;
     }
 
-    // GRF: the seed normalizes the state as Boost.Random does. The first word keeps only its top
-    // bit from the recurrence, and a state of zeros gets the first word `1 << 31`.
+    // GRF: the seed normalizes the state as Boost.Random does.
     CUJU_HOST_DEVICE_NO_INLINE void Seed(uint32_t value) {
         const int stateSize = 624, shiftSize = 397;
         SetWord(0, value);
@@ -94,7 +92,6 @@ struct RNGView {
         return tempered;
     }
 
-    // Exact: the division by 2^32 is in float. A result that rounds up to `Maximum` draws again.
     CUJU_HOST_DEVICE float Uniform() {
         const float minimum = Minimum(), maximum = Maximum();
         for (;;) {
@@ -112,4 +109,4 @@ CUJU_HOST_DEVICE float RandomInRange(uint8_t *stateBytes, float min, float max) 
     return min + (generator.Uniform() * stretch);
 }
 
-}  // namespace cuju
+}

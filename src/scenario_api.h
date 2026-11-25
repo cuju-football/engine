@@ -1,8 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The C API that builds the asset bundle of a scenario, on the host in both libraries.
-// Include after `environment_api.h`, whose `Fail` and `cuju_last_error` it shares.
 #include <fstream>
 
 #include "cuju/file_path.h"
@@ -14,22 +12,17 @@
 #pragma GCC visibility push(default)
 #endif
 extern "C" {
-
-// `cuju_scenario_build_bundle` refuses a `cuju_scenario_description` of another version.
 #define CUJU_SCENARIO_VERSION 1
 
-// One `AddPlayer` call of a GRF scenario file.
 struct cuju_scenario_player {
-    double x, y;       // The start position, in the coordinates of the environment
-    int role;          // An `e_PlayerRole`, from 0 for the goalkeeper to 9 for the centre forward
-    int lazy;          // Nonzero if the AI leaves the player idle
-    int controllable;  // Nonzero if a human gamer can control the player
+    double x, y;
+    int role;
+    int lazy;
+    int controllable;
 };
 
-// What a scenario file builds for one parity of the episode number, in the fields of GRF's
-// `ScenarioConfig`. A team that the file leaves empty holds the lazy goalkeeper that GRF adds.
 struct cuju_scenario_description {
-    int version;  // `CUJU_SCENARIO_VERSION`
+    int version;
     double ball_x, ball_y;
     const cuju_scenario_player *left_team;
     int left_size;
@@ -45,14 +38,10 @@ struct cuju_scenario_description {
     unsigned int game_engine_random_seed;
 };
 
-// Writes the bundle without agents of a scenario to `out`, from the descriptions of its even and
-// its odd episodes. `name` names the scenario inside the bundle. `animations` is the path of
-// `animations.bin`.
 int cuju_scenario_build_bundle(const cuju_scenario_description *even,
                                const cuju_scenario_description *odd, const char *name,
                                const char *animations, const char *out) {
     try {
-        // Every call computes in the default floating point environment, whatever the caller set.
         cuju::DefaultFloatingPoint floatingPoint;
         const cuju_scenario_description *sources[2] = {even, odd};
         cuju::assets::ScenarioDescription parity[2];
@@ -112,7 +101,7 @@ int cuju_scenario_build_bundle(const cuju_scenario_description *even,
     }
 }
 
-}  // extern "C"
+}
 #if !defined(_MSC_VER)
 #pragma GCC visibility pop
 #endif

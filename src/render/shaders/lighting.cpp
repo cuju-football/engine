@@ -14,9 +14,7 @@
 #include "../sampler.h"
 
 namespace cuju::render::shaders {
-
 namespace {
-
 using lanes::F8;
 using lanes::I8;
 
@@ -25,7 +23,6 @@ constexpr int kShadowTaps = 9;
 
 inline F8 K(std::uint32_t bits) { return lanes::Splat(FromBits(bits)); }
 
-// lp_build_log2 with its special cases: NaN below zero, -inf at zero, +inf at +inf.
 F8 Log2(F8 x) {
     using namespace lanes;
     const I8 b = AsInt(x);
@@ -45,8 +42,6 @@ F8 Log2(F8 x) {
     return Select(Ult(x, Splat(0.0f)), K(0x7FC00000u), r);
 }
 
-// lp_build_exp2: the input clamped to [-126.99999, 128], 2^floor times a polynomial of the
-// fraction.
 F8 Exp2(F8 x) {
     using namespace lanes;
     const F8 v = MaxPs(K(0xC2FDFFFFu), MinPs(Splat(128.0f), x));
@@ -61,20 +56,17 @@ F8 Exp2(F8 x) {
     return Mul(scale, Fma(q_odd, f, q_even));
 }
 
-// GLSL pow: zero for a zero base, else exp2(log2(x) * y).
 F8 Pow(F8 x, F8 y) {
     using namespace lanes;
     return Select(Oeq(x, Splat(0.0f)), Splat(0.0f), Exp2(Mul(Log2(x), y)));
 }
 
-// mat4 * (x, y, z, 1) row r, column-major, ((m0r * x + m4r * y) + m8r * z) + m12r.
 inline F8 Affine(const float *m, int r, F8 x, F8 y, F8 z) {
     using namespace lanes;
     return Add(Add(Add(Mul(Splat(m[r]), x), Mul(Splat(m[4 + r]), y)), Mul(Splat(m[8 + r]), z)),
                Splat(m[12 + r]));
 }
 
-// v * (1 / sqrt(dot(v, v))) with the dot product in reverse component order.
 inline void Normalize(const F8 *v, F8 *out) {
     using namespace lanes;
     const F8 inv =
@@ -89,7 +81,7 @@ inline F8 Dot3(const F8 *a, const F8 *b) {
     return Add(Add(Mul(a[2], b[2]), Mul(a[1], b[1])), Mul(a[0], b[0]));
 }
 
-}  // namespace
+}
 
 LightingProgram::LightingProgram()
     : gl::Program({{"modelMatrix", gl::kMat4, 1},
@@ -112,11 +104,6 @@ LightingProgram::LightingProgram()
                    {"lightRadius", gl::kFloat, 1}},
                   {{"position", 0}}, {}) {}
 
-// gl_Position = projectionMatrix * (viewMatrix * modelMatrix * position): the uniform-only product
-// V * M per call, element (j, r) the column-major ((V0r * Mj0 + V1r * Mj1) + V2r * Mj2) + V3r *
-// Mj3, then that product times the vec4 position and the projection times the result, all separate
-// roundings under FTZ and DAZ. The varyings modelViewMatrix and modelViewPosition have no reader
-// and are dropped by the linker.
 void LightingProgram::RunVertices(const gl::DrawState &state, int count,
                                   const float *const *attribs, float *clip, float *) const {
     using ftz::Add;
@@ -153,10 +140,6 @@ void LightingProgram::RunVertices(const gl::DrawState &state, int count,
     }
 }
 
-// fs158, one half of eight lanes at a time as the JIT code runs it. G-buffer fetches are nearest
-// with clamp to edge, the shadow map is textureProj with a LEQUAL compare. Shader arithmetic is
-// separate fmul and fadd in the IR's operand order, divides are IEEE, pow is the log2 and exp2
-// polynomials. The colour is added to both targets with blend ONE, ONE in IEEE arithmetic.
 void LightingProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     using namespace lanes;
     const gl::DrawState &st = *b.state;
@@ -223,12 +206,12 @@ void LightingProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         Normalize(ns, n);
 
         const F8 ndotl = Dot3(ld, n);
-        const F8 scatter = Pow(Add(Mul(ndotl, half), half), K(0x3FD9999Au));  // 1.7
+        const F8 scatter = Pow(Add(Mul(ndotl, half), half), K(0x3FD9999Au));
         const F8 nd = MaxPs(ndotl, zero);
         const F8 fall = Div(MaxPs(Add(radius, Neg(Sqrt(llen2))), zero), radius);
         const F8 fall2 = Mul(fall, fall);
         const F8 resulting =
-            Add(Mul(nd, K(0x3F19999Au)), Mul(scatter, K(0x3ECCCCCDu)));  // 0.6, 0.4
+            Add(Mul(nd, K(0x3F19999Au)), Mul(scatter, K(0x3ECCCCCDu)));
         const F8 lit = Mul(Mul(resulting, fall2), two);
 
         for (int c = 0; c < 3; ++c) {
@@ -249,10 +232,8 @@ void LightingProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     }
 
     if (has_shadow) {
-        // textureProj of lightViewProjectionMatrix * world plus the Poisson offsets / 1500 and the
-        // depth offset, folded into constants; offsets of zero add nothing.
-        const float c1 = FromBits(0x39AEC33Eu);  // 0.5 / 1500
-        const float c2 = FromBits(0x3A2EC33Eu);  // 1 / 1500
+        const float c1 = FromBits(0x39AEC33Eu);
+        const float c2 = FromBits(0x3A2EC33Eu);
         const float dx[kShadowTaps] = {c1, -c1, c1, -c1, c2, 0.0f, -c2, 0.0f, 0.0f};
         const float dy[kShadowTaps] = {c1, c1, -c1, -c1, 0.0f, c2, 0.0f, -c2, 0.0f};
         const F8 ninth = K(0x3DE38E39u);
@@ -261,7 +242,7 @@ void LightingProgram::ShadeBlock(const gl::FragmentBlock &b) const {
             for (int r = 0; r < 4; ++r) {
                 q[h][r] = Affine(L, r, world[h][0], world[h][1], world[h][2]);
             }
-            q[h][2] = Add(q[h][2], K(0xB951B717u));  // -0.0002
+            q[h][2] = Add(q[h][2], K(0xB951B717u));
             shaded[h] = one;
         }
         float ps[kLanes], pt[kLanes], pr[kLanes], lit[kLanes];
@@ -300,4 +281,4 @@ void LightingProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kLighting, LightingProgram);
 
-}  // namespace cuju::render::shaders
+}

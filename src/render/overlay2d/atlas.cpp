@@ -17,9 +17,7 @@
 #include "cuju/file_path.h"
 
 namespace cuju::render::overlay2d {
-
 namespace {
-
 const char kMagic[8] = {'C', 'U', 'J', 'G', 'L', 'Y', 'F', '1'};
 
 class Reader {
@@ -48,7 +46,7 @@ inline std::uint64_t PairKey(std::uint32_t a, std::uint32_t b) {
     return (static_cast<std::uint64_t>(a) << 32) | b;
 }
 
-}  // namespace
+}
 
 bool GlyphAtlas::Load(const std::uint8_t *data, std::size_t size, std::string *error) {
     auto fail = [&](const char *what) {
@@ -259,4 +257,4 @@ Surface GlyphAtlas::RenderBlended(int font, std::string_view utf8, std::uint8_t 
     return s;
 }
 
-}  // namespace cuju::render::overlay2d
+}

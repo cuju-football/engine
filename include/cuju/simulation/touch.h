@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The touches of a humanoid. A touch vector is the momentum of the ball after it, in m/s.
-// Exact: the results depend on the number and the order of the RNG draws.
 #pragma once
 
 #include <stdexcept>
@@ -17,7 +15,6 @@
 
 namespace cuju {
 namespace simulation {
-
 CUJU_FUNCTION inline bool ControllerFloatVelocity(World &world, int player, float &velocity) {
     if (ExternalControllerActive(world, player)) {
         velocity = HumanGetFloatVelocity(world, player);
@@ -27,8 +24,6 @@ CUJU_FUNCTION inline bool ControllerFloatVelocity(World &world, int player, floa
     return true;
 }
 
-// Three errors of a touch from 0 to 1. `ballMovementFactor` is the share of the incoming ball
-// movement that the touch keeps.
 CUJU_FUNCTION_NO_INLINE inline void GetDifficultyFactors(World &world,
                                                          const SimulationContext &context,
                                                          int player, const Vector3 &positionOffset,
@@ -50,7 +45,6 @@ CUJU_FUNCTION_NO_INLINE inline void GetDifficultyFactors(World &world,
                          BallPredict(ball, 0).Get2D())
                             .GetLength(),
                         0.7f, 1.3f);
-    // Exact: the square is one multiplication.
     float fartherAwayPenalty = normalizedDistance * normalizedDistance * 2.0f;
 
     distanceFactor += positionOffsetPenalty * 2.0f;
@@ -396,5 +390,5 @@ CUJU_FUNCTION_NO_INLINE inline Vector3 GetBestPossibleTouch(World &world,
     return resultTouch;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

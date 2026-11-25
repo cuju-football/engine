@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The host-only cursor that loads or saves a state as the raw little-endian bytes of its fields.
 #pragma once
 
 #include "../host_device.h"
@@ -15,8 +14,6 @@
 
 namespace cuju {
 namespace state {
-
-// One primitive field of a save, in the order of GRF's schema.
 struct SchemaEntry {
     int position;
     int size;
@@ -24,8 +21,6 @@ struct SchemaEntry {
     const char *field;
 };
 
-// A field of the world, `path` as in `match.players[3].base.isActive`, `offset` in memory from
-// `Archive::layoutBase`, `position` in the saved state.
 struct LayoutEntry {
     std::string path;
     size_t offset;
@@ -43,7 +38,6 @@ enum PointerKind {
     POINTER_KINDS
 };
 
-// A loaded pointer field, which the codec validates against its collection.
 struct LoadedPointer {
     const int32_t *value;
     PointerKind kind;
@@ -51,8 +45,6 @@ struct LoadedPointer {
     int position;
 };
 
-// A save may also record the layout of the world. `Enter` and `Leave` give each field its path,
-// and with `layoutStorage` every list visits its whole storage.
 class Archive {
 public:
     static Archive Loader(const std::string &data) { return Archive(true, data); }
@@ -64,14 +56,11 @@ public:
     bool AtEnd() const { return offset == buffer.size(); }
 
     std::vector<SchemaEntry> *schema = nullptr;
-    // The path of the next field, for the schema and the error messages.
     const char *field = "";
     std::vector<LayoutEntry> *layout = nullptr;
     const void *layoutBase = nullptr;
-    // Covers every list's whole storage and the members a save skips, else only the saved fields.
     bool layoutStorage = true;
 
-    // Each call needs a matching `Leave`. Both do nothing without a layout.
     void Enter(const std::string &name, int index = -1) {
         if (!layout) return;
         scopes.push_back(index < 0 ? name : name + "[" + std::to_string(index) + "]");
@@ -144,14 +133,12 @@ private:
     Archive &archive_;
 };
 
-// Reads the enclosing function's `Archive` parameter, which must be named `archive`.
 #define PROCESS_STRUCT(x)                               \
     do {                                                \
         ::cuju::state::ArchiveScope scope(archive, #x); \
         (x).Process(archive);                           \
     } while (0)
 
-// A state stores it as an `int32_t` count, then the elements.
 template <class T, int Capacity>
 struct FixedVector {
     static constexpr int CAPACITY = Capacity;
@@ -172,7 +159,6 @@ struct FixedVector {
 template <class T, int Capacity, class ElementFunction>
 void ProcessVector(Archive &archive, FixedVector<T, Capacity> &container,
                    ElementFunction &&processElement) {
-    // The name is a string literal of the caller, so it outlives the call.
     const char *const name = archive.field;
     {
         ArchiveScope scope(archive, name);
@@ -185,11 +171,10 @@ void ProcessVector(Archive &archive, FixedVector<T, Capacity> &container,
                                  " n=" + std::to_string(container.count));
     for (int index = 0; index < archive.Count(container.count, Capacity); index++) {
         ArchiveScope scope(archive, name, index);
-        // The layout names the element by its scope. The schema keeps the name of the list.
         archive.field = archive.layout ? "" : name;
         processElement(container.elements[index]);
     }
 }
 
-}  // namespace state
-}  // namespace cuju
+}
+}

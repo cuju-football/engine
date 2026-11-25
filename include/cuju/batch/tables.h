@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Copies the read-only tables of the simulation into a backend and rebases their pointers there.
 #pragma once
 
 #include <vector>
@@ -12,15 +11,12 @@
 
 namespace cuju {
 namespace batch {
-
 template <class T>
 Span<T> Rebase(Span<T> span, const T *hostBase, const T *base) {
     if (span.count == 0 || span.pointer == nullptr) return Span<T>{nullptr, span.count};
     return Span<T>{base + (span.pointer - hostBase), span.count};
 }
 
-// Fills `tables.context` with backend copies. `Tables::Upload(data, count)` and `Upload(vector)`
-// return a copy that `tables` owns, or null for no values. `HOST` adds the host-only tables.
 template <class Tables>
 void UploadTables(Tables &tables, const animation::AnimationStore &store,
                   const std::vector<animation::AnimationDerived> &derived,
@@ -72,7 +68,6 @@ void UploadTables(Tables &tables, const animation::AnimationStore &store,
     for (size_t index = 0; index < crude.size(); index++)
         crude[index] = simulation::MakeCrudeRecord(store.animations[index], derived[index]);
     tables.context.crude = tables.Upload(crude);
-    // `smoothedMovement` parallels `store.positions` entry for entry.
     std::vector<simulation::SelectionRecord> selection(store.animations.size());
     std::vector<Vector3> smoothedMovement(store.positions.size());
     for (size_t index = 0; index < selection.size(); index++) {
@@ -89,5 +84,5 @@ void UploadTables(Tables &tables, const animation::AnimationStore &store,
     tables.context.requestCommand = nullptr;
 }
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

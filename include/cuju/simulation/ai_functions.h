@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The side of a team, its active players, and the directions of passes and shots.
-// Exact: the pass and shot math depends on its operation order and the double steps it keeps.
 #pragma once
 
 #include <vector>
@@ -13,8 +11,6 @@
 
 namespace cuju {
 namespace simulation {
-
-// The sign of the x coordinate of the goal that the team defends, in the current frame.
 CUJU_FUNCTION inline int TeamDynamicSide(const World &world, int teamID) {
     return world.flags.teamSide[teamID];
 }
@@ -124,7 +120,6 @@ CUJU_FUNCTION_NO_INLINE inline void GetPass(const World &world, int player, int 
         adaptedAutoPowerBias = 1.0;
     } else {
         float maximumAllowedDistance = 50.0f;
-        // Exact: the subtraction from 1 runs in double and rounds to float once.
         float distanceFactor =
             (float)(1.0 - (double)libm::powf(
                               clamp((autoTargetRelative - manualTargetRelative).GetLength() /
@@ -186,5 +181,5 @@ CUJU_FUNCTION_NO_INLINE inline Vector3 GetShotDirection(const World &world, int 
         .GetNormalized(inputDirection);
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

@@ -21,13 +21,10 @@
 #define CUJU_PIXELS_RESTRICT __restrict
 
 namespace cuju::render {
-
 namespace {
-
 constexpr int kLanes = AreaResize::kLanes;
 constexpr int kCoefScale = 1 << 11;
 
-// OpenCV's cvFloor and cvCeil of a double.
 int Floor(double x) {
     int i = static_cast<int>(x);
     return i - (static_cast<double>(i) > x);
@@ -38,8 +35,6 @@ int Ceil(double x) {
     return i + (static_cast<double>(i) < x);
 }
 
-// cvRound of a float: the sum with 1.5 times 2^23 rounds half to even any value of magnitude
-// below 2^22.
 float RoundEven(float x) {
     const float magic = 12582912.0f;
     return (x + magic) - magic;
@@ -63,7 +58,6 @@ struct Term {
     float weight;
 };
 
-// computeResizeAreaTab.
 std::vector<Term> AreaTerms(int source_size, int destination_size, double scale) {
     std::vector<Term> terms;
     for (int d = 0; d < destination_size; ++d) {
@@ -87,7 +81,6 @@ std::vector<Term> AreaTerms(int source_size, int destination_size, double scale)
     return terms;
 }
 
-// out[e * kLanes + l] = rows[l][e].
 void TransposeRows(const std::uint8_t *const *rows, int n, std::uint8_t *out) {
     int e = 0;
 #if CUJU_PIXELS_AVX2
@@ -121,8 +114,6 @@ void TransposeRows(const std::uint8_t *const *rows, int n, std::uint8_t *out) {
     }
 }
 
-// The column terms of every destination value over kLanes rows at once, one row per lane:
-// out[d * kLanes + l] is OpenCV's buf[d] of row l. CN is the channel count, or 0 for any.
 template <int CN>
 void Columns(const std::uint8_t *lanes, int dst_width, int channels, const int *first,
              const int *source, const float *weight, float *out) {
@@ -174,7 +165,6 @@ void Columns(const std::uint8_t *lanes, int dst_width, int channels, const int *
 #endif
 }
 
-// column[i] = the sum of rows[y][i] over `count` rows `step` bytes apart.
 void SumRows(const std::uint8_t *rows, std::ptrdiff_t step, int count, int n,
              std::int32_t *CUJU_PIXELS_RESTRICT column) {
     for (int i = 0; i < n; ++i) {
@@ -188,7 +178,6 @@ void SumRows(const std::uint8_t *rows, std::ptrdiff_t step, int count, int n,
     }
 }
 
-// sums[dx * cn + c] = the sum of `block` consecutive pixels of column from pixel dx * block.
 template <int CN>
 void SumColumns(const std::int32_t *column, int dst_width, int block, int channels,
                 std::int32_t *CUJU_PIXELS_RESTRICT sums) {
@@ -222,7 +211,6 @@ void SumColumns(const std::int32_t *column, int dst_width, int block, int channe
     }
 }
 
-// rows[l][d] = group[d * kLanes + l] for the first `count` lanes.
 void UntransposeRows(const float *group, int width, int count, float *const *rows) {
     int d = 0;
 #if CUJU_PIXELS_AVX2
@@ -258,13 +246,11 @@ void UntransposeRows(const float *group, int width, int count, float *const *row
     }
 }
 
-}  // namespace
+}
 
 void RgbToGray(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
                std::ptrdiff_t dst_step, int width, int height) {
 #if CUJU_PIXELS_AVX2
-    // Four pixels per 128-bit lane: R, G pairs and B, 1 pairs of 16-bit values, which pmaddwd
-    // weights by 9798, 19235 and 3735, 16384.
     const __m256i rg_mask =
         _mm256_setr_epi8(0, -1, 1, -1, 3, -1, 4, -1, 6, -1, 7, -1, 9, -1, 10, -1, 0, -1, 1, -1, 3,
                          -1, 4, -1, 6, -1, 7, -1, 9, -1, 10, -1);
@@ -289,7 +275,6 @@ void RgbToGray(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *d
         std::uint8_t *d = dst + y * dst_step;
         int x = 0;
 #if CUJU_PIXELS_AVX2
-        // Sixteen pixels read 52 bytes from 3 * x.
         for (; 3 * x + 52 <= 3 * width; x += 16) {
             __m256i lo = eight(s + 3 * x), hi = eight(s + 3 * x + 24);
             __m256i w = _mm256_permute4x64_epi64(_mm256_packus_epi32(lo, hi), 0xD8);
@@ -363,7 +348,6 @@ AreaResize::AreaResize(int src_width, int src_height, int dst_width, int dst_hei
         return;
     }
 
-    // Upscaling along either axis: OpenCV's bilinear emulation of area weights, in fixed point.
     mode_ = Mode::kLinear;
     x_offset_.assign(width, 0);
     x_alpha_.assign(static_cast<std::size_t>(width) * 2, 0);
@@ -436,8 +420,6 @@ void AreaResize::RunGray(const std::uint8_t *src, std::ptrdiff_t src_step, std::
     Run(gray_.data(), src_width_, dst, dst_step);
 }
 
-// resizeAreaFast_: the integer sum of each block times the float reciprocal of its area, or for
-// 2x2 blocks the rounded shift of ResizeAreaFastVec.
 void AreaResize::RunBlock(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
                           std::ptrdiff_t dst_step) {
     const int cn = channels_, bx = block_x_, by = block_y_;
@@ -470,9 +452,6 @@ void AreaResize::RunBlock(const std::uint8_t *src, std::ptrdiff_t src_step, std:
     }
 }
 
-// ResizeArea_Invoker. Each source row goes through the column terms, then each destination row
-// sums its weighted source rows, all in OpenCV's order. The column terms run on groups of kLanes
-// source rows, one row per lane.
 void AreaResize::RunArea(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
                          std::ptrdiff_t dst_step, bool from_rgb) {
     const int cn = channels_;
@@ -528,8 +507,6 @@ void AreaResize::RunArea(const std::uint8_t *src, std::ptrdiff_t src_step, std::
     }
 }
 
-// resizeGeneric_ with HResizeLinear and VResizeLinear for 8-bit values. The vertical step rounds
-// as VResizeLinearVec_32s8u does, which OpenCV 5.0 applies to every value of a row.
 void AreaResize::RunLinear(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
                            std::ptrdiff_t dst_step) {
     const int cn = channels_;
@@ -561,4 +538,4 @@ void AreaResize::RunLinear(const std::uint8_t *src, std::ptrdiff_t src_step, std
     }
 }
 
-}  // namespace cuju::render
+}

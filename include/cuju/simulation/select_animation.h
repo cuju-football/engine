@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Animation selection of players and officials, a crude filter followed by stable sorts.
-// Exact: every expression keeps GRF's operation order, precision and conversions.
 #pragma once
 
 #include "../warp.h"
@@ -23,13 +21,10 @@
 
 namespace cuju {
 namespace simulation {
-
 using animation::AnimationDerived;
 
 enum SelectResult { SELECT_FALSE = 0, SELECT_TRUE = 1, UNSUPPORTED = 2 };
 
-// A selection holds its candidates and positions inside the command queue of its humanoid, and the
-// candidates of an idle movement inside those.
 static_assert(WorkAreaRound(sizeof(CommandQueue)) + WorkAreaRound(sizeof(PositionList)) +
                       2 * WorkAreaRound(sizeof(AnimationList)) <=
                   WORK_AREA_BYTES,
@@ -73,7 +68,6 @@ CUJU_FUNCTION inline float Curve(float source, float bias = 1.0f) {
     return (libm::sinf((source - 0.5f) * PI) * 0.5f + 0.5f) * bias + source * (1.0f - bias);
 }
 
-// A zero vector gives NaN components.
 CUJU_FUNCTION inline void NormalizeTo(Vector3 &vector, float length) {
     float factor = length / sqrtf(vector.GetDotProduct(vector));
     vector.coordinates[0] *= factor;
@@ -95,7 +89,6 @@ CUJU_FUNCTION inline Vector3 GetNormalizedMaximum(const Vector3 &vector, float l
     if (vector.GetLength() > length) return vector.GetNormalized(0) * length;
     return vector;
 }
-// Exact: float differences whose squares add up in double.
 CUJU_FUNCTION inline float GetDistance(const Vector3 &first, const Vector3 &second) {
     float differenceX = first.coordinates[0] - second.coordinates[0],
           differenceY = first.coordinates[1] - second.coordinates[1],
@@ -107,15 +100,12 @@ CUJU_FUNCTION inline float GetDistance(const Vector3 &first, const Vector3 &seco
     return length;
 }
 
-// Exact: each angle is a double product with `PI`, rounded to float.
 CUJU_FUNCTION inline void PreferredDirectionAngles(float out[11]) {
     const double piFractions[11] = {0,    0.111, -0.111, 0.25,  -0.25, 0.5,
                                     -0.5, 0.75,  -0.75,  0.999, -0.999};
     for (int direction = 0; direction < 11; direction++)
         out[direction] = (float)(piFractions[direction] * (double)PI);
 }
-// `Vector3(0, -1, 0).GetRotated2D(angle)` for each `PreferredDirectionAngles` entry, but the
-// vector itself for the angle 0.
 CUJU_TABLE_DEFINITION(Vector3, PREFERRED_DIRECTION_VECTORS,
                       {
                           {0x0p+0f, -0x1p+0f, 0x0p+0f},
@@ -209,8 +199,6 @@ CUJU_FUNCTION inline Vector3 GetFrontOfFootOffsetRelative(float velocity, float 
 }
 
 #if CUJU_WARP_LANES
-// Speed: a stable rank sort in registers, 4 keys per lane, fits every list of the simulation.
-// `mine` holds the keys of this lane's elements, one per chunk of 32.
 constexpr int RANK_SORT_CAPACITY = 128;
 template <class Key>
 CUJU_FUNCTION_NO_INLINE inline void RankSortByLaneKeys(AnimationList &dataSet, const Key *mine,
@@ -248,16 +236,12 @@ CUJU_FUNCTION_NO_INLINE inline void RankSortByLaneKeys(AnimationList &dataSet, c
 #endif
 
 #if defined(__CUDA_ARCH__)
-// A binary insertion sort that computes each key again where it needs it, so it takes no room for
-// the keys and every thread needs little local memory. The device uses it for the lists that the
-// rank sort leaves, longer than any that a match has made.
 template <class KeyFunction>
 CUJU_FUNCTION_NO_INLINE inline void InsertionSortByKey(AnimationList &dataSet, KeyFunction key) {
     const int count = dataSet.count;
     for (int element = 1; element < count; element++) {
         const int16_t value = dataSet[element];
         const auto valueKey = key(value);
-        // After every equal key, so equal keys keep their order.
         int low = 0, high = element;
         while (low < high) {
             const int middle = (low + high) / 2;
@@ -272,8 +256,6 @@ CUJU_FUNCTION_NO_INLINE inline void InsertionSortByKey(AnimationList &dataSet, K
     }
 }
 #else
-// Speed: 16-bit positions take a third of the stack of key-animation pairs, and every sort of
-// one key type shares this instance.
 template <class Key>
 CUJU_FUNCTION_NO_INLINE inline void MergeSortByKeys(AnimationList &dataSet, const Key *keys) {
     static_assert(MAXIMUM_ANIMATIONS <= 32767, "int16 positions");
@@ -304,8 +286,6 @@ CUJU_FUNCTION_NO_INLINE inline void MergeSortByKeys(AnimationList &dataSet, cons
 }
 #endif
 
-// Exact: each sort compares a pure key of one animation with `<`, a strict weak order without
-// NaN, so any stable sort of the keys gives GRF's order.
 template <class Key, class KeyFunction>
 CUJU_FUNCTION_NO_INLINE inline void StableSortByKey(AnimationList &dataSet, KeyFunction key) {
     CUJU_PROFILE_SCOPE(STABLE_SORT);
@@ -343,8 +323,6 @@ CUJU_FUNCTION inline bool ChainKeysPrecede(const double *left, const double *rig
     return false;
 }
 
-// Exact: the first after a chain of stable sorts has the smallest keys in order, the last sort's
-// key first, and the earliest position on a full tie. Doubles hold float and int keys exactly.
 template <class KeyFunction>
 CUJU_FUNCTION_NO_INLINE inline int FirstOfSortChain(const AnimationList &dataSet, int keyCount,
                                                     KeyFunction keys) {
@@ -391,12 +369,10 @@ CUJU_FUNCTION_NO_INLINE inline int FirstOfSortChain(const AnimationList &dataSet
     return dataSet[best];
 }
 
-// Directions are relative to the humanoid's angle, and velocities are categories.
 struct CrudeSelectionQuery {
     bool byFunctionType = false;
     int functionType = 0;
     bool heedForcedFoot = false;
-    // The default 1 is `e_Foot_Right`.
     int strongFoot = 1;
     bool bySide = false;
     Vector3 lookAtVectorRelative;
@@ -503,8 +479,6 @@ CUJU_FUNCTION inline CrudeRecord MakeCrudeRecord(const animation::Animation &sou
     return record;
 }
 
-// Exact: per-animation terms that the host computes with the selection's own expressions, so
-// each equals its inline computation bit for bit on either backend.
 struct SelectionRecord {
     float incomingBodyAngles[6];
     float bodyTurnAngle;
@@ -512,10 +486,7 @@ struct SelectionRecord {
     Vector3 preferredOutgoingDirection, preferredOutgoingMovement;
     float preferredOutgoingAngle;
     float lookAngle;
-    // Index of frame 0 in `SimulationContext::smoothedMovement`, -1 below two positions.
     int32_t smoothedMovementOffset;
-    // Exact: the angle of a finite vector to itself is +0, as `x * y - y * x` is +0 and the dot
-    // product is not negative.
     bool ballDirectionFinite;
 };
 
@@ -547,8 +518,6 @@ inline SelectionRecord MakeSelectionRecord(const animation::Animation &animation
     return record;
 }
 
-// `fabsf(ALLOWED_BODY_DIRECTIONS[i].GetAngle2D(ALLOWED_BODY_DIRECTIONS[j])) / PI` at `6 * i + j`.
-// Speed: the lanes read different entries, so the table lives in global memory on the device.
 CUJU_TABLE_DEFINITION_GLOBAL(float, ALLOWED_BODY_DIRECTION_KEYS,
                              {0x0p+0f,   0x1p-2f, 0x1p-2f, 0x1.8p-1f, 0x1.8p-1f, 0x0p+0f,
                               0x1p-2f,   0x0p+0f, 0x1p-1f, 0x1p-1f,   0x1p+0f,   0x1p+0f,
@@ -556,16 +525,13 @@ CUJU_TABLE_DEFINITION_GLOBAL(float, ALLOWED_BODY_DIRECTION_KEYS,
                               0x1.8p-1f, 0x1p-1f, 0x1p+0f, 0x0p+0f,   0x1p-1f,   0x0p+0f,
                               0x1.8p-1f, 0x1p+0f, 0x1p-1f, 0x1p-1f,   0x0p+0f,   0x0p+0f,
                               0x0p+0f,   0x1p+0f, 0x0p+0f, 0x0p+0f,   0x0p+0f,   0x0p+0f});
-// `fabsf(FixAngle(ALLOWED_BODY_DIRECTIONS[i].GetAngle2D()))` for each entry `i`.
 CUJU_TABLE_DEFINITION(float, ALLOWED_BODY_DIRECTION_FIX_ABSOLUTE,
                       {0x0p+0f, 0x1.921fbp-1f, 0x1.921fcp-1f, 0x1.2d97c8p+1f, 0x1.2d97c8p+1f,
                        0x1.921fb6p+0f});
-// `fabsf(Vector3(0, -1, 0).GetAngle2D(ALLOWED_BODY_DIRECTIONS[i]))` for each entry `i`.
 CUJU_TABLE_DEFINITION(float, ALLOWED_BODY_DIRECTION_IDLE_ABSOLUTE,
                       {0x0p+0f, 0x1.921fb6p-1f, 0x1.921fb6p-1f, 0x1.2d97c8p+1f, 0x1.2d97c8p+1f,
                        0x0p+0f});
 
-// Bit for bit. A state loaded from elsewhere may hold a body direction outside the table.
 CUJU_FUNCTION inline int AllowedBodyDirectionEntry(const Vector3 &direction) {
     for (int entry = 0; entry < 6; entry++) {
         const Vector3 &allowed = CUJU_TABLE(ALLOWED_BODY_DIRECTIONS)[entry];
@@ -622,8 +588,6 @@ CUJU_FUNCTION_NO_INLINE inline void CrudeSelection(const SelectContext &selectCo
             fabsf(Vector3(0, -1, 0).GetAngle2D(query.incomingBodyDirection));
     }
     const SelectionRecord *selection = selectContext.context.selection;
-    // Exact: the index holds what `CheckFunctionType` accepts, in increasing order, so the result
-    // equals a scan of every animation.
     const int16_t *list = nullptr;
     int candidateCount = (int)collection.animations.size();
     if (query.byFunctionType && selectContext.context.functionTypeAnimations &&
@@ -638,7 +602,6 @@ CUJU_FUNCTION_NO_INLINE inline void CrudeSelection(const SelectContext &selectCo
     queryInBallAdapted.coordinates[2] *= 0.4f;
     if (queryInBallNonzero) queryInBallAdapted.Normalize();
     const Vector3 queryOutBall2D = query.outgoingBallDirection.Get2D();
-    // Exact: the null test of `GetNormalized`, which returns its fallback for a null vector.
     const bool queryOutBallNull = fabsf(queryOutBall2D.coordinates[0]) < 0.000001f &&
                                   fabsf(queryOutBall2D.coordinates[1]) < 0.000001f &&
                                   fabsf(queryOutBall2D.coordinates[2]) < 0.000001f;
@@ -794,7 +757,6 @@ CUJU_FUNCTION_NO_INLINE inline void CrudeSelection(const SelectContext &selectCo
 
         if (query.byOutgoingBallDirection) {
             const Vector3 &animationBallDirection = derivedFields.crudeBallDirectionNormalized;
-            // Exact: a null query compares the direction with itself, +0 when it is finite.
             float ballDirectionAngle =
                 queryOutBallNull && selection && selection[animationIndex].ballDirectionFinite
                     ? 0.0f
@@ -828,7 +790,6 @@ CUJU_FUNCTION_NO_INLINE inline void CrudeSelection(const SelectContext &selectCo
         return true;
     };
     if (candidateCount > AnimationList::capacity()) InlineVectorOverflow();
-    // Speed: the count stays in a register until the end.
     int count = 0;
     WarpFilterEmit(
         0, candidateCount, [&](int candidate) { return pass(list ? list[candidate] : candidate); },
@@ -836,7 +797,6 @@ CUJU_FUNCTION_NO_INLINE inline void CrudeSelection(const SelectContext &selectCo
     dataSet.count = count;
 }
 
-// Directions are relative to the humanoid's angle, and velocities are categories.
 struct Predicates {
     int desiredFoot = 0;
     int incomingVelocity = 0;
@@ -844,13 +804,11 @@ struct Predicates {
     float corneringBias = 0.0f;
     int desiredVelocity = 0;
     Vector3 relativeIncomingBodyDirection;
-    // World coordinates, unlike the directions.
     Vector3 lookAt;
     Vector3 relativeDesiredTripDirection;
     float idle = 0.0f;
 };
 
-// Exact: `std::max(left, right)`, so `left` wins a tie or a NaN.
 CUJU_FUNCTION inline float StandardMaximum(float left, float right) {
     return (left < right) ? right : left;
 }
@@ -925,7 +883,6 @@ CUJU_FUNCTION inline float KeyIncomingVelocity(const animation::Animation &anima
     return rating;
 }
 
-// Exact: the search compares `GetLength`, and the result is `GetDistance`.
 CUJU_FUNCTION_NO_INLINE inline float ClosestOpponentDistance(const World &world, int player) {
     const int opponentTeam = 1 - world.playerTeamID[player];
     const Vector3 position = Humanoid(world, player).spatialState.position;
@@ -945,8 +902,6 @@ CUJU_FUNCTION_NO_INLINE inline float ClosestOpponentDistance(const World &world,
     return GetDistance(Humanoid(world, closest).spatialState.position, position);
 }
 
-// `Curve(NormalizedClamp(10 * frame, 0, 160), 1)` for frames 0 to 16, which covers every frame.
-// Speed: the lanes read different frames, so the table lives in global memory on the device.
 CUJU_TABLE_DEFINITION_GLOBAL(float, PHYSICS_CURVED_TIME,
                              {0x0p+0f, 0x1.3ad04p-7f, 0x1.37ca2p-5f, 0x1.59267p-4f, 0x1.2bec34p-3f,
                               0x1.c71898p-3f, 0x1.3c10eap-2f, 0x1.9c1d2p-2f, 0x1p-1f, 0x1.31f17p-1f,
@@ -968,7 +923,6 @@ struct Selector {
         uint32_t angleBits = 0;
         libm::SineCosine turn{};
     };
-    // Speed: cached within a selection and keyed by the bits of the angle.
     TurnCache forwardTurn, backTurn;
 
     CUJU_FUNCTION Selector(World &inputWorld, const SimulationContext &inputContext, int inputIndex)
@@ -990,7 +944,6 @@ struct Selector {
     CUJU_FUNCTION libm::SineCosine Turn(float angle) {
         return CachedTurn(forwardTurn, angle, angle);
     }
-    // Exact: computed apart from `Turn`, since `libm::cosf` is not shown to be even.
     CUJU_FUNCTION libm::SineCosine BackTurn(float angle) {
         return CachedTurn(backTurn, angle, -angle);
     }
@@ -1012,7 +965,6 @@ struct Selector {
                                      predicates.desiredVelocity, predicates.corneringBias);
     }
     CUJU_FUNCTION void SortByIncomingBodyDirection(AnimationList &dataSet) {
-        // A single animation computes no key.
         const int queryIndex = dataSet.count > 1 ? IncomingBodyDirectionQuery() : 0;
         Sort<float>(dataSet, [&](int animationIndex) {
             return IncomingBodyDirectionKey(animationIndex, queryIndex);
@@ -1172,7 +1124,6 @@ struct Selector {
         AnimationList &dataSet, const state::PlayerCommand &command, bool strict,
         float allowedAngle = 0) {
         CUJU_PROFILE_SCOPE(KEEP_BEST_BODY_DIRECTION);
-        // A single animation computes no key.
         Vector3 relativeLookAt;
         if (dataSet.count > 1) relativeLookAt = RelativeLookAt();
         Sort<float>(dataSet, [&](int animationIndex) {
@@ -1206,14 +1157,13 @@ struct Selector {
         AnimationList &dataSet = *dataSetLocal;
         CrudeSelection(SC(), query, dataSet);
         // GRF: sorts by idle level, incoming body direction, incoming velocity, direction and then
-        // movement similarity. Each key reads only its own predicates, so all are set first.
+        // movement similarity.
         predicates.idle = 1;
         predicates.relativeIncomingBodyDirection = Vector3(0, -1, 0);
         predicates.incomingVelocity = e_Velocity_Idle;
         SetMovementSimilarityPredicate(Vector3(0, -1, 0), e_Velocity_Idle);
         predicates.lookAt = GetSpatialState().position +
                             RotatedBy(Vector3(0, -10, 0), Turn(GetSpatialState().angle.value()));
-        // A single animation computes no key.
         Vector3 relativeLookAt;
         int queryIndex = 0;
         if (dataSet.count > 1) {
@@ -1381,8 +1331,6 @@ struct Selector {
         const int effectiveFrameCount = animationData.frameCount - 1;
         const float adaptedDesiredVelocity = adaptedDesiredMovement.GetLength();
         const Vector3 adaptedDesiredDirection = adaptedDesiredMovement.GetNormalized(0);
-        // Speed: the part of a frame free of the carried movement, which the lanes compute 32
-        // ahead.
         struct PhysicsFrame {
             Vector3 animationMovement, adaptedAnimationMovement, normalizedMaximum,
                 normalizedAdapted;
@@ -1408,8 +1356,6 @@ struct Selector {
                     lagExponent = StandardMaximum(lagExponent, 0.7f);
                 lagExponent = lagExponent * physicsBias + 1.0f * (1.0f - physicsBias);
             }
-            // Exact: without physics bias the exponent is 1, and `powf(x, 1)` is `x` for non-NaN
-            // `x`.
             float adaptedFrameBias =
                 lagExponent == 1.0f ? frameBias : libm::powf(frameBias, lagExponent);
             Vector3 animationMovement = RotatedBy(
@@ -1439,8 +1385,6 @@ struct Selector {
             frameData.normalizedMaximum = GetNormalizedMaximum(adaptedAnimationMovement, 1.0f);
             frameData.normalizedAdapted = adaptedAnimationMovement.GetNormalized(0);
             const float rotation = cappedToDesiredAngle * frameBias;
-            // Exact: below 2^-12 the sine is the argument and the cosine 1, by the test of `sinf`
-            // and `cosf`. An animation without a turn rotates by zero every frame.
             if (libm::MagnitudeTopBits(rotation) < libm::MagnitudeTopBits(0x1p-12f)) {
                 frameData.rotationCosine = 1.0f;
                 frameData.rotationSine = rotation;
@@ -1500,14 +1444,10 @@ struct Selector {
                         maximumAngleFactor *= (0.7f + 0.3f * statisticAgility);
                         if (!touch) maximumAngleFactor *= 1.5f;
                         float maximumAngle = maximumAngleFactor * PI;
-                        // Exact: GRF raises this to the power 1, and `powf(x, 1)` is `x` for
-                        // non-NaN `x`.
                         float velocityFactor =
                             NormalizedClamp(temporalMovementLength, 0, SPRINT_VELOCITY);
                         maximumAngle = maximumAngle / (velocityFactor + 0.01f);
 #if !defined(__CUDA_ARCH__)
-                        // Exact: for dot > 0, |GetAngle2D| = atanf(|cross / dot|) <= |cross / dot|,
-                        // so a ratio within the limit keeps the movement without the arc tangent.
                         const float cross =
                             predictedDirection.coordinates[0] * temporalDirection.coordinates[1] -
                             predictedDirection.coordinates[1] * temporalDirection.coordinates[0];
@@ -1516,7 +1456,6 @@ struct Selector {
                             predictedDirection.coordinates[1] * temporalDirection.coordinates[1];
                         const bool withinLimit = dot > 0.0f && fabsf(cross / dot) <= maximumAngle;
 #else
-              // Speed: on the GPU the test costs more than the arc tangent it saves.
               const bool withinLimit = false;
 #endif
                         if (!withinLimit) {
@@ -1604,7 +1543,6 @@ struct Selector {
                     penaltyBreakFactor = 0.0f;
                 currentPosition += temporalMovement * (1.0f - penaltyBreakFactor) *
                                    (timeStepMilliseconds / 1000.0f);
-                // The count is set once after the loop.
                 positionsResult[frame] = currentPosition;
             });
         positionsResult.resize(animationData.frameCount > 0 ? animationData.frameCount : 0);
@@ -1878,9 +1816,6 @@ struct Selector {
     };
 
 #if !defined(__CUDA_ARCH__)
-    // Speed: false only if no touch can pass the height test of `GetBestCheatableAnimationID`. The
-    // bound takes the closest ball height from 6 ms before to 3 ms after the touch, the smallest
-    // height factor, no doubling and the base subtraction, with a margin far above rounding.
     bool AnyTouchWithinHeight(const animation::Animation &animationData, int functionType,
                               float playerHeight) {
         const state::MatchState &match = world.serialized.match;
@@ -1897,8 +1832,6 @@ struct Selector {
             const float movementZ =
                 (MentalBallPredictionAt(frame * 10 + 10).coordinates[2] - ballZ) * 100.0f;
             const float relativeZ = ballZ - positionZ;
-            // The margin covers rounding only below these magnitudes. Beyond them the full test
-            // runs.
             if (!(fabsf(relativeZ) < 100.0f && fabsf(movementZ) < 1000.0f)) return true;
             const float before = relativeZ - movementZ * 0.006f,
                         after = relativeZ + movementZ * 0.003f;
@@ -1952,8 +1885,6 @@ struct Selector {
             const animation::Animation &animationData = A(animationIndex);
             bool isBase = animationData.baseAnimation;
 #if !defined(__CUDA_ARCH__)
-            // Exact: an animation whose every touch misses in height is never chosen, but the last
-            // one tried still runs for its path.
             if (entry + 1 < sortedDataSet.size() && !retainerIsMe &&
                 !AnyTouchWithinHeight(animationData, functionType, playerHeight))
                 continue;
@@ -1969,8 +1900,8 @@ struct Selector {
             const int totalTouches = (int)animationData.football.size();
             int defaultTouchFrame = GetDerived(animationIndex).touchFrame;
 
-            // GRF: tries the middle touch first, then the earlier ones backwards and the later
-            // ones forwards.
+            // GRF: tries the middle touch first, then the earlier ones backwards and the later ones
+            // forwards.
             const int middleTouch = totalTouches / 2;
             for (int touchNumber = 0; touchNumber < totalTouches && !found; touchNumber++) {
                 const int touchID =
@@ -2003,8 +1934,6 @@ struct Selector {
                 Vector3 bodyPosition = touchPosition;
                 bodyPosition.coordinates[2] = 0;
 
-                // Exact: the yaw `z` comes from the interpolation table, which holds the same
-                // `GetAngles`.
                 Quaternion animationBodyRotation;
                 Vector3 animationBodyPosition;
                 float z;
@@ -2285,7 +2214,7 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::BaseSelectAnimation(
     }
 
     // GRF: sorts by idle level, foot, incoming body direction, incoming velocity, trip direction
-    // and then base animations. Each key reads only its own predicates, so all are set first.
+    // and then base animations.
     predicates.idle = 1;
     predicates.desiredFoot = spatialState.foot;
     predicates.relativeIncomingBodyDirection = spatialState.relativeBodyDirectionVector;
@@ -2301,7 +2230,6 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::BaseSelectAnimation(
     if (dataSet.empty()) return SELECT_FALSE;
     const bool byTripDirection = command.useDesiredTripDirection,
                byBase = functionType != e_FunctionType_Movement;
-    // A single animation computes no key.
     const int queryIndex = dataSet.count > 1 ? IncomingBodyDirectionQuery() : 0;
     const int firstAnimation = FirstOfSortChain(
         dataSet, 4 + byTripDirection + byBase, [&](int animationIndex, double *keys) {
@@ -2644,8 +2572,6 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::SelectAnimation(
         }
     }
 
-    // Speed: a movement, trip or special needs only the first of the chain below, which
-    // `FirstOfSortChain` finds without sorting. Each key reads only its own predicates.
     const bool firstOnly = functionType == e_FunctionType_Movement ||
                            functionType == e_FunctionType_Trip ||
                            functionType == e_FunctionType_Special;
@@ -2710,7 +2636,6 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::SelectAnimation(
             BackTurn(angle));
 
     if (firstOnly) {
-        // The keys of the chain above, the last sort first. A single animation computes no key.
         const bool byTripDirection = command.useDesiredTripDirection,
                    byBase = functionType != e_FunctionType_Movement;
         const int queryIndex = dataSet.count > 1 ? IncomingBodyDirectionQuery() : 0;
@@ -2824,5 +2749,5 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::SelectAnimation(
     return SELECT_TRUE;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

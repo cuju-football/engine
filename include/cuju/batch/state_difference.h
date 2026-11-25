@@ -1,8 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Names the fields in which the scenario of a state differs from an environment's, for the errors
-// of `SetState`, on the host only.
 #pragma once
 
 #include <algorithm>
@@ -16,7 +14,6 @@
 
 namespace cuju {
 namespace batch {
-
 // GRF's name of a field of the scenario, so `leftTeam[3].startPosition` is
 // `left_team[3].start_position`.
 inline std::string GrfFieldName(const std::string &path) {
@@ -32,7 +29,6 @@ inline std::string GrfFieldName(const std::string &path) {
     return name;
 }
 
-// A field's value in `bytes`, as GRF's Python prints it.
 inline std::string FieldValue(const state::LayoutEntry &field, const std::string &bytes) {
     const char *data = bytes.data() + field.position;
     const std::string type = field.type;
@@ -51,7 +47,6 @@ inline std::string FieldValue(const state::LayoutEntry &field, const std::string
         memcpy(&value, data, 4);
         snprintf(text, sizeof(text), "%u", value);
     } else if (field.size == 4) {
-        // An integer or an enumeration, such as a role.
         int32_t value;
         memcpy(&value, data, 4);
         snprintf(text, sizeof(text), "%d", value);
@@ -66,8 +61,6 @@ inline std::string FieldValue(const state::LayoutEntry &field, const std::string
     return text;
 }
 
-// The saved fields of a scenario without the per-episode seed and the batch-set difficulties, as
-// `SaveScenario` compares them, and their bytes.
 inline std::vector<state::LayoutEntry> ScenarioFields(state::ScenarioState scenario,
                                                       std::string &bytes) {
     scenario.gameEngineRandomSeed = 0;
@@ -83,8 +76,6 @@ inline std::vector<state::LayoutEntry> ScenarioFields(state::ScenarioState scena
     return fields;
 }
 
-// The fields in which `loaded` differs from the closest of `expected`, at most three of them, or
-// an empty string if one of them is the same.
 inline std::string ScenarioDifference(const state::ScenarioState &loaded,
                                       const std::vector<const state::ScenarioState *> &expected) {
     std::string loadedBytes;
@@ -99,7 +90,6 @@ inline std::string ScenarioDifference(const state::ScenarioState &loaded,
         size_t count = 0, index = 0;
         for (; index < fields.size() && index < loadedFields.size(); index++) {
             const state::LayoutEntry &mine = loadedFields[index], &theirs = fields[index];
-            // Teams of other sizes shift every later field, which the team sizes already name.
             if (mine.path != theirs.path || mine.size != theirs.size) break;
             if (memcmp(loadedBytes.data() + mine.position, bytes.data() + theirs.position,
                        mine.size) == 0)
@@ -124,5 +114,5 @@ inline std::string ScenarioDifference(const state::ScenarioState &loaded,
     return closest;
 }
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

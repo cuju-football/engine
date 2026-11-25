@@ -2,12 +2,10 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// Loads and saves the match and the whole state, in GRF's field order.
 #include "cuju/state/environment_state.h"
 
 namespace cuju {
 namespace state {
-
 static void ProcessMatch(Archive &archive, MatchState &match, int freeControllerCount) {
     PROCESS_FIELD(match.firstTeam, TYPE_INTEGER);
     PROCESS_FIELD(match.secondTeam, TYPE_INTEGER);
@@ -99,5 +97,5 @@ void ProcessEnvironmentState(Archive &archive, EnvironmentStateFull &environment
     ProcessMatch(archive, environment.match, freeControllerCount);
 }
 
-}  // namespace state
-}  // namespace cuju
+}
+}

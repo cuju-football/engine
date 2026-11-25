@@ -1,11 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks cuju-gfootball, which imports cuju's port under GRF's names, each in a new interpreter.
-
-The interpreters read `cuju_gfootball.pth` from `packages/cuju-gfootball/src` with `site`, as an
-install does. GRF's own tests run here unchanged, rebuilt from the port by undoing its rewrites and
-checked against the digests of GRF's files. `CUJU_GRF_SUITE_FULL=1` plays them at full length.
-"""
+"""Checks cuju-gfootball, which imports cuju's port under GRF's names, each in a new interpreter."""
 
 import hashlib
 import importlib.util
@@ -28,7 +23,6 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT = os.path.join(ROOT, 'packages', 'cuju-gfootball')
 SOURCE = os.path.join(PROJECT, 'src')
 PACKAGE = os.path.join(os.path.dirname(cuju.__file__), 'gfootball')
-# The folder that holds `cuju`, for the interpreters that the tests start.
 HOME = os.path.dirname(os.path.dirname(os.path.abspath(cuju.__file__)))
 SCENARIO = 'academy_empty_goal_close'
 
@@ -39,7 +33,6 @@ if not os.path.isdir(SOURCE):
 
 
 def _run(code, *, alias=True, path=(), check=True, timeout=600, arguments=(), temporary=None):
-    """Runs `code` in a new interpreter, with the alias read from the source tree where `alias`."""
     prelude = f'import site\nsite.addsitedir({SOURCE!r})\n' if alias else ''
     environment = dict(os.environ)
     inherited = [entry for entry in [os.environ.get('PYTHONPATH')] if entry]
@@ -61,12 +54,10 @@ def _run(code, *, alias=True, path=(), check=True, timeout=600, arguments=(), te
 
 
 def _json(code, **options):
-    """Returns the JSON value that `code` prints on its last line."""
     return json.loads(_run(code, **options).stdout.strip().splitlines()[-1])
 
 
 def _installed():
-    """Returns whether cuju-gfootball is installed where the interpreters run."""
     return _json(
         'import importlib.util, json; print(json.dumps(bool('
         "importlib.util.find_spec('cuju_gfootball'))))",
@@ -161,11 +152,8 @@ def test_a_port_module_loaded_first_is_renamed_on_activation():
 
 
 def _site_packages():
-    """Returns the folders of this interpreter's path, which `-S` would leave out in part."""
     return [entry for entry in sys.path if entry and os.path.isdir(entry)]
 
-
-# Dumps both ways.
 
 _NAMES = """
     import json, pickle
@@ -194,7 +182,6 @@ def _needs_torch():
 
 
 def _write_dump(tmp_path, module):
-    """Writes a dump of a few steps through `module`'s `create_environment` and returns its path."""
     code = f"""
         import glob, json
         import {module} as football
@@ -212,7 +199,6 @@ def _write_dump(tmp_path, module):
 
 
 def test_dumps_through_the_alias_name_grf_and_open_in_every_reader(tmp_path):
-    # cuju's own readers and writers of dumps run on PyTorch.
     _needs_torch()
     path = _write_dump(tmp_path, 'gfootball.env')
     found = _json(
@@ -232,9 +218,7 @@ def test_dumps_through_the_alias_name_grf_and_open_in_every_reader(tmp_path):
 
 
 def test_dumps_that_name_grf_open_in_the_port_through_the_alias(tmp_path):
-    # cuju's own readers and writers of dumps run on PyTorch.
     _needs_torch()
-    # cuju.env writes the names of GRF's own dumps, which GRF's readers in the port then load.
     path = _write_dump(tmp_path, 'cuju.env')
     code = textwrap.dedent(_NAMES) + textwrap.dedent(f"""
         from cuju.gfootball.env import script_helpers
@@ -252,10 +236,6 @@ def test_dumps_that_name_grf_open_in_the_port_through_the_alias(tmp_path):
     if not _installed():
         result = _run(code, alias=False, check=False)
         assert "No module named 'gfootball'" in result.stderr
-
-
-# Kaggle's football environment reaches into GRF's trace for its dumps and videos at the end of an
-# episode, and these are its calls.
 
 
 @pytest.mark.parametrize('video', [False, True], ids=['dump', 'video'])
@@ -417,13 +397,9 @@ def test_gym_makes_the_ids_of_grf():
     assert made[1] == [115]
     found_version = tuple(int(part) for part in re.findall(r'\d+', version)[:2])
     if not vendored and found_version in ((0, 22), (0, 23)):
-        # Gym 0.22 and 0.23 refuse the form `module:id`, for GRF's own package as well.
         assert made[0] == 'Error'
     else:
         assert made[0] == [72, 96, 4]
-
-
-# The refusal beside an install of GRF.
 
 
 def _grf_package(folder):
@@ -486,7 +462,6 @@ def test_the_alias_stays_out_beside_the_distribution_of_grf(tmp_path):
 
 
 def test_the_alias_stays_out_beside_an_editable_grf(tmp_path):
-    # An editable install finds its packages through a finder of its own on `sys.meta_path`.
     folder = _grf_package(tmp_path)
     found = _json(f"""
         import importlib.machinery, json, sys, warnings
@@ -518,9 +493,6 @@ def test_the_command_says_why(tmp_path):
     )
     assert inactive.returncode == 1
     assert 'cuju-gfootball is inactive' in inactive.stdout
-
-
-# The wheel.
 
 
 @pytest.fixture(scope='module')
@@ -604,7 +576,6 @@ def test_install_activates_and_uninstall_leaves_nothing(wheel, tmp_path):
         text=True,
         check=True,
     ).stdout.strip()
-    # The new environment reads cuju and its dependencies from this one.
     with open(os.path.join(site_packages, '_outer.pth'), 'w') as handle:
         handle.write('\n'.join([HOME, *_site_packages()]) + '\n')
 
@@ -658,8 +629,6 @@ def test_release_checks_the_wheel_and_publishes_it_after_the_engine():
     assert 'needs: [gfootball, publish]' in publish
     assert 'environment: pypi-gfootball' in publish and 'id-token: write' in publish
     assert 'name: cuju-gfootball' in publish
-    # The engine's files fail loudly where PyPI holds them, and the alias uploads only where PyPI
-    # lacks its version.
     assert 'skip-existing' not in workflow
     check = publish.index('https://pypi.org/pypi/cuju-gfootball/$version/json')
     assert publish.index('packages/cuju-gfootball/src/cuju_gfootball/_version.py') < check

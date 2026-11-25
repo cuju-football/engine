@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// A list of fixed capacity stored inline. Outgrowing the capacity stops as `CUJU_FATAL` does.
 #pragma once
 
 #include <cstddef>
@@ -12,22 +11,16 @@
 #include "host_device.h"
 
 namespace cuju {
-
 #if defined(__CUDACC__)
 CUJU_HOST_DEVICE void InlineVectorOverflow() {
 #elif defined(_MSC_VER)
-// Speed: the throw stays out of line. MSVC has no `cold`.
 __declspec(noinline) inline void InlineVectorOverflow() {
 #else
-// Speed: the throw stays cold and out of line, away from the hot code of every list.
 __attribute__((cold, noinline)) inline void InlineVectorOverflow() {
 #endif
     CUJU_FATAL("a fixed-capacity list outgrows its capacity");
 }
 
-// Speed: the elements stay unconstructed, as `T` is trivially copyable. Zero-filling the capacity
-// of every list, as a default `Vector3` does, was a large share of the device's local memory
-// traffic.
 template <class T, int Capacity>
 struct InlineVector {
     int32_t count = 0;
@@ -45,7 +38,6 @@ struct InlineVector {
         elements[count++] = value;
     }
     CUJU_HOST_DEVICE void pop_back() { count--; }
-    // Added elements stay unwritten.
     CUJU_HOST_DEVICE void resize(size_t newCount) {
         if ((int)newCount > Capacity) InlineVectorOverflow();
         count = (int32_t)newCount;
@@ -78,7 +70,6 @@ struct InlineVector {
         count++;
         return position;
     }
-    // Speed: only the live elements move. A whole copy would move the full capacity.
     CUJU_HOST_DEVICE void swap(InlineVector &other) {
         const int liveCount = count > other.count ? count : other.count;
         for (int index = 0; index < liveCount; index++) {
@@ -92,4 +83,4 @@ struct InlineVector {
     }
 };
 
-}  // namespace cuju
+}

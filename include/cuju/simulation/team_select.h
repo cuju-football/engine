@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The players that the gamers of a team control, and the reset of their controllers.
 #pragma once
 
 #include "../profiling.h"
@@ -12,9 +11,6 @@
 
 namespace cuju {
 namespace simulation {
-
-// A global gamer index puts the gamers of the team processed first before the others. A player's
-// `externalController` holds the global index of its gamer, or -1 without one.
 CUJU_FUNCTION inline int GlobalGamerIndex(const World &world, int teamID, int gamer) {
     return TeamSlot(world, teamID) == 0 ? gamer
                                         : world.serialized.match.teams[0].humanGamers.count + gamer;
@@ -26,8 +22,6 @@ CUJU_FUNCTION inline state::HumanGamerState &GamerByGlobal(World &world, int gam
                : world.serialized.match.teams[1].humanGamers[gamerIndex - firstTeamGamerCount];
 }
 
-// The state keeps a second copy of each keyboard, in global order, which must stay equal to the
-// first. GRF: the sprint, dribble and defensive buttons are sticky and keep their state.
 CUJU_FUNCTION inline void KeyboardReleaseNonStickyButtons(World &world, int gamerIndex) {
     for (state::KeyboardState *keyboard :
          {&GamerByGlobal(world, gamerIndex).controller.keyboard,
@@ -57,12 +51,10 @@ CUJU_FUNCTION inline void HumanControllerSetPlayer(World &world, int gamerIndex,
     state::HumanControllerState &controller = GamerByGlobal(world, gamerIndex).controller;
     controller.base.lastSwitchTimeMilliseconds = world.serialized.match.actualTimeMilliseconds;
     controller.base.player = player;
-    // The state stores a team as its slot, not its ID.
     controller.base.team = TeamSlot(world, world.playerTeamID[player]);
     controller.base.opponentTeam = TeamSlot(world, 1 - world.playerTeamID[player]);
 }
 
-// `gamerIndex` is global, or -1 to hand the player back to the AI.
 CUJU_FUNCTION inline void SetExternalController(World &world, int player, int gamerIndex) {
     state::PlayerState &playerState = world.serialized.match.players[player];
     playerState.base.externalController = gamerIndex;
@@ -110,7 +102,6 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamSelectPlayer(World &world, const Simulat
     return true;
 }
 
-// Exact: a tie keeps the player that comes first in the state.
 CUJU_FUNCTION_NO_INLINE inline int GetClosestPlayer(const World &world,
                                                     const SimulationContext &context, int teamID,
                                                     const Vector3 &position, bool onlyAIControlled,
@@ -132,8 +123,6 @@ CUJU_FUNCTION_NO_INLINE inline int GetClosestPlayer(const World &world,
     return closestPlayer;
 }
 
-// A time in milliseconds, not a distance, the shortest of the players that enabled gamers control,
-// or 10000.
 CUJU_FUNCTION inline int HumanControlledToBallDistance(const World &world, int teamID) {
     const state::TeamState &team = TeamByID(world, teamID);
     int timeToBall = 10000;
@@ -203,5 +192,5 @@ CUJU_FUNCTION_NO_INLINE inline void TeamHumanGamersSelectAnyone(World &world,
     }
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

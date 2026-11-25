@@ -15,7 +15,6 @@
 
 namespace cuju::render::assets {
 namespace {
-
 struct XmlTree {
     std::string value;
     std::multimap<std::string, XmlTree> children;
@@ -177,7 +176,7 @@ bool LoadObjectImpl(const std::string &nodename, const XmlTree &objectTree, Obje
     return true;
 }
 
-}  // namespace
+}
 
 bool LoadObject(const std::string &data_dir, const std::string &path, ObjectNode *node,
                 std::string *error) {
@@ -199,4 +198,4 @@ bool LoadObject(const std::string &data_dir, const std::string &path, ObjectNode
     return true;
 }
 
-}  // namespace cuju::render::assets
+}

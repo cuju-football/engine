@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The referee, for half time, balls out of play, fouls, offside and the start of each set piece.
 #pragma once
 
 #include "../profiling.h"
@@ -13,14 +12,11 @@
 
 namespace cuju {
 namespace simulation {
-
-// `reset.h` defines these two, and through `team_ai.h` it includes this file before it does.
 CUJU_FUNCTION inline bool LeftTeamOwnsBall(const World &world);
 CUJU_FUNCTION inline bool RefereePrepareSetPiece(World &world, const SimulationContext &context,
                                                  int setPiece);
 
 enum e_MatchPhase { e_MatchPhase_PreMatch, e_MatchPhase_FirstHalf, e_MatchPhase_SecondHalf };
-// `time` is in milliseconds.
 CUJU_FUNCTION_NO_INLINE inline void BumpActualTime(World &world, const SimulationContext &context,
                                                    uint64_t time) {
     state::MatchState &match = world.serialized.match;
@@ -34,13 +30,10 @@ CUJU_FUNCTION_NO_INLINE inline void BumpActualTime(World &world, const Simulatio
     else
         match.goalScoredTimer = 0;
     if (match.inPlay && !match.inSetPiece) {
-        // The state stores the possession relative to the team processed first.
         const float sign = world.FirstTeamID() == 1 ? -1.0f : 1.0f;
         float possession = match.possessionLastMinute * sign;
         int teamID = world.playerTeamID[match.designatedPossessionPlayer] == 0 ? 0 : 1;
         float delta = 0.001f * time;
-        // Exact: the operand order of `std::max(moved, limit)` and `std::min(moved, limit)`, which
-        // return `moved` on a tie.
         if (teamID == 0) {
             float moved = possession - delta, limit = -60.0f;
             possession = (moved < limit) ? limit : moved;
@@ -78,8 +71,6 @@ CUJU_FUNCTION inline void ResetFoul(state::FoulState &foul) {
     foul.hasBeenProcessed = true;
 }
 
-// `setPiece` is an `e_GameMode`. The buffer times are in `actualTimeMilliseconds`. The caller sets
-// the restart position, the team and the active flag of the buffer.
 CUJU_FUNCTION_NO_INLINE inline void RefereeStop(World &world, const SimulationContext &context,
                                                 int setPiece,
                                                 uint64_t extraPrepareMilliseconds = 0) {
@@ -97,7 +88,6 @@ CUJU_FUNCTION_NO_INLINE inline void RefereeStop(World &world, const SimulationCo
     buffer.startTime = buffer.prepareTime + 2000;
 }
 
-// Returns `true` when the foul stops play.
 CUJU_FUNCTION_NO_INLINE inline bool RefereeCheckFoul(World &world,
                                                      const SimulationContext &context) {
     state::MatchState &match = world.serialized.match;
@@ -105,7 +95,6 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeCheckFoul(World &world,
     state::FoulState &foul = referee.foul;
     bool penalty = false;
     if (foul.foulType != 0) {
-        // Exact: the penalty-area bounds, 16.5 m deep and 20.15 m to each side, compare in double.
         if ((double)fabsf(foul.foulPosition.coordinates[1]) < 20.15 - (double)LINE_HALF_WIDTH &&
             (double)(foul.foulPosition.coordinates[0] *
                      -StaticSide(world.playerTeamID[foul.foulVictim])) >
@@ -141,7 +130,6 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeCheckFoul(World &world,
         buffer.teamID = world.playerTeamID[foul.foulVictim];
         buffer.active = true;
         state::PlayerState &offender = match.players[foul.foulPlayer];
-        // A foul type of 2 is a yellow card and 3 a red card.
         if (foul.foulType == 2) {
             offender.cards++;
             offender.cardEffectiveTimeMilliseconds = match.actualTimeMilliseconds + 6000;
@@ -174,8 +162,7 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeProcess(World &world, const Simulatio
     const state::ScenarioState &scenario = world.serialized.scenario;
     if (match.inPlay && !match.inSetPiece) {
         Vector3 ballPosition = BallPredict(match.ball, 0);
-        // GRF: the half time is an `int` product that wraps. The comparison with the unsigned match
-        // time converts it, so after a wrap to a negative product half time never comes.
+        // GRF: the half time is an `int` product that wraps.
         const int64_t halfTime = (int32_t)((uint32_t)1800 * (uint32_t)scenario.secondHalf);
         if (match.matchTimeMilliseconds >= (uint64_t)halfTime &&
             match.matchPhase == e_MatchPhase_FirstHalf) {
@@ -216,7 +203,6 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeProcess(World &world, const Simulatio
                     buffer.startTime = buffer.prepareTime + 500;
                     buffer.restartPosition = Vector3(0, 0, 0);
                     buffer.teamID = world.FirstTeamID();
-                    // `lastGoalTeam` is a slot, and the other slot kicks off.
                     buffer.setPieceTeam = 1 - match.lastGoalTeam;
                 } else if ((ballPosition.coordinates[0] > 0 && lastSide > 0) ||
                            (ballPosition.coordinates[0] < 0 && lastSide < 0)) {
@@ -352,5 +338,5 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereeBallTouched(World &world,
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

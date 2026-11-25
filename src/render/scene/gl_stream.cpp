@@ -6,9 +6,7 @@
 #include <cstring>
 
 namespace cuju::render::scene {
-
 namespace {
-
 constexpr const char *kOpNames[] = {
     "glBindTexture",
     "glBlendFunc",
@@ -86,7 +84,7 @@ std::uint64_t I(std::int64_t v) { return static_cast<std::uint64_t>(v); }
 
 constexpr std::uint32_t kCompileStatus = 0x8B81;
 
-}  // namespace
+}
 
 const char *OpName(Op op) { return kOpNames[static_cast<int>(op)]; }
 
@@ -145,7 +143,7 @@ std::uint32_t GlStream::Ctx(const std::unordered_map<std::uint32_t, std::uint32_
 }
 
 void GlStream::GetFloatv(std::uint32_t pname, float *out) {
-    *out = 16.0f;  // llvmpipe's GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT
+    *out = 16.0f;
     if (recorder_) Item(&Record(Op::kGetFloatv, {pname, 0}), out, 4);
 }
 
@@ -529,4 +527,4 @@ void GlStream::ReadPixels(int x, int y, int width, int height, std::uint32_t for
     }
 }
 
-}  // namespace cuju::render::scene
+}

@@ -25,7 +25,7 @@ classifiers = [
 
 [project.urls]
 Homepage = "https://github.com/cuju-football/engine"
-Documentation = "https://github.com/cuju-football/engine/blob/main/docs/rendering.md"
+Documentation = "https://github.com/cuju-football/engine/blob/main/docs/observations-rewards-actions.md"
 Issues = "https://github.com/cuju-football/engine/issues"
 
 [tool.hatch.version]

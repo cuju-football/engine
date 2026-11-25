@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The usual and the optimistic time that a player needs to reach a target position.
-// Exact: float to integer conversions go through `FloatToInt32` and `FloatToUnsigned32`.
 #pragma once
 
 #include "profiling.h"
@@ -21,9 +19,6 @@
 #endif
 
 namespace cuju {
-
-// Entry `k` is `clamp((float)(10 k) / (float)700, 0, 1)`. The table replaces a division that
-// took most of the time of the loop.
 CUJU_TABLE_DEFINITION(float, TIME_NEEDED_BIAS,
                       {
                           0x0.0p+0f,
@@ -104,16 +99,12 @@ struct TimeNeeded {
     uint32_t optimisticMilliseconds = 0;
 };
 
-// The smallest doubles whose square roots round to a float above 16 and 48. Both steps are
-// monotone, so `(float)sqrt(s) > 16` exactly when `s >= ABOVE_SIXTEEN_SQUARED`.
 constexpr double ABOVE_SIXTEEN_SQUARED = 0x1.0000020000012p+8;
 constexpr double ABOVE_FORTY_EIGHT_SQUARED = 0x1.2000018000009p+11;
 
-// Exactly `GetLength() > 16`, or 48 when `precise`, without the square root.
 CUJU_HOST_DEVICE bool BeyondOptimizeDistance(const Vector3 &playerPosition,
                                              const Vector3 &targetPosition, bool precise) {
     const Vector3 difference = playerPosition - targetPosition;
-    // The sum of squares of `GetLength`, in double.
     double x = difference.coordinates[0], y = difference.coordinates[1],
            z = difference.coordinates[2];
     const double squaredLength = x * x + y * y + z * z;
@@ -129,7 +120,6 @@ CUJU_HOST_DEVICE uint32_t DirectTimeMilliseconds(const Vector3 &playerPosition,
                (maximumVelocity * 0.75f) * 1000));
 }
 
-// Velocities are in meters per second. `maximumTimeMilliseconds` is `UINT32_MAX` for no limit.
 CUJU_HOST_DEVICE_NO_INLINE TimeNeeded GetTimeNeededForDistanceMilliseconds(
     const Vector3 &playerPosition, const Vector3 &playerMovement, const Vector3 &targetPosition,
     float maximumVelocity, bool precise, uint32_t maximumTimeMilliseconds) {
@@ -137,13 +127,11 @@ CUJU_HOST_DEVICE_NO_INLINE TimeNeeded GetTimeNeededForDistanceMilliseconds(
     TimeNeeded result;
 
 #if defined(__CUDA_ARCH__)
-    // Speed: on the GPU one direct estimate and the plain length are faster.
     const uint32_t directTimeMilliseconds =
         DirectTimeMilliseconds(playerPosition, playerMovement, targetPosition, maximumVelocity);
     auto directTime = [&] { return directTimeMilliseconds; };
     const bool beyond = (playerPosition - targetPosition).GetLength() > (precise ? 48.0f : 16.0f);
 #else
-    // Speed: on the host only the two cases that read the direct estimate compute it.
     auto directTime = [&] {
         return DirectTimeMilliseconds(playerPosition, playerMovement, targetPosition,
                                       maximumVelocity);
@@ -177,8 +165,6 @@ CUJU_HOST_DEVICE_NO_INLINE TimeNeeded GetTimeNeededForDistanceMilliseconds(
     float adaptedMaximumVelocity = maximumVelocity * 0.94f;
 
     while (true) {
-        // `clamp((float)currentTimeMilliseconds / (float)700, 0, 1)`. Entry 70 is 1 and ends the
-        // loop.
         float bias = CUJU_TABLE(TIME_NEEDED_BIAS)[currentTimeMilliseconds / timeStepMilliseconds];
 
         if (bias >= 1.0f) {
@@ -250,9 +236,6 @@ CUJU_HOST_DEVICE_NO_INLINE TimeNeeded GetTimeNeededForDistanceMilliseconds(
 }
 
 #if !defined(__CUDA_ARCH__)
-// Speed: host only. A moving player's walk does not depend on the target, so its steps are computed
-// once, with the operations of `GetTimeNeededForDistanceMilliseconds` in order. The optimistic
-// radius always exceeds the usual one, so the first step within each decides `Time` bit for bit.
 struct TimeNeededWalk {
     static constexpr int STEPS = 70;
     static constexpr int PADDED_STEPS = 72;
@@ -300,8 +283,6 @@ struct TimeNeededWalk {
         computed = true;
     }
 
-    // The first step below `end` within `squaredRadii`, or `end`. The squares sum as
-    // `Vector3::GetSquaredLength` sums them.
     int FirstWithin(const float *squaredRadii, int end, float targetX, float targetY,
                     float squaredZ) const {
 #if defined(CUJU_WALK_AVX)
@@ -316,7 +297,6 @@ struct TimeNeededWalk {
                 _mm256_cmp_ps(squared, _mm256_load_ps(squaredRadii + block), _CMP_LT_OQ));
             if (within) {
 #if defined(_MSC_VER)
-                // `within` is not 0, so `tzcnt` counts what `__builtin_ctz` does.
                 const int step = block + (int)_tzcnt_u32((unsigned)within);
 #else
                 const int step = block + __builtin_ctz((unsigned)within);
@@ -334,7 +314,6 @@ struct TimeNeededWalk {
 #endif
     }
 
-    // Requires `shared`, and the arguments that built the walk.
     TimeNeeded Time(const Vector3 &playerPosition, const Vector3 &targetPosition,
                     float maximumVelocity, bool precise, uint32_t maximumTimeMilliseconds) {
         TimeNeeded result;
@@ -345,7 +324,6 @@ struct TimeNeededWalk {
             return result;
         }
         if (!computed) Compute();
-        // From this step on the time exceeds the limit, which ends the walk as a radius does.
         int limit = STEPS;
         if (maximumTimeMilliseconds != (uint32_t)-1 &&
             maximumTimeMilliseconds / 10 + 1 < (uint32_t)STEPS)
@@ -406,4 +384,4 @@ struct TimeNeededWalk {
 };
 #endif
 
-}  // namespace cuju
+}

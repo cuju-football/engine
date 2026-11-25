@@ -10,7 +10,6 @@
 #include "../numerics.h"
 
 namespace cuju::render::gl {
-
 int UniformComponents(std::uint32_t type) {
     switch (type) {
         case kVec2:
@@ -43,7 +42,6 @@ Program::Program(std::vector<UniformDecl> uniforms, std::vector<AttributeDecl> a
 }
 
 int Program::UniformLocation(const std::string &name) const {
-    // GL accepts "a", "a[0]" and "a[k]" for array element k.
     std::string base = name;
     int element = 0;
     const std::size_t bracket = name.find('[');
@@ -85,7 +83,6 @@ const Texture *DrawState::SamplerTexture(int loc) const {
 }
 
 namespace {
-
 struct Registry {
     std::mutex mutex;
     ProgramFactory factories[8] = {};
@@ -96,7 +93,7 @@ Registry &GetRegistry() {
     return registry;
 }
 
-}  // namespace
+}
 
 bool RegisterProgram(ProgramKind kind, ProgramFactory factory) {
     Registry &r = GetRegistry();
@@ -115,4 +112,4 @@ std::unique_ptr<Program> MakeProgram(ProgramKind kind) {
     return f ? f() : nullptr;
 }
 
-}  // namespace cuju::render::gl
+}

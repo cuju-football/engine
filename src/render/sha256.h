@@ -11,13 +11,11 @@
 #include <string>
 
 namespace cuju::render {
-
 class Sha256 {
 public:
     Sha256() { Reset(); }
     void Reset();
     void Update(const void *data, std::size_t size);
-    // The digest in lowercase hexadecimal; the object starts over afterwards.
     std::string HexDigest();
 
 private:
@@ -34,6 +32,6 @@ inline std::string Sha256Hex(const void *data, std::size_t size) {
     return h.HexDigest();
 }
 
-}  // namespace cuju::render
+}
 
-#endif  // CUJU_RENDER_SHA256_H
+#endif

@@ -132,8 +132,6 @@ def test_a_node_map_stands_in_for_the_numa_nodes(machine, monkeypatch):
     machine('[run]\nnuma = "0,0,1,1"\n')
     assert _config.values()['numa'] == '0,0,1,1'
     monkeypatch.delenv('CUJU_NUMA_NODES', raising=False)
-    # A map shorter than the machine's processors puts the rest on node 0, and the processors of
-    # the other node come early in the map.
     for threads in (1, 4):
         with Batch('5_vs_5', environment_count=4, device='cpu', threads=threads, numa='0,0,1,1'):
             pass

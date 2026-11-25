@@ -2,14 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""The players of `extra_players` that Python modules define, as GRF loads them.
-
-The player `<name>` of a definition such as `<name>:right_players=1` loads from the module
-`cuju.gfootball.env.players.<name>`, else from the module path `<name>`, and its class
-`Player(player_config, env_config)` acts on the host each step on GRF's raw observations. The
-player `replay` is cuju's, which reads its dump with `cuju.dumps`.
-"""
-
 from __future__ import annotations
 
 import copy
@@ -29,21 +21,17 @@ _MODULE_PATH = re.compile(r'\w+(\.\w+)*')
 
 
 def _import(name):
-    """Imports a module, or returns `None` if it does not exist."""
     try:
         return importlib.import_module(name)
     except ModuleNotFoundError as error:
-        # A module that the player's module imports and lacks is the player's error.
         if error.name is not None and (name == error.name or name.startswith(error.name + '.')):
             return None
         raise
 
 
 def player_module(name: str) -> ModuleType | None:
-    """Returns the module that defines the player `name`, or `None`."""
     if not _MODULE_PATH.fullmatch(name):
         return None
-    # The replay player reads its dump with `cuju.dumps`, which takes the names of GRF's classes.
     candidates = ('cuju._replay_player',) if name == 'replay' else (f'{_PACKAGE}.{name}', name)
     for candidate in candidates:
         module = _import(candidate)
@@ -53,10 +41,6 @@ def player_module(name: str) -> ModuleType | None:
 
 
 def _match_view(observation, sticky_names):
-    """Returns the observation of a right player as the match is, from the one turned for it.
-
-    GRF: `observation_rotation.flip_observation`, which turns the match back as well.
-    """
     view = {}
     for key in ('ball', 'ball_direction'):
         point = observation[key]
@@ -82,8 +66,6 @@ def _match_view(observation, sticky_names):
 
 
 class PythonPlayer:
-    """One player of `extra_players` that a module defines, run on the host each step."""
-
     def __init__(self, player: Any, slots: list[int], left: int, action_set: str) -> None:
         self.player = player
         self._slots = slots
@@ -93,15 +75,10 @@ class PythonPlayer:
         self._batch = None
 
     def bind(self, batch: Any) -> PythonPlayer:
-        """Plays the agents `slots` of environment 0 of `batch`."""
         self._batch = batch
         return self
 
     def _index(self, action, turned):
-        """Returns the index in the action set of an action of the player.
-
-        GRF: `football_action_set.named_action_from_action_set`.
-        """
         names = self._names
         if hasattr(action, '_name') and hasattr(action, '_backend_action'):
             name = action._name
@@ -122,7 +99,6 @@ class PythonPlayer:
         return names.index(name)
 
     def act(self) -> torch.Tensor:
-        """Returns the actions of the player's agents, from its `take_action`."""
         observations = grf_observations(self._batch, 0, self._slots) if self._slots else []
         # GRF: a player that plays the right side as it is sees the match as it is.
         right_as_is = bool(self.player.can_play_right())
@@ -150,15 +126,6 @@ class PythonPlayer:
 
 
 class PythonPlayers:
-    """The players of an environment that modules define, and GRF's `env_config` that they share.
-
-    Attributes:
-        config: GRF's `Config` of the environment, which each player's constructor receives as
-            `env_config`. It follows the episodes of the environment, as GRF's does.
-        scripted: The scripted players of the environment, each a name or a `PythonPlayer`, with
-            its agents.
-    """
-
     def __init__(
         self,
         definitions: list[str],
@@ -167,16 +134,6 @@ class PythonPlayers:
         config: Any,
         action_set: str,
     ) -> None:
-        """Builds the players in the order of their definitions, as GRF's `FootballEnv` does.
-
-        Args:
-            definitions: GRF's player definitions of the environment.
-            parsed: Each definition's name, first left position, left players, first right
-                position, right players and parameters.
-            scripted: The environment's scripted players, names with their agents, in order.
-            config: GRF's `Config` of the environment, as it stands before the core's first reset.
-            action_set: The name of the action set.
-        """
         from ._grf_config import parse_player_definition
 
         self.config = config
@@ -219,6 +176,5 @@ class PythonPlayers:
             self.scripted.append((name, slots))
 
     def reset(self) -> None:
-        """Resets each player, after a reset of the environment."""
         for player in self.players:
             player.reset()

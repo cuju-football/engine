@@ -16,8 +16,6 @@
 #include "numerics.h"
 
 namespace cuju::render {
-
-// lp_build_fast_log2: exponent - 128 plus the mantissa read as a float in [1, 2).
 inline float FastLog2(float x) {
     const std::uint32_t b = Bits(x);
     const float e = static_cast<float>(static_cast<std::int32_t>((b >> 23) & 0xFFu) - 128);
@@ -25,7 +23,6 @@ inline float FastLog2(float x) {
     return ftz::Add(e, m);
 }
 
-// lp_build_log2, with its special cases: NaN below zero, -inf at zero, +inf at +inf.
 inline float Log2(float x) {
     const std::uint32_t b = Bits(x);
     const float e = static_cast<float>(static_cast<std::int32_t>((b & 0x7F800000u) >> 23) - 127);
@@ -50,8 +47,6 @@ inline float Log2(float x) {
     return r;
 }
 
-// lp_build_exp2: the input clamped to [-126.99999, 128], 2^floor times a polynomial of the
-// fraction.
 inline float Exp2(float x) {
     const float v = ftz::MaxPs(FromBits(0xC2FDFFFFu), ftz::MinPs(128.0f, x));
     const float i = ftz::Floor(v);
@@ -67,7 +62,6 @@ inline float Exp2(float x) {
     return ftz::Mul(scale, q);
 }
 
-// GLSL pow as the JIT code computes it: zero for a zero base, else exp2(log2(x) * y).
 inline float Pow(float x, float y) {
     if (ftz::Oeq(x, 0.0f)) {
         return 0.0f;
@@ -76,8 +70,6 @@ inline float Pow(float x, float y) {
 }
 
 namespace detail {
-
-// lp_build_sin_or_cos. The result is clamped to [-1, 1] and is NaN for an infinite or NaN input.
 inline float SinOrCos(float a, bool cos) {
     const std::uint32_t a_bits = Bits(a);
     const float x_abs = FromBits(a_bits & 0x7FFFFFFFu);
@@ -108,11 +100,11 @@ inline float SinOrCos(float a, bool cos) {
     return (a_bits & 0x7F800000u) != 0x7F800000u ? clamped : FromBits(0x7FC00000u);
 }
 
-}  // namespace detail
+}
 
 inline float Cos(float a) { return detail::SinOrCos(a, true); }
 inline float Sin(float a) { return detail::SinOrCos(a, false); }
 
-}  // namespace cuju::render
+}
 
-#endif  // CUJU_RENDER_POLYNOMIALS_H
+#endif

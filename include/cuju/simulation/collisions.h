@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The collisions of the ball with the players and of the players with each other.
-// Exact: the geometries of a humanoid come in pre-order over its nodes, and sums keep that order.
 #pragma once
 
 #include "../profiling.h"
@@ -19,7 +17,6 @@
 
 namespace cuju {
 namespace simulation {
-
 // GRF: before the first touch, the team processed first counts as the last to touch.
 CUJU_FUNCTION inline float MatchLastTouchBias(const World &world, int decayMilliseconds) {
     int team = world.serialized.match.lastTouchTeamID != -1 ? world.serialized.match.lastTouchTeamID
@@ -146,7 +143,6 @@ CUJU_FUNCTION_NO_INLINE inline bool CheckBallCollisions(World &world,
     return true;
 }
 
-// The position in the fixed frame of the pitch, in which team 0 starts on side -1.
 CUJU_FUNCTION inline Vector3 PitchPosition(const World &world, int player) {
     Vector3 position = Humanoid(world, player).spatialState.position;
     const int teamID = world.playerTeamID[player];
@@ -191,8 +187,6 @@ CUJU_FUNCTION_NO_INLINE inline void RefereeTripNotice(World &world, int trippedP
                     .GetLength() < 8.0) {
             float severity = 1.0;
             if (trippingHumanoid.currentAnimation.touchFrame != -1) {
-                // Exact: the frame difference divides as a double, `clamp` takes floats, and the
-                // power runs in double.
                 const int touchFrame = trippingHumanoid.currentAnimation.touchFrame,
                           currentFrame = trippingHumanoid.currentAnimation.frameNumber;
                 float timing = clamp(
@@ -248,7 +242,6 @@ CUJU_FUNCTION_NO_INLINE inline void TripMe(World &world, const SimulationContext
     }
 }
 
-// A soft push from a player close by.
 struct PlayerBounce {
     int opponent;
     float force;
@@ -435,7 +428,6 @@ CUJU_FUNCTION_NO_INLINE inline void CheckHumanoidCollision(World &world,
         if (similarForceFactor > 0.0f &&
             distance < (bouncePlayerRadius + similarPlayerRadius) * 2.0f) {
             float gap = distance - bouncePlayerRadius * 2.0f;
-            // Exact: the comparison keeps the operand order of `std::max(0.0f, gap)`.
             float shellDistance = (0.0f < gap) ? gap : 0.0f;
             similarBias += firstBackFacing * 0.8f;
             similarBias -= secondBackFacing * 0.8f;
@@ -615,5 +607,5 @@ CUJU_FUNCTION_NO_INLINE inline bool CheckHumanoidCollisions(World &world,
     return true;
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

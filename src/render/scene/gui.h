@@ -22,10 +22,8 @@
 #include "scene.h"
 
 namespace cuju::render::scene {
-
 class Gui;
 
-// Where GRF's process crashes, a renderer stops with this error.
 struct GrfCrash : std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -43,7 +41,7 @@ public:
     std::string name;
     float x_percent, y_percent, w_percent, h_percent;
     GuiView *parent = nullptr;
-    std::vector<GuiView *> children;  // owned
+    std::vector<GuiView *> children;
     bool visible = false;
     bool exited = false;
 };
@@ -65,8 +63,8 @@ public:
 
 private:
     void Upload();
-    // GRF: a redraw of a caption that never took text, which only a caption made without
-    // rendering holds, renders no text and crashes on the missing surface.
+    // GRF: a redraw of a caption that never took text, which only a caption made without rendering
+    // holds, renders no text and crashes on the missing surface.
     void CheckRedraw(bool redraws) const;
     overlay2d::Color3 color_ = overlay2d::kBright1, outline_color_ = overlay2d::kDark1;
     float transparency_ = 0.0f;
@@ -102,13 +100,11 @@ public:
     void SetPosition(GuiView *view, float x, float y);
     void SetZPriority(GuiView *view, int priority);
     void SetRecursiveZPriority(GuiView *view, int priority);
-    // Exit and delete.
     void Exit(GuiView *view);
     bool LoadSourceImage(const std::string &path, overlay2d::SourceImage *out) {
         return load_image_(path, out);
     }
 
-    // The page path: the current page, deleted when the next is created.
     void CreateLoadingPage(const std::array<std::string, 2> &team_names,
                            const std::array<std::string, 2> &team_logos);
     void CreateGamePage();
@@ -129,12 +125,10 @@ private:
     GuiView *page_ = nullptr;
 };
 
-// Gui2Radar.
 class Radar : public GuiView {
 public:
     Radar(Gui *gui, float x, float y, float w, float h);
     void ReloadAvatars(int team, int count);
-    // Put with the ball's Predict(0) and the players' GetPosition, team 1 before its mirror.
     void Put(const Vector3 &ball, const std::vector<Vector3> &team0,
              const std::vector<Vector3> &team1);
     ImageView *bg = nullptr;
@@ -142,7 +136,6 @@ public:
     std::vector<ImageView *> avatars[2];
 };
 
-// Gui2ScoreBoard.
 class Scoreboard : public GuiView {
 public:
     Scoreboard(Gui *gui, const std::array<std::string, 2> &short_names,
@@ -154,9 +147,8 @@ public:
     CaptionView *goals[2] = {nullptr, nullptr};
 };
 
-// Converts an overlay surface, bytes in RGBA order, into the Image2D's surface.
 void AssignSurface(assets::Surface *dst, const overlay2d::Surface &src);
 
-}  // namespace cuju::render::scene
+}
 
-#endif  // CUJU_RENDER_SCENE_GUI_H
+#endif

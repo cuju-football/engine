@@ -2,13 +2,7 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-"""GRF's `create_environment` and gymnasium ids, each environment a batch of one.
-
-`create_environment` takes GRF's arguments with GRF's defaults and returns GRF's gym interface,
-or gymnasium's with `api='gymnasium'`. It draws the seed of every episode from Python's `random` as
-GRF does, so after the same `random.seed(...)` it plays GRF's matches. Importing `cuju` registers
-the ids `GFootball-<scenario>-<representation>-v0` with gymnasium, for `gymnasium.make`.
-"""
+"""GRF's `create_environment` and gymnasium ids, each environment a batch of one."""
 
 from __future__ import annotations
 
@@ -51,15 +45,13 @@ from .wrappers import MultiAgentToSingleAgent
 
 __all__ = ['FootballEnvironment', 'create_environment', 'grf_observation', 'register_environments']
 
-# The interfaces of `create_environment`, GRF's gym one first.
 _APIS = ('gym', 'gymnasium')
 
 # GRF: `observation_preprocessing.SMM_WIDTH` and `SMM_HEIGHT`.
 _SMM_SIZE = (96, 72)
 # GRF: every scenario that `scenario_builder` builds draws `random.randint(0, 2000000000)`.
 _SEED_LIMIT = 2000000000
-# GRF: the core actions in the order of the `full` set. The `default` and `v2` sets take the
-# first 19 and 20.
+# GRF: the core actions in the order of the `full` set.
 _ACTION_NAMES = (
     'idle',
     'left',
@@ -121,22 +113,16 @@ _OPTIONS = _DISPLAY_OPTIONS | {
     'tracesdir',
     'write_video',
 }
-# The players of GRF's `gfootball/env/players` that a batch can play.
 _PLAYERS = ('agent', 'bot', 'lazy')
 # GRF: any other player is a module of `gfootball.env.players`, here one so named or a module path.
 _PLAYER_MODULE = re.compile(r'\w+(\.\w+)*')
 
 
 def _numpy(tensor):
-    """Returns a host copy of a tensor as a numpy array."""
     return tensor.detach().cpu().numpy().copy()
 
 
 def _parse_player(definition):
-    """Returns the name, left players, right players and parameters of a player definition.
-
-    GRF: `config.parse_player_definition`, which gives a player without counts one left player.
-    """
     name, parameters = definition, {}
     if ':' in definition:
         # GRF: on Windows the path of a replay may hold a colon.
@@ -158,11 +144,6 @@ def _parse_player(definition):
 
 
 def _scenario_facts(asset):
-    """Returns whether a scenario is deterministic and the controllable players of each side.
-
-    The first is `None` where only the bundle knows, and the second is `None` unless the scenario
-    sets `control_all_players`.
-    """
     if isinstance(asset, str) and asset.endswith('.py') and os.path.isfile(asset):
         from . import scenarios
 
@@ -181,7 +162,6 @@ def _scenario_facts(asset):
 
 
 def _numpy_values(value):
-    """Returns a value of GRF's observation of the match with each array stand-in as numpy's."""
     from . import dumps
 
     if isinstance(value, dumps._Array):
@@ -197,9 +177,7 @@ def _numpy_values(value):
 
 
 def _space_shape(base, agents, single, stacked):
-    """Returns the shape of GRF's observation space for `agents` agents of the player."""
-    # GRF: the representation wrappers size the agent axis from the action space, which is a
-    # `Discrete` that counts as one agent for fewer than two agents.
+    # GRF: the representation wrappers size the agent axis from the action space.
     shape = (agents if agents > 1 else 1, *base)
     if single:
         shape = shape[1:]
@@ -209,12 +187,7 @@ def _space_shape(base, agents, single, stacked):
 
 
 class _Dumps:
-    """GRF's dump options, which `cuju.dumps.DumpWriter` writes after each step, outside `step`.
-
-    Each reset takes the dump options of the configuration for the episode that it starts. With a
-    `frequency` above 1, only the first reset and then one in every `frequency` keep them, as GRF's
-    `PeriodicDumpWriter` counts the resets of the environment.
-    """
+    """GRF's dump options, which `cuju.dumps.DumpWriter` writes after each step, outside `step`."""
 
     def __init__(self, batch, full_episodes, goals, frequency, directory):
         try:
@@ -237,15 +210,9 @@ class _Dumps:
         self._writer._grf_names = True
 
     def after_step(self, actions):
-        """Records the step that the batch's `actions` played and returns the dumps it wrote.
-
-        GRF: `info['dumps']` lists a dictionary for each dump that the step finished, with the
-        path of the dump and the name of its kind, as `ObservationProcessor` gives it.
-        """
         return [{'dump': path, 'name': kind} for kind, path in self._writer._record(actions)]
 
     def follow(self, config):
-        """Takes the dump options of GRF's `Config` for the episode that a reset starts."""
         # GRF: `create_environment` applies `PeriodicDumpWriter` only for a frequency above 1.
         kept = self._frequency <= 1 or self._resets % self._frequency == 0
         self._resets += 1
@@ -263,14 +230,6 @@ _LOGIC = ('previous_score_diff', 'previous_game_mode', 'prev_ball_owned_team')
 
 
 def _split_state(state):
-    """Returns the pickled entries of a state in GRF's byte format and its match bytes.
-
-    The entries hold the episode logic under `FootballEnvCore` and those of GRF's wrappers, such
-    as the counts of `CheckpointRewardWrapper` and the frames of `FrameStack`.
-
-    Raises:
-        StateError: If the bytes hold no pickle of the episode logic or it does not load.
-    """
     if len(state) < 4 or not 0 < struct.unpack_from('<i', state)[0] <= len(state) - 4:
         raise StateError(
             'expected the bytes of a state: a pickle length, the pickle and the match, '
@@ -278,7 +237,6 @@ def _split_state(state):
         )
     (length,) = struct.unpack_from('<i', state)
     unpickler = _StateUnpickler(io.BytesIO(state[4 : 4 + length]))
-    # The frames of `FrameStack` are numpy arrays in a deque.
     unpickler.stacked = True
     try:
         entries = unpickler.load()
@@ -291,27 +249,16 @@ def _split_state(state):
 
 
 def _pickled(value):
-    """Returns the pickle of `value` without its protocol and stop opcodes."""
     return pickle.dumps(value, protocol=2)[2:-1]
 
 
 def _own_frame(frame):
-    """Returns a numeric frame as an array of its own with numpy's own dtype, else the frame.
-
-    A batch's stack holds such arrays, which pickle writes in full with one dtype for all, while
-    the frames of a loaded state share the dtypes that the pickle built.
-    """
     if not isinstance(frame, np.ndarray) or frame.dtype.kind not in 'biufc':
         return frame
     return frame.astype(np.dtype(frame.dtype.str))
 
 
 def _join_state(entries, match):
-    """Returns the state in GRF's byte format of pickled entries and match bytes.
-
-    The episode logic, the checkpoint counts and the frames are written as a batch writes them, so
-    equal entries give equal bytes, and every other entry follows as pickle writes it.
-    """
     episode = [vars(entries[_CORE])[name] for name in _LOGIC]
     collected = None
     if _CHECKPOINTS in entries:
@@ -329,31 +276,12 @@ def _join_state(entries, match):
         for key, value in entries.items()
         if key not in (_CORE, _CHECKPOINTS, _FRAMES)
     )
-    # The other entries join the dictionary before its last `SETITEMS` and `STOP`.
     data = data[:-2] + others + data[-2:]
     return struct.pack('<i', len(data)) + data + match
 
 
 class FootballEnvironment(_gym.Env):
-    """One GRF environment, from `create_environment`.
-
-    The observation, the reward, the termination and the information of each step equal those of
-    the environment that GRF's `create_environment` returns for the same arguments, bit for bit,
-    after the same `random.seed(...)`. With GRF's gym interface, the default, `reset` returns the
-    observation and `step` returns `(observation, reward, done, info)`. With gymnasium's, `reset`
-    returns `(observation, info)` and `step` returns `(observation, reward, terminated, truncated,
-    info)`, with `truncated` always `False`, as GRF's episodes end only by termination.
-
-    Attributes:
-        batch: The batch of one environment that plays the match.
-        observation_space, action_space: GRF's spaces for the same arguments. The raw
-            representation has no observation space, as in GRF, so its `observation_space` is
-            `None`.
-        _config: GRF's `Config` of the environment, of the private module `cuju._grf_config`, which
-            counts the episodes and holds the seed of each as GRF's does.
-        _num_actions: The number of actions of the action set, as GRF's attribute.
-        reward_range: The bounds of the reward, unbounded, as gym's `Env` gives GRF's.
-    """
+    """One GRF environment, from `create_environment`."""
 
     # GRF: gym's `Env`, whose rewards are unbounded.
     reward_range = (-float('inf'), float('inf'))
@@ -363,8 +291,7 @@ class FootballEnvironment(_gym.Env):
         self._settings = settings
         self._config = settings['config']
         self._slots = settings['slots']
-        # GRF: a configuration without an `agent` player steps with `step([])`, and its observation
-        # is the match's own.
+        # GRF: a configuration without an `agent` player steps with `step([])`.
         self._agent = settings.get('agent', True)
         # GRF: the single-agent wrappers follow the agent counts of the arguments.
         self._single = settings['single']
@@ -413,11 +340,9 @@ class FootballEnvironment(_gym.Env):
 
     @property
     def _num_actions(self) -> int:
-        """The number of actions of the action set, as GRF's `FootballEnv._num_actions`."""
         return self._settings['action_count']
 
     def _observe(self):
-        """Returns the agent's observation of the current step, as GRF's wrappers give it."""
         if self._wrapper is not None:
             if self._representation == 'raw':
                 return self._raw(self._wrapper._index[0].tolist())
@@ -429,22 +354,15 @@ class FootballEnvironment(_gym.Env):
         return array[0] if self._single else array
 
     def _raw(self, slots):
-        """Returns GRF's raw observation of each agent of `slots`."""
         return grf_observations(self.batch, 0, slots)
 
     def observation(self) -> list[dict[str, Any]] | dict[str, Any] | None:
-        """Returns the raw observation of each of the agent's players, as GRF's unwrapped one.
-
-        Without an `agent` player it is GRF's observation of the match, the dictionary that GRF's
-        dumps hold, read from the players that the configuration holds. With no player at all the
-        batch holds no raw observation to read, so it is `None`.
-        """
+        """Returns the raw observation of each of the agent's players, as GRF's unwrapped one."""
         if not self._agent:
             return self._match_observation()
         return self._raw(self._slots)
 
     def _match_observation(self):
-        """Returns GRF's observation of the match, `FootballEnvCore.observation()`, or `None`."""
         from . import dumps
 
         batch = self.batch
@@ -456,19 +374,12 @@ class FootballEnvironment(_gym.Env):
             for agent in range(batch.agents)
         ]
         values, _ = dumps._episode_values(batch, 0)
-        # An ended episode keeps the designated players of its last step apart.
         designated = values[15:17] if self._done else values[13:15]
         episode = dumps._Episode(0, values, None, False, False)
         sticky = dumps._sticky_names(batch.action_count)
         return _numpy_values(dumps._match_observation(rows, episode, designated, sticky))
 
     def _actions(self, action):
-        """Returns the agent's actions and those of the scripted players for the agent's `action`.
-
-        The first are the actions of the batch's agents with those of the scripted players in
-        their slots, or under `MultiAgentToSingleAgent` the policy's actions, one a side, which the
-        wrapper places. The second lists each scripted player's slot with its action.
-        """
         # GRF: `FootballEnv._action_to_list`, then one action per player of the agent.
         if isinstance(action, np.ndarray):
             action = action.tolist()
@@ -511,24 +422,13 @@ class FootballEnvironment(_gym.Env):
         return actions, scripted
 
     def reset(self, *, seed: int | None = None, options: dict[str, Any] | None = None) -> Any:
-        """Starts the next episode, with a seed drawn from Python's `random` as GRF draws it.
-
-        Args:
-            seed: Seeds `np_random`, as the reset of GRF's gymnasium port does. The match does not
-                depend on it.
-            options: Ignored, as in GRF.
-
-        Returns:
-            The observation, and with gymnasium's interface an empty information dictionary after
-            it.
-        """
+        """Starts the next episode, with a seed drawn from Python's `random` as GRF draws it."""
         if seed is not None:
             # GRF: gym 0.21 takes no seed in `reset`, so only gymnasium's base class seeds.
             super().reset(seed=seed)
         target = self.batch if self._wrapper is None else self._wrapper
         if self._dumps is not None:
-            # GRF: the dump options of the configuration, which `PeriodicDumpWriter` sets before
-            # the reset, hold for the episode that the reset starts.
+            # GRF: the dump options hold for the episode that the reset starts.
             self._dumps.follow(self._config)
         episode_seed = None if self._fixed else random.randint(0, _SEED_LIMIT)
         if episode_seed is None:
@@ -546,23 +446,7 @@ class FootballEnvironment(_gym.Env):
         return self._observe()
 
     def step(self, action: Any) -> tuple[Any, ...]:
-        """Runs one step.
-
-        Args:
-            action: An action index, or a list or numpy array of one per player of the agent.
-
-        Returns:
-            The observation, the `float32` reward, a scalar for one player or without an agent,
-            whether the episode ended and `{'score_reward': ...}`. With GRF's dump options, the
-            information also holds `dumps`, as GRF's, a dictionary for each dump that the step
-            finished, which maps `dump` to its path and `name` to its kind, such as
-            `episode_done`. Gymnasium's interface puts `False` for truncation before the
-            information.
-
-        Raises:
-            RuntimeError: If the episode ended, until `reset`.
-            ValueError: If the number of actions is not the number of the agent's players.
-        """
+        """Runs one step."""
         if self._done:
             raise RuntimeError("can't call step() once the episode finished; call reset() first")
         actions, scripted = self._actions(action)
@@ -576,8 +460,7 @@ class FootballEnvironment(_gym.Env):
         else:
             _, reward, done, information = self._wrapper.step([actions], _others=scripted)
             played = self._wrapper.last_actions
-        # GRF: the reward of each of the agent's players, which `MultiAgentToSingleAgent` passes
-        # on for every player that the agent controls.
+        # GRF: the reward of each of the agent's players, as `MultiAgentToSingleAgent` passes on.
         reward = _numpy(reward[0, self._slots])
         self._played.append(played)
         self._done = bool(done[0])
@@ -599,17 +482,13 @@ class FootballEnvironment(_gym.Env):
         return observation, reward, self._done, info
 
     def seed(self, seed: int | None = None) -> None:
-        """Does nothing and returns `None`, as gym's `Env.seed` under GRF's environment does.
-
-        The match follows Python's `random`, or `game_engine_random_seed`, as GRF's does.
-        """
+        """Does nothing and returns `None`, as gym's `Env.seed` under GRF's environment does."""
         return None
 
     def disable_render(self) -> None:
-        """Does nothing, since cuju renders nothing. GRF's turns its renderer off."""
+        """Does nothing, since cuju renders nothing."""
 
     def _refuse_wrapper_state(self):
-        """Raises `ValueError` under GRF's `MultiAgentToSingleAgent`, which refuses states too."""
         if self._wrapper is not None:
             raise ValueError(
                 "GRF's MultiAgentToSingleAgent supports no states, so a scenario with "
@@ -617,19 +496,7 @@ class FootballEnvironment(_gym.Env):
             )
 
     def get_state(self, to_pickle: dict[str, Any] | None = None) -> bytes:
-        """Returns the state of the match in GRF's byte format, as GRF's `get_state(to_pickle)`.
-
-        Args:
-            to_pickle: The entries of GRF's wrappers over the environment, such as the counts of
-                `CheckpointRewardWrapper` and the frames of `FrameStack`, which the state holds
-                beside the match. The entries of `rewards='scoring,checkpoints'` and
-                `stacked=True` replace those of the same keys, as GRF's innermost wrapper writes
-                its entry last.
-
-        Returns:
-            The bytes, which `set_state` here or in GRF reads. Equal entries give equal bytes,
-            whether the options of `create_environment` or GRF's wrappers wrote them.
-        """
+        """Returns the state of the match in GRF's byte format, as GRF's `get_state(to_pickle)`."""
         self._refuse_wrapper_state()
         batch = self.batch
         entries, match = _split_state(batch.get_state(0, stacked=batch.stacked))
@@ -649,18 +516,7 @@ class FootballEnvironment(_gym.Env):
         return _join_state({**(to_pickle or {}), **own}, match)
 
     def set_state(self, state: bytes) -> dict[str, Any]:
-        """Loads a state in GRF's byte format, as GRF's `set_state(state)`.
-
-        Returns:
-            The pickled entries of the state, as GRF's returns them, from which GRF's wrappers over
-            the environment take theirs, such as the counts of `CheckpointRewardWrapper` and the
-            frames of `FrameStack`.
-
-        Raises:
-            StateError: If the bytes hold no state that loads, or lack the counts of
-                `rewards='scoring,checkpoints'` or the frames of `stacked=True`. It is a
-                `ValueError` and a `RuntimeError`.
-        """
+        """Loads a state in GRF's byte format, as GRF's `set_state(state)`."""
         self._refuse_wrapper_state()
         batch = self.batch
         entries, match = _split_state(state)
@@ -674,21 +530,11 @@ class FootballEnvironment(_gym.Env):
         if batch.stacked and _FRAMES in entries:
             own[_FRAMES] = self._batch_frames(entries[_FRAMES])
         batch.set_state(0, _join_state(own, match), stacked=batch.stacked)
-        # The replay of `write_dump` plays the match in a batch of raw observations.
         self._played = self._episode_steps.set_state(_join_state(core, match), self._done)
         self._done = False
         return entries
 
     def _batch_frames(self, frames):
-        """Returns the frames of a state's `FrameStack` for every agent of the batch.
-
-        GRF's `FrameStack` holds the observations of the agent's players, and the batch stacks
-        those of the scripted players too. Their frames stay as the batch holds them, since only
-        the agent sees a stack.
-
-        Raises:
-            StateError: If the frames are not four observations of the agent's players.
-        """
         batch = self.batch
         agents = batch.agents
         if list(self._slots) == list(range(agents)):
@@ -715,23 +561,7 @@ class FootballEnvironment(_gym.Env):
         return collections.deque(stack, maxlen=_frame_stack.FRAMES)
 
     def write_dump(self, name: str) -> str | None:
-        """Writes the last steps of the episode as a dump, as GRF's `write_dump(name)`.
-
-        The dump `<logdir>/<name>_<date>-<time>.dump` holds the last 100 steps of the episode at
-        most, the first with the configuration, as GRF writes it. Each name writes once an episode.
-        The steps play again in a new batch of one environment, from the reset and each state
-        loaded since, so a long episode takes a moment.
-
-        Args:
-            name: The name of the dump. GRF's options write `episode_done`, `score` and
-                `lost_score`, so those names write nothing here.
-
-        Returns:
-            The path of the dump without `.dump`, as GRF returns it, or `None` if it writes none.
-
-        Raises:
-            RuntimeError: If the episode ended, until `reset`, where GRF's has no steps to dump.
-        """
+        """Writes the last steps of the episode as a dump, as GRF's `write_dump(name)`."""
         return self._episode_steps.write_dump(self, name)
 
     def close(self) -> None:
@@ -763,45 +593,7 @@ def create_environment(
     threads: int = 1,
     api: str = 'gym',
 ) -> FootballEnvironment:
-    """Creates one GRF environment, as `gfootball.env.create_environment` with the same arguments.
-
-    Args:
-        env_name: A shipped scenario such as `11_vs_11_stochastic`, a GRF scenario file or a bundle.
-        stacked: Whether the observation stacks the last 4, as GRF's `stacked`.
-        representation: `extracted` for the SMM, `simple115`, `simple115v2` or `raw`.
-        rewards: `scoring`, or `scoring,checkpoints`.
-        write_goal_dumps: GRF's dumps of the frames before each goal, through `cuju.dumps`.
-        write_full_episode_dumps: GRF's dumps of every episode, through `cuju.dumps`.
-        render: Must stay `False`, since cuju renders nothing.
-        write_video: Must stay `False`, for the same reason.
-        dump_frequency: Keep the dump options for the first reset and then for one reset in
-            every `dump_frequency`, as GRF's option.
-        logdir: The directory of the dumps.
-        extra_players: Further players, each a definition such as GRF's
-            `'agent:left_players=1'`.
-        number_of_left_players_agent_controls: The left players that the agent controls.
-        number_of_right_players_agent_controls: The right players that the agent controls.
-        channel_dimensions: The width and the height of the SMM.
-        other_config_options: GRF's other `Config` values, which are `action_set`,
-            `game_engine_random_seed`, `reverse_team_processing`, `episode_number`,
-            `physics_steps_per_frame`, `players`, `level`, the dump settings, and the rendering
-            settings, which change nothing here.
-        device: Where the batch of one environment runs, `cpu` or `cuda`. Not a GRF argument.
-        threads: The CPU threads of that batch. Not a GRF argument.
-        api: `gym` for GRF's interface, where `reset` returns the observation and `step` four
-            values, or `gymnasium` for gymnasium's, where `reset` returns two and `step` five. Not
-            a GRF argument.
-
-    Returns:
-        The environment.
-
-    Raises:
-        ValueError: If `api` names neither interface, `env_name` is empty, `render` or
-            `write_video` is set, a player definition names a player that cuju lacks or a second
-            agent, or another argument is refused by `BatchEnvironment`, which raises `KeyError`
-            for an unknown representation or action set.
-        NotImplementedError: If a dump option is set and `cuju.dumps` is missing.
-    """
+    """Creates one GRF environment, as `gfootball.env.create_environment` does."""
     if api not in _APIS:
         raise ValueError(f'expected api {" or ".join(map(repr, _APIS))}, found {api!r}')
     if not env_name:
@@ -826,8 +618,7 @@ def create_environment(
     players = [f'agent:left_players={left_agents},right_players={right_agents}']
     facts = _scenario_facts(env_name)
     control = facts[1]
-    # GRF: a scenario that sets `control_all_players` gives the agent every controllable player
-    # of its sides, and `MultiAgentToSingleAgent` lets the policy play one a side.
+    # GRF: `control_all_players` gives the agent every player, and the wrapper plays one a side.
     single_players = control is not None and left_agents in (0, 1) and right_agents in (0, 1)
     if single_players:
         if 'players' in options or not left_agents + right_agents:
@@ -874,10 +665,6 @@ def create_environment(
 
 
 def _legacy_gym():
-    """Returns gym where a gym before 0.26 is installed beside gymnasium, else `None`.
-
-    GRF's gym interface is that of gym 0.21, so code written for GRF checks gym's classes.
-    """
     if _gym.__name__ == 'gym' or not _gym_before_026():
         return None
     try:
@@ -890,7 +677,6 @@ _LEGACY_CLASSES: dict[str, type] = {}
 
 
 def _legacy_class(gym) -> type:
-    """Returns `FootballEnvironment` that is also gym's `Env`, for GRF's gym interface."""
     cls = _LEGACY_CLASSES.get(gym.__version__)
     if cls is None:
         cls = type('FootballEnvironment', (FootballEnvironment, gym.Env), {})
@@ -917,20 +703,6 @@ def _create(
     threads,
     api,
 ):
-    """Returns the batch and the settings of the environment of GRF's configuration values.
-
-    Args:
-        values: The values of GRF's `Config` before its scenario numbers the first episode, with
-            the episode number of the options.
-        env_name, facts: A scenario and its `_scenario_facts`, which spare reading them again when
-            the level is that scenario.
-        config: The `Config` that GRF's `FootballEnv` takes, which drew the seed of the first
-            episode, or `None` to build the configuration as `create_environment` does.
-        sides: The policy's sides for `MultiAgentToSingleAgent`, or `None` without it.
-        single: Whether the agent controls one player, as GRF's single-agent wrappers check.
-        representation, rewards, stacked, channel_dimensions, dump_frequency, device, threads, api:
-            As `create_environment`.
-    """
     single_players = sides is not None
     players = list(values['players'])
     level = values['level']
@@ -969,8 +741,7 @@ def _create(
     agent = slots is not None
     slots = slots or []
     if config is None:
-        # GRF: `create_environment` builds a configuration that reads the scenario, which draws a
-        # seed whatever the options say.
+        # GRF: `create_environment` builds a configuration that draws a seed anyway.
         random.randint(0, _SEED_LIMIT)
     fixed_seed = values.get('game_engine_random_seed')
     if fixed_seed is not None and not 0 <= fixed_seed < 2**32:
@@ -980,10 +751,7 @@ def _create(
     reverse = values.get('reverse_team_processing')
     episode_number = values.get('episode_number', 0)
     deterministic = (facts if level == env_name else _scenario_facts(level))[0]
-    # GRF: without a fixed seed, the configuration of the environment draws the seed whose parity
-    # sets the team order, and the reset inside the creation of the core draws the seed of the
-    # episode that a step before the first `reset` plays. `FootballEnv` takes a configuration
-    # that drew the first already.
+    # GRF: without a fixed seed, the creation draws the seeds, the first one setting the team order.
     creation = None
     if fixed_seed is None:
         first = (
@@ -1006,7 +774,6 @@ def _create(
         environment_count=1,
         representation=representation,
         rewards=rewards,
-        # `v2` plays `default` with `builtin_ai` for the agents that the policy does not move.
         action_set='v2' if single_players and action_set == 'default' else action_set,
         numpy_legacy=numpy_legacy,
         auto_reset=False,
@@ -1018,16 +785,12 @@ def _create(
         stacked=stacked and not single_players,
         game_engine_random_seed=fixed_seed,
         agent_counts=[(left, right)],
-        # Only the parity of the episode number reaches a bundle. The creation plays the episode
-        # before the first, and one more reset sets the team order where only the bundle knows
-        # whether the scenario is deterministic.
         episode_number=(episode_number + (0 if creation and deterministic is None else 1)) % 2,
     )
     try:
         if creation is None:
             batch.reset(reverse=None if reverse is None else int(bool(reverse)))
         elif deterministic is None:
-            # The library sets the team order from the seed as GRF does, deterministic or not.
             batch.reset(seeds=creation[0], reverse=None if reverse is None else int(bool(reverse)))
             batch.reset(seeds=creation[1])
         else:
@@ -1045,8 +808,7 @@ def _create(
             )
         wrapper = None
         if single_players:
-            # GRF: the wrapper covers the agent's players, and the players of `extra_players`
-            # play their own actions.
+            # GRF: the wrapper covers the agent's players, `extra_players` play their own actions.
             wrapper = MultiAgentToSingleAgent(
                 batch, *sides, action_set=action_set, stacked=stacked, _slots=slots
             )
@@ -1076,14 +838,6 @@ def _create(
 
 
 def _grf_config(values, config, deterministic, fixed_seed, creation):
-    """Returns GRF's `Config` of an environment as its creation leaves it.
-
-    Args:
-        values, config: As `_create`.
-        deterministic: Whether the scenario is deterministic, `None` where only its bundle knows.
-        fixed_seed: The seed of the options, or `None`.
-        creation: The seeds that the creation drew, or `None` with a fixed seed.
-    """
     config = _grf_config_values(values, config, deterministic, fixed_seed, creation)
     # GRF: the creation of the core builds the scenario again with the same number and a new seed.
     config._new_scenario(0, None if creation is None else creation[1])
@@ -1091,13 +845,11 @@ def _grf_config(values, config, deterministic, fixed_seed, creation):
 
 
 def _grf_config_values(values, config, deterministic, fixed_seed, creation):
-    """Returns GRF's `Config` of an environment before the core's first reset, for `_grf_config`."""
     from . import _grf_config as grf_config
 
     if config is None:
         values = dict(values)
-        # GRF: the `Config` numbers the scenario that it builds, and a scenario that is not
-        # deterministic takes the team order from the parity of its seed unless the values hold one.
+        # GRF: the `Config` numbers the scenario, and the parity of its seed sets the team order.
         values['episode_number'] = values.get('episode_number', 0) + 1
         if deterministic is False and 'reverse_team_processing' not in values:
             seed = fixed_seed if creation is None else creation[0]
@@ -1120,7 +872,6 @@ _ENTRY_POINT = 'cuju.env:create_environment'
 
 
 def _gym_version() -> tuple[int, int] | None:
-    """Returns the major and minor version of the installed gym, or `None` without one."""
     try:
         version = importlib.metadata.version('gym')
     except importlib.metadata.PackageNotFoundError:
@@ -1130,26 +881,17 @@ def _gym_version() -> tuple[int, int] | None:
 
 
 def _gym_before_026() -> bool:
-    """Returns whether the installed gym precedes 0.26, which took gymnasium's interface."""
     version = _gym_version()
     return version is not None and version < (0, 26)
 
 
 def register_environments() -> None:
-    """Registers GRF's ids `GFootball-<scenario>-<representation>-v0` for the shipped scenarios.
-
-    It registers them with gymnasium, where installed, with gymnasium's interface. `import cuju`
-    imports no gymnasium, and registers the ids as soon as it is imported. gym gets GRF's own
-    environments under the same ids from `import cuju.gfootball`, as importing `gfootball`
-    registers them in GRF. The `Pixels` ids are registered as in GRF, and making one raises, since
-    cuju renders nothing.
-    """
+    """Registers GRF's ids `GFootball-<scenario>-<representation>-v0` for the shipped scenarios."""
     if importlib.util.find_spec('gymnasium') is not None:
         _register_with('gymnasium')
 
 
 def _register_with(module: str) -> None:
-    """Registers GRF's ids with `gymnasium`, as `register_environments` does."""
     if module != 'gymnasium':
         return
     registration = importlib.import_module(f'{module}.envs.registration')
@@ -1168,7 +910,5 @@ def _register_with(module: str) -> None:
             )
 
 
-# A gymnasium that this module's own imports brought in gets the ids here, since `cuju` cannot
-# take them from a module that is still importing.
 if sys.modules.get('gymnasium') is not None:
     _register_with('gymnasium')

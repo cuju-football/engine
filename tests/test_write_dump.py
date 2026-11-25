@@ -42,7 +42,6 @@ def test_a_dump_holds_the_last_100_steps(tmp_path):
     assert env.write_dump('episode_done') is None and env.write_dump('score') is None
     short = env.write_dump('shutdown')
     expected = env._config.get_dictionary()
-    # Closing writes the unfinished episode, as GRF leaves it.
     env.close()
     (full_path,) = [name for name in os.listdir(tmp_path) if name.startswith('episode_done')]
     full = cuju.dumps.read_dump(os.path.join(tmp_path, full_path))

@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The values that the simulation derives from the text variables of each animation, once at load.
-// Exact: the host C library's `atof` and `atoi` parse them, so they match GRF's parse at each use.
 #pragma once
 
 #include <cmath>
@@ -18,7 +16,6 @@
 
 namespace cuju {
 namespace animation {
-
 enum e_AnimationString {
     e_AnimationString_Empty = 0,
     e_AnimationString_OutgoingSpecialState = 1,
@@ -83,13 +80,9 @@ struct AnimationDerived {
     int32_t incomingRetainBodyPart;
     int forcedFootWhich;
     bool touchFootLeft;
-    // 0 is `e_TouchType_Intentional_Kicked`, for a foot or a lower leg, and 1 is
-    // `e_TouchType_Intentional_NonKicked`.
     int touchType;
     float touchMaximumPowerFactor;
     float touchDifficultyFactor;
-    // Animation-only subexpressions of the crude selection, hoisted to load with the same
-    // functions.
     Vector3 crudeOutDirectionRotated;
     float crudeTurnAngle;
     float crudeInBodyFixAbsolute;
@@ -149,7 +142,6 @@ inline std::vector<AnimationDerived> DeriveAll(const AnimationStore &store) {
             animationData.outgoingDirection.GetRotated2D(animationData.outgoingBodyAngle.value());
         entry.crudeTurnAngle =
             entry.crudeOutDirectionRotated.GetAngle2D(animationData.incomingBodyDirection);
-        // `FixAngle` of the simulation, written out.
         entry.crudeInBodyFixAbsolute = fabsf(ModulateIntoRange(
             -PI, PI, animationData.incomingBodyDirection.GetAngle2D() + 0.5f * PI));
         entry.crudeOutBodyDirection = Vector3(0, -1, 0).GetRotated2D(
@@ -164,5 +156,5 @@ inline std::vector<AnimationDerived> DeriveAll(const AnimationStore &store) {
     return derived;
 }
 
-}  // namespace animation
-}  // namespace cuju
+}
+}

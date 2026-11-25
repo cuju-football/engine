@@ -17,9 +17,7 @@
 #include "scene/vertex_colors.h"
 
 namespace cuju::render {
-
 namespace {
-
 using scene::Node;
 using scene::Object;
 using scene::ObjectPtr;
@@ -58,10 +56,6 @@ std::string Text(const char *text, std::size_t size) {
     return std::string(text, n);
 }
 
-// Spatial's getters as GRF's caches give them at a render. Match::Put ends with
-// RecursiveUpdateSpatialData on the dynamic node, which drops every cache below it, and the static
-// stadium and goals keep caches of values that never change, so a fresh evaluation from the local
-// values gives each getter's result.
 void ComputePoses(Node &node, const Vector3 &parent_position, const Quaternion &parent_rotation,
                   bool has_parent) {
     Vector3 position = node.position;
@@ -111,7 +105,7 @@ std::vector<scene::PlanarMesh> PlanarMeshes(const scene::GeometryData &data) {
     return out;
 }
 
-}  // namespace
+}
 
 SharedMedia::SharedMedia(std::string media_path, int threads)
     : media_path_(std::move(media_path)),
@@ -145,8 +139,6 @@ const pitch::PitchTextures &SharedMedia::Pitch() {
             return;
         }
         pitch::PitchOptions options;
-        // Speed: the pitch is the same for any thread count and is made once, so it takes every
-        // core the machine has.
         options.threads =
             std::max<int>(threads_, std::min(12u, std::thread::hardware_concurrency()));
         if (!pitch::GeneratePitch(media, options, &pitch_, &error)) SetError(error);
@@ -240,8 +232,6 @@ scene::MatchLook MatchLookOf(const RenderState &state, std::uint32_t seed) {
 
 Renderer::Renderer(const RendererOptions &options, std::shared_ptr<SharedMedia> media)
     : options_(options), media_(std::move(media)) {
-    // Exact: the caller's floating-point modes never reach the renderer, which may run in a
-    // process where a library set flush to zero at load.
     FpScope fp(FpMode::kIeee);
     if (!media_) media_ = std::make_shared<SharedMedia>(options.media_path, options.threads);
     gl::ContextOptions co;
@@ -347,7 +337,6 @@ void Renderer::StartMatch(const RenderState &state, std::uint32_t seed) {
     context_->StartMatch(look, [this](int body, Object &, scene::GeometryData &data) {
         Skin(body, data, true, nullptr);
     });
-    // Match::PrepareGoalNetting, from the goals mesh as the last match left it.
     if (!netting_prepared_) {
         netting_.Prepare(PlanarMeshes(*context_->goals->GetObject("goals")->data->res));
         netting_prepared_ = true;
@@ -386,8 +375,6 @@ void Renderer::ApplyState(const RenderState &state) {
     for (std::size_t b = 0; b < bodies.size() && b < body_slot_.size(); b++) {
         const std::array<int, 2> &at = body_slot_[b];
         const RenderHumanoid &h = at[0] >= 0 ? state.players[at[0]][at[1]] : state.officials[at[1]];
-        // HumanoidBase::UpdateFullbodyNodes, or Hide for a player sent off. Any other inactive
-        // player keeps the body of its last render.
         if (h.present) {
             bodies[b].fullbody_node->position = h.fullbodyOffset;
             bodies[b].hair->position = h.hairPosition;
@@ -412,8 +399,6 @@ void Renderer::ApplyState(const RenderState &state) {
         camera.parent->rotation = state.camera.nodeOrientation;
     }
     ComputePoses(context_->scene().root(), Vector3(), Quaternion(), false);
-    // Camera::SetFOV and SetCapping, and what the graphics camera, Execute and the light's
-    // shadow map read of the camera's derived pose.
     camera.fov = state.camera.fieldOfView;
     camera.near_cap = state.camera.nearCap;
     camera.far_cap = state.camera.farCap;
@@ -428,9 +413,6 @@ void Renderer::ApplyState(const RenderState &state) {
 
 const std::vector<std::uint8_t> &Renderer::Render(const RenderState &state, bool swap, bool read) {
     FpScope fp(FpMode::kIeee);
-    // Exact: every pass of a match render clears or covers each pixel it later reads, the
-    // shadow map, the G-buffer, the light buffers and the window, so the pixels of the render
-    // that waits never reach this one's.
     Resolve(context_->match() != nullptr);
     if (!context_->match()) return RenderScene(swap);
     if (!read && options_.skip_unread) {
@@ -445,7 +427,6 @@ const std::vector<std::uint8_t> &Renderer::Render(const RenderState &state, bool
 
 const std::vector<std::uint8_t> &Renderer::RenderMatch(const RenderState &state, bool swap) {
     scene::Match *match = context_->match();
-    // Gui2ScoreBoard::SetGoalCount and Match::SpamMessage, which GRF calls during the step.
     for (int t = 0; t < 2; t++)
         if (state.overlay.goals[t] != shown_goals_[t]) {
             match->SetGoalCount(t, state.overlay.goals[t]);
@@ -453,8 +434,6 @@ const std::vector<std::uint8_t> &Renderer::RenderMatch(const RenderState &state,
         }
     std::string message = Text(state.overlay.message, sizeof state.overlay.message);
     bool visible = state.overlay.messageVisible;
-    // An empty text is a caption that no spam drew, while GRF rendered nothing, so it keeps its
-    // text and only shows.
     if (visible && (!message_visible_ || message != shown_message_)) {
         if (message.empty())
             match->ShowMessage();
@@ -463,7 +442,6 @@ const std::vector<std::uint8_t> &Renderer::RenderMatch(const RenderState &state,
     }
     shown_message_ = message;
     message_visible_ = visible;
-    // Match::Put.
     ApplyState(state);
     auto humanoid = [&](int body) -> const RenderHumanoid & {
         const std::array<int, 2> &at = body_slot_.at(body);
@@ -496,8 +474,6 @@ const std::vector<std::uint8_t> &Renderer::RenderMatch(const RenderState &state,
             if (humanoid(b).present) radar[t].push_back(humanoid(b).radarPosition);
     match->PutRadar(state.ball.radarPosition, radar[0], radar[1]);
     bool netting = netting_.Update(state.ball.position, state.ball.touchesNet);
-    // GameTask::PrepareRender. Speed: the bodies are skinned all at once on the renderer's
-    // threads, each into its own buffer, before the uploads in GRF's order.
     const int body_count = static_cast<int>(std::min(match->bodies().size(), body_slot_.size()));
     std::vector<int> skinned;
     for (int b = 0; b < body_count; b++) {
@@ -528,4 +504,4 @@ const std::vector<std::uint8_t> &Renderer::RenderMatch(const RenderState &state,
     return screen_;
 }
 
-}  // namespace cuju::render
+}

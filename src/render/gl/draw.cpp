@@ -20,9 +20,7 @@
 #include "pipeline.h"
 
 namespace cuju::render::gl {
-
 namespace {
-
 constexpr std::uint32_t kUndefinedVertexId = 0xFFFF;
 constexpr int kSegmentSize = 1024;
 constexpr int kMaxVerticesLinear = 4096;
@@ -31,8 +29,6 @@ constexpr int kMaxClippedVertices = 2 * (6 + 8) + 1;
 constexpr int kVbufBytes = 4096;
 constexpr int kVbufIndices = 1020;
 
-// draw's vertex_header with its data: clip_pos and data[0] the window position, data[1..] the
-// fragment inputs.
 struct PVertex {
     std::uint32_t clipmask;
     std::uint32_t vertex_id;
@@ -61,9 +57,7 @@ public:
 
     void SetKept(const DrawState *kept) { kept_ = kept; }
 
-    // Everything inside draw_vbo, under FTZ and DAZ.
     void RunSegments();
-    // The final draw_flush, under IEEE.
     void FinalFlush() { FlushVertices(true); }
 
 private:
@@ -88,13 +82,12 @@ private:
     const DrawState *kept_;
     int num_slots_;
 
-    std::vector<PVertex> verts_;  // the current segment's vertices
+    std::vector<PVertex> verts_;
     std::vector<float> attribs_[kMaxAttributes];
     std::vector<float> clip_, inputs_;
     std::vector<PVertex> tmps_;
     bool in_pipeline_ = false;
 
-    // The vbuf stage.
     int vertex_size_, max_vertices_;
     bool vbuf_allocated_ = false;
     bool vbuf_first_ = true;
@@ -102,7 +95,6 @@ private:
     int vbuf_nr_vertices_ = 0;
     std::vector<std::uint16_t> vbuf_indices_;
 
-    // The emit path's hardware vertices.
     std::vector<float> hw_;
 };
 
@@ -118,8 +110,6 @@ void DrawRunner::Fetch(const std::uint32_t *fetch, int count) {
                 std::memcpy(v, src.generic, 16);
                 continue;
             }
-            // draw_llvm's fetch: the element is read when stride * index, in 32 bits, is below
-            // buffer_size - (format size - 1) - offset; otherwise it reads as zero.
             const std::uint32_t bsize = static_cast<std::uint32_t>(src.size) * 4u;
             std::uint32_t adj = 0;
             const std::uint64_t size = src.buffer_size;
@@ -180,8 +170,6 @@ void DrawRunner::SetupHw(const float *v0, const float *v1, const float *v2, bool
                   reinterpret_cast<const float(*)[4]>(v1), reinterpret_cast<const float(*)[4]>(v2));
 }
 
-// draw_pt_emit: the pending pipeline triangles first, then an exact copy of the vertices and
-// lp_setup_draw_elements in index order.
 void DrawRunner::Emit(const std::uint16_t *elts, int count) {
     FlushVertices(false);
     const int n = static_cast<int>(verts_.size());
@@ -234,8 +222,6 @@ std::uint16_t DrawRunner::EmitVertex(PVertex *v) {
     return static_cast<std::uint16_t>(v->vertex_id);
 }
 
-// vbuf_first_tri and vbuf_tri. A flush resets the stage to vbuf_first_tri, so the triangle after
-// a full buffer starts yet another buffer of its own.
 void DrawRunner::VbufTriangle(PVertex *v0, PVertex *v1, PVertex *v2) {
     if (vbuf_first_) {
         FlushVertices(false);
@@ -254,7 +240,6 @@ void DrawRunner::VbufTriangle(PVertex *v0, PVertex *v1, PVertex *v2) {
     vbuf_indices_.push_back(EmitVertex(v2));
 }
 
-// draw_pipe_cull.c.
 void DrawRunner::CullTriangle(PVertex *v0, PVertex *v1, PVertex *v2) {
     if (rs_.cull_face == 0) {
         VbufTriangle(v0, v1, v2);
@@ -325,7 +310,6 @@ void DrawRunner::Interp(PVertex *dst, float t, const PVertex *out, const PVertex
     }
 }
 
-// The frustum planes of draw_context.c in bit order, clip_halfz false.
 constexpr float kPlanes[6][4] = {
     {-1, 0, 0, 1}, {1, 0, 0, 1}, {0, -1, 0, 1}, {0, 1, 0, 1}, {0, 0, 1, 1}, {0, 0, -1, 1},
 };
@@ -338,8 +322,6 @@ inline float ClipDist(const PVertex *v, int plane) {
         ftz::Mul(c[3], p[3]));
 }
 
-// do_clip_tri: Sutherland-Hodgman in plane order, interpolating from the nearer endpoint, then a
-// fan (L[i-1], L[i], L[0]).
 void DrawRunner::ClipTriangle(PVertex *v0, PVertex *v1, PVertex *v2, std::uint32_t clipmask) {
     PVertex *a[kMaxClippedVertices];
     PVertex *b[kMaxClippedVertices];
@@ -427,7 +409,6 @@ void DrawRunner::PipelineTriangle(PVertex *v0, PVertex *v1, PVertex *v2) {
     }
 }
 
-// One middle-end run: fetch and shade the fetch list, then emit or the pipeline.
 void DrawRunner::RunSegment(const std::uint32_t *fetch, int fetch_count, const std::uint16_t *elts,
                             int draw_count) {
     if (fetch_count <= 0) {
@@ -464,7 +445,6 @@ void DrawRunner::RunSegments() {
     std::vector<std::uint32_t> fetch;
     std::vector<std::uint16_t> elts;
     if (!input_.indices) {
-        // vsplit_run_linear: segments of up to 4096 vertices, trimmed to whole triangles.
         const int seg_max = TrimTriangles(std::min(kMaxVerticesLinear, count));
         int seg_start = 0;
         while (seg_start < count) {
@@ -480,9 +460,6 @@ void DrawRunner::RunSegments() {
         }
         return;
     }
-    // vsplit_run_uint{8,16,32}: the whole-primitive shortcut is refused for GRF's draws (max_index
-    // - min_index > count - 1 or uint32 indices longer than a segment), so segments go through the
-    // 256-entry fetch cache.
     const std::uint32_t elt_max = static_cast<std::uint32_t>(
         input_.index_space / static_cast<std::size_t>(input_.index_size));
     const std::uint32_t istart = 0;
@@ -544,11 +521,10 @@ void DrawRunner::RunSegments() {
     }
 }
 
-// Opens draw_vbo's FTZ and DAZ window around the work; the work reads everything from memory.
 CUJU_GL_NOINLINE void RunSegmentsOf(DrawRunner *r) { r->RunSegments(); }
 CUJU_GL_NOINLINE void FinalFlushOf(DrawRunner *r) { r->FinalFlush(); }
 
-}  // namespace
+}
 
 void RunDraw(const DrawState &state, const RasterState &rs, const DrawInput &input, Scene &scene) {
     DrawRunner runner(state, rs, input, scene);
@@ -563,4 +539,4 @@ void RunDraw(const DrawState &state, const RasterState &rs, const DrawInput &inp
     }
 }
 
-}  // namespace cuju::render::gl
+}

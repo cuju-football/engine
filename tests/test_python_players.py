@@ -117,7 +117,6 @@ def test_a_module_player_plays_as_an_agent_would(modules):
         'chaser:right_players=1',
     ]
     assert player.resets == 1 and player.env_config['episode_number'] == 2
-    # The same match, with the right player as a second agent fed the same decisions.
     random.seed(3)
     env = cuju_env.create_environment(
         'academy_3_vs_1_with_keeper', representation='raw', number_of_right_players_agent_controls=1
@@ -145,7 +144,6 @@ def test_a_player_that_plays_the_right_as_it_is(modules):
     env = cuju_env.create_environment(
         'academy_3_vs_1_with_keeper', representation='raw', number_of_right_players_agent_controls=1
     )
-    # `left` in the frame of the match is `right` for the right agent.
     observations = play(env, len(played) - 1, [0, 5])
     env.close()
     seen = AsIs.built[0].seen
@@ -153,7 +151,6 @@ def test_a_player_that_plays_the_right_as_it_is(modules):
         same_observation(first[0], second[0])
         if step < len(seen):
             match = seen[step][0]
-            # The match as it is, the left agent's view, and the right player's own values.
             for key in ('ball', 'left_team', 'right_team_roles', 'score', 'ball_owned_team'):
                 assert np.array_equal(np.asarray(match[key]), np.asarray(second[0][key])), key
             assert match['active'] == second[1]['active']

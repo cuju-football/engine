@@ -41,7 +41,6 @@ class StandIn:
         )
         self.started = False
         self.steps = 0
-        # `(what, step)`: the observation or the state to spoil at that step.
         self.flip = flip
 
     def grf(self, observation):
@@ -58,7 +57,6 @@ class StandIn:
         return agents[0] if self.agents == 1 else np.stack(agents)
 
     def reset(self):
-        # The batch starts the next episode at the end of the last, and GRF does it here.
         observation = self.batch.observation() if self.started else self.batch.reset()
         self.started = True
         return self.grf(observation), {}
@@ -133,14 +131,12 @@ def test_the_library_marks_the_padding_of_angles(example):
     match = example.match_bytes(batch.get_state(0))
     mask = np.zeros(len(match), np.uint8)
     assert example.padding_function()(match, len(match), mask.ctypes.data) == 0
-    # Three bytes of each angle, a small part of the match.
     assert 0 < int(mask.sum()) < len(match) // 10 and int(mask.sum()) % 3 == 0
     assert example.padding_function()(b'not a match', 11, mask.ctypes.data) == -1
     batch.close()
 
 
 def test_a_policy_hook_plays_both_engines(example, monkeypatch, capsys, tmp_path):
-    # A Kaggle-style agent with a global counter and draws from Python's `random`.
     (tmp_path / 'submission.py').write_text(
         'import random\n'
         'calls = 0\n'
@@ -171,7 +167,6 @@ def test_raw_of_an_agent_has_the_types_of_grf(example):
     assert left['left_team_active'].dtype == np.bool_
     assert left['sticky_actions'].dtype == np.uint8
     assert isinstance(left['ball_owned_team'], int) and isinstance(left['score'], list)
-    # A right agent sees its own team as the left team.
     assert np.array_equal(right['left_team'], -left['right_team'])
     batch.close()
 

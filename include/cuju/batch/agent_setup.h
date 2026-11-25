@@ -1,8 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// Gives the template of a bundle, the world right after a GRF reset, any agent counts per side.
-// Exact: GRF's gamer setup draws no random number, so one template yields every agent count.
 #pragma once
 
 #include <algorithm>
@@ -15,11 +13,9 @@
 
 namespace cuju {
 namespace batch {
-
 using state::MATCH_KEYBOARDS;
 
 // GRF: a reset disables and releases every keyboard, then sets its mirror, -1 for a right agent.
-// The state stores the direction times the mirror, so mirror -1 stores the release as -0.
 inline state::KeyboardState ResetKeyboard(float mirror) {
     state::KeyboardState keyboard{};
     keyboard.mirror = mirror;
@@ -29,8 +25,7 @@ inline state::KeyboardState ResetKeyboard(float mirror) {
     return keyboard;
 }
 
-// GRF: a newly built gamer without a player. The `PlayerController` constructor runs its own
-// `Reset`, as a constructor's virtual call stays in its class, then `HumanController::Reset` runs.
+// GRF: a newly built gamer without a player.
 inline state::HumanGamerState NewHumanGamer(int slot, int keyboardIndex, float mirror) {
     state::HumanGamerState gamer{};
     gamer.selectedPlayer = -1;
@@ -68,8 +63,6 @@ inline state::HumanGamerState NewHumanGamer(int slot, int keyboardIndex, float m
     return gamer;
 }
 
-// Removes every gamer from a template. GRF: no gamers means no main selected player, since only
-// `Team::AddHumanGamers` sets one before the match comes into play.
 inline void StripAgents(simulation::World &world) {
     state::MatchState &match = world.serialized.match;
     world.serialized.scenario.leftAgents = 0;
@@ -87,7 +80,7 @@ inline void StripAgents(simulation::World &world) {
 }
 
 // GRF: the observation reads each agent's controller from a list as long as its team, so a side
-// holds 0 to its team size in agents. Those beyond the controllable players control none.
+// holds 0 to its team size in agents.
 inline void CheckAgents(const state::ScenarioState &scenario, int left, int right,
                         const std::string &bundle) {
     auto check = [&](const char *side, int agents, int players) {
@@ -104,9 +97,6 @@ inline void CheckAgents(const state::ScenarioState &scenario, int left, int righ
                                     std::to_string(left + right));
 }
 
-// Gives a template, in the rest frame, `left` and `right` agents as GRF's reset does. Throws as
-// `CheckAgents`. Slot 0 is the team processed first, the right one under `reverseTeamProcessing`.
-// Left agent `i` gets keyboard `i` and right agent `i` keyboard `11 + i`.
 inline void SetupAgents(simulation::World &world, const simulation::StaticData &staticData,
                         int left, int right, const std::string &bundle) {
     state::ScenarioState &scenario = world.serialized.scenario;
@@ -116,7 +106,6 @@ inline void SetupAgents(simulation::World &world, const simulation::StaticData &
     scenario.leftAgents = left;
     scenario.rightAgents = right;
     const int agents[2] = {left, right};
-    // Counts first, as the global gamer index and the second keyboard copies depend on both teams.
     for (int teamID = 0; teamID < 2; teamID++) {
         state::TeamState &team = simulation::TeamByID(world, teamID);
         team.humanGamers.count = agents[teamID];
@@ -137,11 +126,9 @@ inline void SetupAgents(simulation::World &world, const simulation::StaticData &
             match.secondKeyboardCopies[gamerIndex] = human.controller.keyboard;
         }
     }
-    // The keyboards that no gamer owns stay in index order, all free and alike.
     match.freeControllerCount = MATCH_KEYBOARDS - left - right;
     // GRF: `Team::AddHumanGamers` takes the active controllable players closest to the ball, which
-    // is at the origin with the players at their formation spots, ties in state order. The main
-    // selected player is the closest, and by stable ID the players go to the gamers in order.
+    // is at the origin with the players at their formation spots, ties in state order.
     simulation::SimulationContext context{};
     context.staticData = &staticData;
     auto stableID = [&](int player) { return staticData.stableID[player]; };
@@ -160,5 +147,5 @@ inline void SetupAgents(simulation::World &world, const simulation::StaticData &
     }
 }
 
-}  // namespace batch
-}  // namespace cuju
+}
+}

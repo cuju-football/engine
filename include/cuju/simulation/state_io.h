@@ -1,7 +1,6 @@
 // Copyright 2026 The cuju Authors
 // SPDX-License-Identifier: Apache-2.0
 
-// The conversion between states and worlds on the host.
 #pragma once
 
 #include <exception>
@@ -14,12 +13,9 @@
 
 namespace cuju {
 namespace simulation {
-
-// A state does not record how many free controllers its environment has, so the codec finds the
-// count on the first load and tries it first on later ones.
 struct StateCodec {
     int freeControllerCount = -1;
-    int animationCount = -1;  // -1 leaves the animation pointers of a loaded state unchecked.
+    int animationCount = -1;
 
     // GRF: every pointer of a state that it loads is -1 or indexes an element of its collection.
     bool PointersInRange(const World &world, const std::vector<state::LoadedPointer> &pointers) {
@@ -35,7 +31,6 @@ struct StateCodec {
         return true;
     }
 
-    // `Load` and `Save` leave the coordinate frame as it is. `LoadFrame` and `SaveFrame` convert.
     bool Load(const std::string &bytes, World &world) {
         auto tryLoad = [&](int controllerCount) {
             try {
@@ -68,7 +63,6 @@ struct StateCodec {
         return archive.data();
     }
 
-    // `mirror` names the call frame. Bit 0 mirrors team 0, bit 1 team 1 and bit 2 the ball.
     bool LoadFrame(const std::string &bytes, int mirror, World &world) {
         world = World();
         if (!Load(bytes, world)) return false;
@@ -78,7 +72,6 @@ struct StateCodec {
         return true;
     }
 
-    // Leaves `world` in the call frame that `mirror` names, as it was.
     std::string SaveFrame(World &world, int mirror,
                           std::vector<state::SchemaEntry> *schema = nullptr) {
         MirrorMatch(world, mirror & 1, mirror & 2, mirror & 4);
@@ -90,5 +83,5 @@ struct StateCodec {
     }
 };
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

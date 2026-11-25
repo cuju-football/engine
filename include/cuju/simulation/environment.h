@@ -2,7 +2,6 @@
 // Copyright 2019 Google LLC
 // SPDX-License-Identifier: Apache-2.0
 
-// The episode logic of GRF's Python environment on top of the ticks of the simulation.
 #pragma once
 
 #include "../profiling.h"
@@ -13,7 +12,6 @@
 
 namespace cuju {
 namespace simulation {
-
 enum Action {
     e_Action_Idle = 0,
     e_Action_Left,
@@ -50,7 +48,6 @@ enum Action {
     e_Action_BuiltinAI
 };
 
-// `actionSet` is 0 for `default` with 19 actions, 1 for `v2` with 20 and 2 for `full` with 33.
 CUJU_FUNCTION inline int ActionSetSize(int actionSet) {
     return actionSet == 0 ? 19 : actionSet == 1 ? 20 : 33;
 }
@@ -95,7 +92,6 @@ CUJU_FUNCTION_NO_INLINE inline int ActionFromSet(int actionSet, int index) {
 
 enum AxisNegation : int { NEGATE_X = 1, NEGATE_Y = 2 };
 
-// The action that points the same way on a pitch whose x, y or both change sign.
 CUJU_FUNCTION inline int NegateActionAxes(int action, bool negateX, bool negateY) {
     int horizontal, vertical;
     switch (action) {
@@ -141,16 +137,12 @@ CUJU_FUNCTION inline int StickyAction(int index) {
         e_Action_Left,        e_Action_TopLeft,     e_Action_Top,        e_Action_TopRight,
         e_Action_Right,       e_Action_BottomRight, e_Action_Bottom,     e_Action_BottomLeft,
         e_Action_Sprint,      e_Action_Dribble,     e_Action_KeeperRush, e_Action_Pressure,
-        e_Action_TeamPressure};  // The last three are in `full` only.
+        e_Action_TeamPressure};
     return actions[index];
 }
 
-// An agent acts through a keyboard controller. IDs 0 to 10 belong to the left team, 11 to 21 to
-// the right team.
 constexpr int MAXIMUM_TEAM_CONTROLLERS = 11;
 
-// The state holds a gamer's keyboard twice, in the gamer and in the match, every other controller
-// once among the free controllers, and some controllers not at all.
 using KeyboardCopies = InlineVector<state::KeyboardState *, 2>;
 CUJU_FUNCTION_NO_INLINE inline KeyboardCopies Keyboard(World &world, int controllerID) {
     state::MatchState &match = world.serialized.match;
@@ -163,7 +155,6 @@ CUJU_FUNCTION_NO_INLINE inline KeyboardCopies Keyboard(World &world, int control
             return copies;
         }
     }
-    // The free controllers are the controllers that no gamer owns, in ID order.
     int freeIndex = 0;
     for (int controller = 0; controller < controllerID; controller++) {
         bool owned = false;
@@ -176,7 +167,6 @@ CUJU_FUNCTION_NO_INLINE inline KeyboardCopies Keyboard(World &world, int control
     return copies;
 }
 
-// `player` is the index of the agent within its team.
 CUJU_FUNCTION_NO_INLINE inline void EnvironmentAction(World &world, int action, bool leftTeam,
                                                       int player) {
     const int controllerID = player + (leftTeam ? 0 : MAXIMUM_TEAM_CONTROLLERS);
@@ -296,12 +286,10 @@ CUJU_FUNCTION_NO_INLINE inline void EnvironmentAction(World &world, int action, 
     }
 }
 
-// A controller that the state does not hold is at its defaults, no direction and no button pressed.
 CUJU_FUNCTION inline bool StickyActionState(World &world, int action, bool leftTeam, int player) {
     KeyboardCopies copies = Keyboard(world, player + (leftTeam ? 0 : MAXIMUM_TEAM_CONTROLLERS));
     if (copies.count == 0) return false;
     const state::KeyboardState &keyboard = *copies[0];
-    // Exact: the mirror sign is 1 or -1, so a second multiplication recovers the chosen direction.
     const Vector3 direction = keyboard.direction * keyboard.mirror;
     switch (action) {
         case e_Action_Left:
@@ -334,8 +322,7 @@ CUJU_FUNCTION inline bool StickyActionState(World &world, int action, bool leftT
     return false;
 }
 
-// GRF: the end of `GameEnv::step`, after its ticks. A step in play counts and releases the buttons
-// that a press holds for one step only.
+// GRF: the end of `GameEnv::step`, after its ticks.
 CUJU_FUNCTION_NO_INLINE inline void EnvironmentFinishStep(World &world) {
     if (world.serialized.match.inPlay) {
         world.serialized.step++;
@@ -348,7 +335,6 @@ CUJU_FUNCTION_NO_INLINE inline void EnvironmentFinishStep(World &world) {
     }
 }
 
-// A render point of GRF's `GameEnv::step`, which a batch that renders follows.
 struct NoRender {
     CUJU_FUNCTION void operator()() const {}
 };
@@ -384,8 +370,7 @@ struct TeamObservation {
     PlayerObservation players[state::MAXIMUM_TEAM_PLAYERS];
     int designatedPlayer = -1;
 };
-// GRF's observation, seen from the left team. `team[0]` is the left team. Player indices count
-// within a team, and -1 marks no player or no team.
+// GRF's observation, seen from the left team.
 struct Observation {
     float ball[3], ballDirection[3], ballRotation[3];
     TeamObservation team[2];
@@ -397,14 +382,11 @@ struct Observation {
     bool isInPlay;
 };
 
-// Speed: an out parameter, since a returned `Observation` is copied at every call site.
 CUJU_FUNCTION_NO_INLINE inline void EnvironmentGetState(const World &world,
                                                         const SimulationContext &context,
                                                         Observation &observation) {
     CUJU_PROFILE_SCOPE(ENVIRONMENT_GET_STATE);
     const state::MatchState &match = world.serialized.match;
-    // Speed: a loop over the words is shorter than a store per member. The prototype keeps the -1
-    // of a team without a designated player.
     WarpReset(observation);
     auto setCoordinates = [](float *out, const Vector3 &vector) {
         for (int index = 0; index < 3; index++) out[index] = EnvironmentCoordinate(vector, index);
@@ -474,9 +456,6 @@ enum GameState {
     e_GameState_Done
 };
 
-// `world` holds a copy of a template, the state after a reset of the same scenario, agents and
-// `reverseTeamProcessing`. Resets with other seeds differ only in the RNG, the stored seed and
-// the idle frames of the humanoids, so this reseeds and replays GRF's reset draws in their order.
 CUJU_FUNCTION_NO_INLINE inline bool EnvironmentResetFromTemplate(World &world,
                                                                  const SimulationContext &context,
                                                                  uint32_t seed) {
@@ -495,7 +474,7 @@ CUJU_FUNCTION_NO_INLINE inline bool EnvironmentResetFromTemplate(World &world,
             Formation(world, context, player).position * 25 * Vector3(-side, -side, 0);
         if (!HumanoidResetPosition(world, context, player, position, Vector3(0))) return false;
     }
-    world.draws.officialSkin = RandomInRange(world.serialized.rng, 1, 4);  // The officials' skin.
+    world.draws.officialSkin = RandomInRange(world.serialized.rng, 1, 4);
     for (int official = 0; official < 3; official++)
         for (int draw = 0; draw < 2; draw++)
             if (!HumanoidResetPosition(world, context, playerCount + official, Vector3(0),
@@ -527,11 +506,6 @@ struct EnvironmentCore {
     Observation observation;
 };
 
-// `actions` holds one `Action` per agent, the left agents first. `reward` is the left team's
-// change of score difference. `tickHook` runs after every tick and returns `false` to stop, and
-// `renderHook` at each render point.
-// GRF: after 20 steps in a set piece every agent short-passes, then the ball owner's agent runs
-// to one side and back while the rest idle.
 template <class TickHook, class RenderHook = NoRender>
 CUJU_FUNCTION_NO_INLINE inline bool EnvironmentCoreStep(World &world,
                                                         const SimulationContext &context,
@@ -615,5 +589,5 @@ CUJU_FUNCTION inline bool EnvironmentCoreAfterReset(World &world, const Simulati
     }
 }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

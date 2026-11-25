@@ -1,10 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Runs GRF's own tests of `gfootball.env`, ported with only their imports changed, on cuju.
-
-`UNITTEST_IN_DOCKER`, GRF's own switch, skips the tests that render, and `fast_run` shortens the
-two long matches. `CUJU_GRF_SUITE_FULL=1` plays them at GRF's full lengths.
-"""
+"""Runs GRF's own tests of `gfootball.env`, ported with only their imports changed, on cuju."""
 
 import importlib
 import importlib.util
@@ -34,9 +30,7 @@ _VIDEO_TESTS = (
 _TEXT_TEST = 'ScriptHelpersTest.test_dump_to_txt'
 _VIDEO_SKIP_REASON = 'GRF replay and video export need OpenCV, which provides cv2'
 
-# GRF's tests of `gym.make` that fail in GRF itself under a later gym that runs GRF. Gym 0.22 and
-# 0.23 refuse the ids of the form `gfootball:GFootball-...`, and gym 0.24's step checker refuses the
-# rewards of GRF's multi-agent wrappers. The port fails them alike.
+# GRF's tests of `gym.make` that fail in GRF itself under a later gym that runs GRF.
 _CONSISTENT = (
     'SingleAgentWrapperTest.test_consistent_observation_and_action',
     'SingleAgentWrapperTest.test_consistent_observation_and_action_floats',
@@ -50,7 +44,6 @@ _GYM_FAILURES = {
 
 
 def _gym_failures():
-    """Returns the tests that GRF fails under the gym that serves the port."""
     from cuju.gfootball import _gym
 
     if _gym.VENDORED:
@@ -60,7 +53,6 @@ def _gym_failures():
 
 
 def _module(name):
-    """Imports one of GRF's test modules with GRF's switch that skips rendering."""
     os.environ['UNITTEST_IN_DOCKER'] = '1'
     module = importlib.import_module(f'cuju.gfootball.env.{name}')
     if hasattr(module, 'fast_run'):
@@ -69,7 +61,6 @@ def _module(name):
 
 
 def _cases():
-    """Returns one case for each test method of GRF's modules, by its class and its name."""
     cases = []
     for name in MODULES:
         try:
@@ -90,7 +81,6 @@ def _cases():
 
 
 def _run_case(case, test):
-    """Runs a GRF case with its optional OpenCV dependency accounted for."""
     from absl import flags
 
     if not flags.FLAGS.is_parsed():

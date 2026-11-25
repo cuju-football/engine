@@ -16,10 +16,8 @@
 
 namespace cuju::render::assets {
 namespace {
-
 constexpr int kElements = 5;
 
-// Folded at compile time, so the subnormal FLT_MIN / 100 survives any FTZ mode.
 constexpr float kResetMin = std::numeric_limits<float>::max() / 100;
 constexpr float kResetMax = std::numeric_limits<float>::min() / 100;
 
@@ -57,7 +55,7 @@ void Add(Aabb &aabb, const Aabb &add) {
         if (aabb.max.v[i] < add.max.v[i]) aabb.max.v[i] = add.max.v[i];
 }
 
-}  // namespace
+}
 
 void Aabb::Reset() {
     for (int i = 0; i < 3; i++) {
@@ -146,7 +144,6 @@ GeometryData IndexFullbody(const GeometryData &fullbody, float z_multiplier) {
     for (const TriangleMesh &mesh : fullbody.meshes) {
         const int elementOffset = (int)mesh.vertices.size() / kElements;
         const float *data = mesh.vertices.data();
-        // The first occurrence of each position and texcoord pair keeps all five elements.
         std::vector<int> unique;
         TriangleMesh result;
         result.material = mesh.material;
@@ -182,4 +179,4 @@ GeometryData IndexFullbody(const GeometryData &fullbody, float z_multiplier) {
     return out;
 }
 
-}  // namespace cuju::render::assets
+}

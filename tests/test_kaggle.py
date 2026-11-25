@@ -58,13 +58,11 @@ def test_players_raw_holds_grf_values_as_json(batch):
     for agent in (0, 1):
         (entry,) = kaggle.players_raw(batch, 1, agent)
         assert set(entry) == KEYS
-        # Kaggle's server sends it through JSON, which keeps every value.
         assert json.loads(json.dumps(entry)) == entry
         assert len(entry['left_team']) == 5 and len(entry['sticky_actions']) == 10
         assert isinstance(entry['ball'][0], float) and isinstance(entry['active'], int)
         theirs = raw['left_team'][1, agent, :5].double().numpy()
         assert np.array(entry['left_team']).tobytes() == theirs.tobytes()
-    # The right agent sees the match turned by 180 degrees, its own goals first.
     left, right = (kaggle.players_raw(batch, 0, agent)[0] for agent in (0, 1))
     assert right['ball'][:2] == [-value for value in left['ball'][:2]]
     assert right['score'] == left['score'][::-1]
@@ -94,7 +92,6 @@ def test_kaggle_agent_plays_as_its_actions():
     def agent(obs, configuration):
         seen.append((obs.step, configuration.get('name')))
         player = obs['players_raw'][0]
-        # Shoot when the own team owns the ball, else stand still.
         return [Action.Shot if player['ball_owned_team'] == 0 else Action.Idle]
 
     opponent = kaggle.KaggleAgent(agent, played, 1, configuration={'name': 'test'})
@@ -177,6 +174,5 @@ def test_agent_runner_calls_as_kaggle_and_checks_answers(batch):
         kaggle.action_index(['shot'], 19)
     assert kaggle.action_index(np.array([7]), 19) == 7
     assert kaggle.action_indices((1, Action.Idle), 19, 2) == [1, 0]
-    # The names before 0.2.1 stay as aliases.
     assert kaggle._action is kaggle.action_index and kaggle._actions is kaggle.action_indices
     assert kaggle._accepts_configuration is kaggle.accepts_configuration

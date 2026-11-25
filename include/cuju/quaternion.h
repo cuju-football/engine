@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // GRF's float quaternion, stored x, y, z, then the scalar w.
-// Exact: every step keeps GRF's float or double, and its libm.
 #pragma once
 
 #include <cmath>
@@ -18,7 +17,6 @@
 #include "x86.h"
 
 namespace cuju {
-
 struct Quaternion {
     float elements[4];
 
@@ -56,8 +54,7 @@ struct Quaternion {
                               elements[1] * other.elements[1] - elements[2] * other.elements[2];
         return product;
     }
-    // GRF: two cross products with the vector part, not two quaternion products. A rotation only
-    // at length 1.
+    // GRF: two cross products with the vector part, not two quaternion products.
     CUJU_HOST_DEVICE Vector3 operator*(const Vector3 &vector) const {
         Vector3 vectorPart(elements[0], elements[1], elements[2]);
         Vector3 firstCross = vectorPart.GetCrossProduct(vector);
@@ -78,7 +75,6 @@ struct Quaternion {
         for (int index = 0; index < 4; index++) elements[index] *= factor;
     }
 
-    // Exact: a float square root, compared with the double 1e-6.
     CUJU_HOST_DEVICE float GetMagnitude() const {
         if (elements[0] == 0.0f && elements[1] == 0.0f && elements[2] == 0.0f &&
             elements[3] == 0.0f)
@@ -100,8 +96,7 @@ struct Quaternion {
     }
 
     // GRF picks `2 / (1 + s)` over `1 / sqrt(s)` when the magnitude of `(int32_t)(1.0 - s)` is
-    // below 2.1e-8, at 0 when s is below 2 or at `INT32_MIN` for NaN or a float above 2^31. The
-    // float tests decide the same for every float, with s summed in float, the factors in double.
+    // below 2.1e-8, at 0 when s is below 2 or at `INT32_MIN` for NaN or a float above 2^31.
     CUJU_HOST_DEVICE void Normalize() {
         const float squaredMagnitude = elements[0] * elements[0] + elements[1] * elements[1] +
                                        elements[2] * elements[2] + elements[3] * elements[3];
@@ -129,8 +124,6 @@ struct Quaternion {
                elements[2] * other.elements[2] + elements[3] * other.elements[3];
     }
 
-    // Exact: the dot sums in float in the order w, x, y, z. The rest runs in double and rounds to
-    // float at the end.
     CUJU_HOST_DEVICE_NO_INLINE Quaternion GetSphericallyInterpolated(float bias,
                                                                      const Quaternion &to) const {
         Quaternion result;
@@ -154,8 +147,6 @@ struct Quaternion {
             return result;
         }
 #if !defined(__CUDA_ARCH__)
-        // Speed: a zero bias gives weights within 2^-25 of 1 and a zero signed as `bias`,
-        // so each element rounds back to its own, and a zero takes the sign of a sum of two zeros.
         if (bias == 0.0f && sinHalfTheta >= 0.000001f) {
             for (int element = 0; element < 4; element++) {
                 const float own = elements[element];
@@ -283,4 +274,4 @@ struct Quaternion {
     }
 };
 
-}  // namespace cuju
+}

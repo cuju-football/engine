@@ -2,8 +2,6 @@
 // Copyright 2019 Google LLC & Bastiaan Konings
 // SPDX-License-Identifier: Apache-2.0
 
-// The world of one environment and the mirroring between its coordinate frames.
-// Exact: a mirror turns the pitch by negating x and y only, so a second mirror restores the bits.
 #pragma once
 
 #include "../warp.h"
@@ -14,7 +12,6 @@
 
 namespace cuju {
 namespace simulation {
-
 using state::EnvironmentStateFull;
 using state::HumanoidState;
 using state::MatchState;
@@ -22,9 +19,6 @@ using state::MentalImageState;
 using state::PlayerImage;
 using state::Radian;
 
-// In the rest frame between ticks, each team is in its own frame, side -1, no mirror, the ball in
-// team 0's. `MirrorMatch` moves to the call frame of the team being processed, and a state stores
-// the canonical frame of `CanonicalToRest`. These flags are not in the state.
 struct FrameFlags {
     bool teamMirrored[2] = {false, false};
     int teamSide[2] = {-1, -1};
@@ -33,24 +27,19 @@ struct FrameFlags {
     bool mentalBallMirrored[4] = {};
 };
 
-// GRF: render mode. Off plays without graphics. On plays with graphics that render, whose
-// observers recompute a root's cache at every invalidation, and `ResetPosition` moves the root
-// without one, so later reads see the root where it was. Idle plays with graphics after
-// `game_config.render` turned off, where a cache computed before stays until its invalidation.
+// GRF: render mode.
 enum RenderMode : int8_t { e_Render_Off, e_Render_On, e_Render_Idle };
 
-// GRF: the cached world transform of a humanoid's root node, which is absolute, so the cache is
-// its own position and rotation when last computed. Not `valid` is a cache to compute afresh.
+// GRF: the cached world transform of a humanoid's root node, which is absolute, so the cache is its
+// own position and rotation when last computed.
 struct RootCache {
     Vector3 position;
     Quaternion rotation;
     bool valid = false;
 };
-// The players, then the three officials, as `AnyHumanoid` counts them.
 constexpr int MAXIMUM_HUMANOIDS = state::MAXIMUM_PLAYERS + 3;
 
-// GRF: `SpamMessage`, the message caption's last message, which no state holds. The text is made
-// from `kind`, `team`, a GRF team ID, and `player`, at render time.
+// GRF: `SpamMessage`, the message caption's last message, which no state holds.
 enum MessageKind : int8_t {
     e_Message_Goal,
     e_Message_GoalNoScorer,
@@ -64,7 +53,6 @@ enum MessageKind : int8_t {
     e_Message_SentOff,
     e_Message_AllOver
 };
-// The bytes of a message's text with its terminating zero, at most.
 constexpr int MESSAGE_BYTES = 128;
 struct MatchMessage {
     bool spammed = false;
@@ -80,32 +68,23 @@ struct MatchMessage {
     uint64_t removeTimeMilliseconds = 0;
 };
 
-// The draws of the match's creation that only the pictures read, the officials' shared skin and
-// the six of the light, in the order of the RNG.
 struct MatchDraws {
     float officialSkin = 1.0f;
     float light[6] = {};
 };
 
-// A state together with the data that a state lacks.
 struct World {
     EnvironmentStateFull serialized;
     FrameFlags flags;
     int playerTeamID[state::MAXIMUM_PLAYERS];
-    // 0 selects the player's own formation entry, any other value 1 plus the player whose entry it
-    // uses. GRF: a goalkeeper sent off hands its entry to the first active player of its team.
     int8_t formationOverride[state::MAXIMUM_PLAYERS];
     // GRF: the `animations` flag of `GameEnv::reset`, which the referee holds for the match.
-    // Without it the clock skips the wait of a stoppage at once.
     bool refereeAnimations = false;
-    // GRF: `ScenarioConfig` caches `DynamicPlayerSelection` until a state is saved or loaded.
-    // -1 computes it at every read, as the batch does. 0 and 1 are a cached value, and 2 and 3 a
-    // value that the first read caches.
+    // GRF: `ScenarioConfig` caches `DynamicPlayerSelection` until a state is saved or loaded. -1
+    // computes it at every read, as the batch does.
     int8_t dynamicPlayerSelection = -1;
-    // A `RenderMode`. Off, every read of a root is fresh.
     int8_t renderMode = e_Render_Off;
     RootCache rootCaches[MAXIMUM_HUMANOIDS];
-    // For the pictures only, cleared at the creation of each match.
     MatchMessage message;
     MatchDraws draws;
     // GRF: the scoreboard, in `goalCount`'s order, which takes a team's count at its goals only,
@@ -114,15 +93,14 @@ struct World {
     // GRF: `Deactivate` moves a sent-off player's body and hair out of sight, and only a `Put` of
     // the player active again brings them back, so a player loaded inactive stays where it stood.
     bool humanoidHidden[state::MAXIMUM_PLAYERS] = {};
-    // GRF: the count of `ProcessState` runs, each of which makes the next render upload the
-    // nets again.
+    // GRF: the count of `ProcessState` runs, each of which makes the next render upload the nets
+    // again.
     uint32_t stateProcessed = 0;
     CUJU_FUNCTION int FirstTeamID() const {
         return serialized.match.firstTeam ^ (serialized.scenario.reverseTeamProcessing ? 1 : 0);
     }
 };
 
-// The root's cache computed afresh.
 CUJU_FUNCTION inline void RefreshRootCache(RootCache &cache, const state::NodeState &root) {
     cache.position = root.position;
     cache.rotation = root.rotation;
@@ -158,7 +136,6 @@ CUJU_FUNCTION_NO_INLINE inline void MirrorHumanoid(HumanoidState &humanoid, bool
     MirrorRadian(humanoid.startAngle);
     MirrorVector(humanoid.nextStartPosition);
     MirrorRadian(humanoid.nextStartAngle);
-    // A spatial state mirrors its positions and movements and keeps its angles.
     state::SpatialState &spatialState = humanoid.spatialState;
     MirrorVector(spatialState.position);
     MirrorVector(spatialState.actualMovement);
@@ -171,7 +148,6 @@ CUJU_FUNCTION_NO_INLINE inline void MirrorHumanoid(HumanoidState &humanoid, bool
     MirrorVector(humanoid.previousPosition2D);
     MirrorVector(humanoid.tripDirection);
     MirrorVector(humanoid.decayingPositionOffset);
-    // The scratch values of the animation selection are not state and stay as they are.
 }
 
 CUJU_FUNCTION inline void MirrorTeam(World &world, int teamID) {
@@ -186,8 +162,6 @@ CUJU_FUNCTION inline void MirrorTeam(World &world, int teamID) {
     });
 }
 
-// The prediction and history arrays mirror lazily. `lazyFlip` says they hold negated x and y, a
-// reader applies it per value, and a user of the whole arrays calls `BallMaterialize` first.
 CUJU_FUNCTION inline void MirrorBall(state::BallSerialized &ball) {
     MirrorVector(ball.momentum);
     ball.lazyFlip = !ball.lazyFlip;
@@ -240,9 +214,6 @@ CUJU_FUNCTION inline void MirrorMatch(World &world, bool team0, bool team1, bool
         MirrorMentalImage(world, image, team0, team1, ball);
 }
 
-// A state stores the ball, the last-touch team IDs and the referee's team and positions relative
-// to processing order, and the goal counts and possession times in state order. The flags stay.
-// The conversion is an involution, so `RestToCanonical` is the same function.
 CUJU_FUNCTION_NO_INLINE inline void CanonicalToRest(World &world) {
     MatchState &match = world.serialized.match;
     if (world.FirstTeamID() == 1) {
@@ -260,5 +231,5 @@ CUJU_FUNCTION_NO_INLINE inline void CanonicalToRest(World &world) {
 }
 CUJU_FUNCTION inline void RestToCanonical(World &world) { CanonicalToRest(world); }
 
-}  // namespace simulation
-}  // namespace cuju
+}
+}

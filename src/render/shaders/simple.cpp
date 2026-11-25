@@ -13,7 +13,6 @@
 #include "../sampler.h"
 
 namespace cuju::render::shaders {
-
 SimpleProgram::SimpleProgram()
     : gl::Program(
           {{"modelMatrix", gl::kMat4, 1},
@@ -29,8 +28,6 @@ SimpleProgram::SimpleProgram()
           {gl::Interp::kPerspective, gl::Interp::kPerspective, gl::Interp::kPerspective}) {}
 
 namespace {
-
-// m * v for the upper 3x3 of a column-major matrix, ((m0r * x + m1r * y) + m2r * z).
 inline void Mul3(const float *m, const float *v, float *out) {
     for (int r = 0; r < 3; ++r) {
         float s = ftz::Mul(m[0 * 3 + r], v[0]);
@@ -39,12 +36,8 @@ inline void Mul3(const float *m, const float *v, float *out) {
     }
 }
 
-}  // namespace
+}
 
-// frag_position = V * (M * pos) with pos.w = 1 folded away, gl_Position = P * frag_position. The
-// normal matrix transpose(inverse(mat3(M))) is the uniform-only cofactor form with nine divides by
-// the determinant, applied to normal, tangent and bitangent. Fragment inputs, packed as the JIT
-// packs the varyings: (normal, s), (t, tangent), (bitangent, 0).
 void SimpleProgram::RunVertices(const gl::DrawState &state, int count, const float *const *attribs,
                                 float *clip, float *inputs) const {
     const float *M = state.UniformPtr(kModelMatrix);
@@ -63,7 +56,6 @@ void SimpleProgram::RunVertices(const gl::DrawState &state, int count, const flo
     const float k108 = ftz::Add(ftz::Mul(a0, b2), -ftz::Mul(b0, a2));
     const float k113 = ftz::Add(ftz::Mul(a0, b1), -ftz::Mul(b0, a1));
     const float det = ftz::Add(ftz::Add(ftz::Mul(a0, k77), -ftz::Mul(a1, k81)), ftz::Mul(a2, k85));
-    // N, column-major: column 0 multiplies x, column 1 y, column 2 z.
     float N[9];
     N[0] = ftz::Div(k77, det);
     N[3] = ftz::Div(-k90, det);
@@ -112,8 +104,6 @@ void SimpleProgram::RunVertices(const gl::DrawState &state, int count, const flo
 }
 
 namespace {
-
-// Quads of a lane mask, bit q for quad q.
 inline unsigned QuadMask(std::uint16_t lanes) {
     unsigned q = 0;
     for (int k = 0; k < 4; ++k) {
@@ -124,11 +114,6 @@ inline unsigned QuadMask(std::uint16_t lanes) {
     return q;
 }
 
-// texture() of one unit for the quads in `quads` and the channels in `channels`, out[c * 16 +
-// lane]; lanes of other quads are 0. GRF's material textures are mipmapped and sampled by
-// llvmpipe's anisotropic trilinear texfunc. An incomplete texture samples Mesa's fallback, a 1x1
-// RGBA8 texel (0, 0, 0, 255), as the inline nearest code of the variants without a texfunc for that
-// unit.
 void SampleUnit(const Texture *tex, unsigned quads, const float *s, const float *t,
                 unsigned channels, float *out) {
     if (tex == nullptr || tex->levels.size() < 2) {
@@ -169,11 +154,8 @@ void SampleUnit(const Texture *tex, unsigned quads, const float *s, const float 
     }
 }
 
-}  // namespace
+}
 
-// fs157: early D16 LESS test, albedo with discard on alpha < 0.12 (olt), the materialbools
-// branches, bump mapping, normalize as v * fdiv(1, sqrt(dot)) with the dot in reverse component
-// order, three RGBA16F outputs stored round toward zero, then the depth store for the lanes left.
 void SimpleProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     float X[16], Y[16], z[16];
     std::uint16_t d16[16];
@@ -181,14 +163,13 @@ void SimpleProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     gl::InterpolateDepth(b, X, Y, z);
     gl::DepthToD16(z, d16);
     const std::uint16_t pass = gl::DepthTest(b, d16, gl::LaneMaskFromCoverage(b.coverage));
-    // Lanes outside the mask are rewritten unchanged by the JIT's store, so nothing to do.
     if (pass == 0) {
         return;
     }
     const gl::DrawState &st = *b.state;
 
     alignas(32) float oow[16];
-    alignas(32) float v[11][16];  // normal xyz, s, t, tangent xyz, bitangent xyz
+    alignas(32) float v[11][16];
     gl::PerspectiveOneOverW(b, X, Y, oow);
     for (int c = 0; c < 4; ++c) {
         gl::InterpolatePerspective(b, 1, c, X, Y, oow, v[c]);
@@ -286,4 +267,4 @@ void SimpleProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kSimple, SimpleProgram);
 
-}  // namespace cuju::render::shaders
+}
