@@ -291,36 +291,9 @@ jobs:
     # can read.
     sbom:
         needs: [sdist, wheel, gfootball]
-        runs-on: ubuntu-24.04
-        steps:
-            - uses: actions/download-artifact@v8
-              with:
-                  path: dist
-                  pattern: '{sdist,wheel-*,cuju-gfootball}'
-                  merge-multiple: true
-            - uses: anchore/sbom-action/download-syft@v0
-              id: syft
-            - name: Write the SBOM of each wheel and sdist
-              run: |
-                  mkdir -p sbom unpacked
-                  for file in dist/*.whl dist/*.tar.gz; do
-                      name=$(basename "$file" .whl)
-                      name=${name%.tar.gz}
-                      version=$(echo "$name" | cut -d- -f2)
-                      mkdir -p "unpacked/$name"
-                      case $file in
-                          *.whl) unzip -q "$file" -d "unpacked/$name" ;;
-                          *) tar -xzf "$file" -C "unpacked/$name" ;;
-                      esac
-                      "${{ steps.syft.outputs.cmd }}" scan "dir:unpacked/$name" \
-                          --source-name "${name%%-*}" --source-version "$version" \
-                          -o "spdx-json=sbom/$name.spdx.json"
-                  done
-                  ls -l sbom
-            - uses: actions/upload-artifact@v7
-              with:
-                  name: sbom
-                  path: sbom/*.spdx.json
+        uses: cuju-football/.github/.github/workflows/sbom.yml@main
+        with:
+            artifacts: '{sdist,wheel-*,cuju-gfootball}'
 
     # The data wheel cuju-grf-media, GRF's media at the pinned commit, copied unchanged by
     # ci/make_render_media.py, which refuses a tree whose files differ from their pins. It builds

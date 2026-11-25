@@ -29,6 +29,7 @@ HERE = 'engine'
 ARENA = 'arena'
 RENDER = 'render'
 UMBRELLA = 'cuju'
+ORG = '.github'
 BRANCH = 'main'
 
 # Every path of a sibling repository that the files link to, as it follows
@@ -39,6 +40,7 @@ SIBLING_PATHS = {
     ARENA: [''],
     RENDER: [''],
     UMBRELLA: [''],
+    ORG: ['blob/main/CONTRIBUTING.md'],
 }
 
 # The hosts whose addresses are no links to check, each with its reason.

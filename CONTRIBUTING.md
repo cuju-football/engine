@@ -3,11 +3,16 @@
 One rule shapes everything else in cuju. Its outputs equal those of Google Research Football, or
 GRF, bit for bit, and every contribution keeps that rule.
 
+The [contributing guide of the organization](https://github.com/cuju-football/.github/blob/main/CONTRIBUTING.md)
+holds the rules for commits, documentation and Python that every Cuju repository shares, and this
+one adds the notes of the engine.
+
 ## Reports
 
-- **A difference from GRF** is the most valuable report. Use the Difference from GRF issue form,
-    which asks for exactly what a reproduction needs.
-- **Bugs, installation problems, performance and missing GRF features** have their own forms.
+- **A difference from GRF** is the most valuable report. Use the Difference from GRF issue form of
+    the organization, which asks for exactly what a reproduction needs.
+- **Bugs, installation problems, performance and missing GRF features** have the Bug and Feature
+    request forms of the organization.
 - **Questions** go to [Discussions](https://github.com/cuju-football/engine/discussions).
 
 ## Changes to the simulation
@@ -53,10 +58,7 @@ only a pull request.
 3. Run `clang-format-18 --dry-run -Werror` on changed C++ and CUDA files.
 4. Keep the compiler flags as they are. The build refuses flags that change floating-point results,
     and a pull request that needs one explains why.
-5. Write each commit message as one line in the imperative, at most 72 characters, with no body,
-    such as `Port the flight of the ball`.
-6. Write documentation in plain, precise sentences, with GRF's names for GRF's things, to
-    Wikipedia's Manual of Style, with prose that uses only words, commas and periods.
+5. Use GRF's names for GRF's things in the documentation.
 
 ## Rules for exactness
 
@@ -92,9 +94,8 @@ clang-format-18 --dry-run -Werror <files>      # C++ and CUDA
 - In C++, name constants in `UPPER_SNAKE_CASE`, variables in `camelCase`, functions and types in
     `PascalCase`. Write `//` comments only, sparse, saying why. Prefix GRF facts with `GRF:`,
     exactness notes with `Exact:`, speed notes with `Speed:`.
-- In Python, follow PEP 8 through `ruff`, with line length 100, single quotes and Google-style
-    docstrings. Raise the classes of `cuju.errors` rather than bare built-ins.
-- Start new files with `Copyright 2026 The cuju Authors` and `SPDX-License-Identifier: Apache-2.0`.
+- In Python, write Google-style docstrings and raise the classes of `cuju.errors` rather than bare
+    built-ins.
 - Leave `python/cuju/gfootball/` out of `ruff`, since `ci/port_gfootball.py` generates it.
 
 ## Leave alone unless the pull request states a reason

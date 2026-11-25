@@ -82,6 +82,10 @@ maps every old name to its replacement.
     between its columns. Static shell completion offers the shipped case names, the replay devices
     and the Boolean values of the text exporter.
 - The single-environment migration guide names the `spaces` extra as a prerequisite.
+- The Code of Conduct and the general contributing guide live in the `.github` repository of the
+    organization, with the issue forms and the pull request template, and the repository keeps its own
+    security policy and contributing notes. CI runs the lint of the Python and the SBOMs through
+    the organization's reusable workflows.
 
 ### Removed
 

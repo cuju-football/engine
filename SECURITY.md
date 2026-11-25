@@ -10,18 +10,13 @@
 
 ## Reporting a Vulnerability
 
-Report a vulnerability privately through GitHub's private vulnerability reporting. Open the
+Report a vulnerability privately through GitHub's private vulnerability reporting, as the
+[security policy of the organization][org-security] describes. Open the
 [Security tab](https://github.com/cuju-football/engine/security) of the repository, then choose
 Report a vulnerability. Please keep vulnerabilities out of public issues and discussions.
 
 A useful report names the version, the platform and the backend, and gives the steps or the file
-that reproduce the problem.
-
-## What to Expect
-
-- An acknowledgment of the report within seven days.
-- An assessment, and a plan for a fix when the report is confirmed, within thirty days.
-- A fixed release and a published advisory, with credit to the reporter unless anonymity is asked.
+that reproduce the problem. The organization's policy gives what to expect after a report.
 
 ## Trusted Input
 
@@ -44,3 +39,4 @@ loopback interface. Its own [security policy][render-security] describes both an
 reports.
 
 [render-security]: https://github.com/cuju-football/render/blob/main/SECURITY.md
+[org-security]: https://github.com/cuju-football/.github/blob/main/SECURITY.md
