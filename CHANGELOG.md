@@ -7,6 +7,26 @@ compare only within one version, or across versions whose entries say the output
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - Unreleased
+
+Every output of a batch and every state stays as it was in 0.5.0, bit for bit, on both backends. The
+scene is read from a world without changing it, and only when asked.
+
+### Added
+
+- `cuju.scene` gives the exact scene of a match, typed and versioned, in numpy arrays. `of_batch`
+    reads the scene of chosen environments on the CPU or the GPU, `follow` keeps it after each step
+    with the events of the step, and `of_recording` replays a recording into its scene, equal bit for
+    bit to the match followed live. `Frames` holds the step, the clock, the score, the game mode and
+    set piece, the half, possession, the last touch, the foul and the offside, the ball, and for each
+    player and official the role, cards, control, animation, height, root and the 13 joints in
+    world space. The events are `kickoff`, `restart`, `goal`, `foul`, `card`, `offside`, `halftime`
+    and `fulltime`. The module also holds GRF's constants, the pitch, the goal, the skeleton and the
+    names of the enumerations. See [Scene](docs/scene.md).
+- The C library gains `cuju_environment_scene_states`, `cuju_scene_state_size`,
+    `cuju_scene_state_version` and `cuju_scene_team_players`. `SceneState` is in
+    `include/cuju/scene/scene_state.h`.
+
 ## [0.5.0] - 2026-11-26
 
 ### Added

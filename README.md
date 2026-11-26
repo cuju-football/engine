@@ -82,6 +82,7 @@ The reference is GRF 2.10.3 at commit 3d9e754 as built by GCC for x86-64 Linux w
 | [Migrating from GRF](https://github.com/cuju-football/engine/blob/main/docs/migrating-from-grf.md) | GRF's interfaces, option mapping, dumps |
 | [Controllers](https://github.com/cuju-football/engine/blob/main/docs/agents.md) | controllers for the agents of a batch, matches between them, Kaggle agents and other environments |
 | [Recording](https://github.com/cuju-football/engine/blob/main/docs/recording.md) | matches kept as files, replaying them, converting GRF dumps and Kaggle episodes |
+| [Scene](https://github.com/cuju-football/engine/blob/main/docs/scene.md) | the exact scene of a match as numpy arrays, with its events and constants |
 | [Exactness](https://github.com/cuju-football/engine/blob/main/docs/exactness.md) | what equals GRF, how to check, differences |
 | [Performance](https://github.com/cuju-football/engine/blob/main/docs/performance.md) | backends, devices, threads, memory |
 
