@@ -7,8 +7,8 @@ import torch
 import cuju
 import cuju.dumps
 import cuju.recording as cr
-from cuju import _kaggle
 from cuju._batch import unwrap
+from cuju.agents import kaggle as _kaggle
 
 SHORT = 'academy_empty_goal_close'
 TEAMS = 'academy_3_vs_1_with_keeper'

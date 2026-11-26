@@ -19,7 +19,10 @@ KAGGLE = "def agent(obs):\n    print('noise on stdout')\n    return [obs['step']
 
 def observation():
     return agents.Observation(
-        data={'ball': np.zeros((2, 1, 3), dtype=np.float32), 'active': np.zeros((2, 1), dtype=np.int32)},
+        data={
+            'ball': np.zeros((2, 1, 3), dtype=np.float32),
+            'active': np.zeros((2, 1), dtype=np.int32),
+        },
         first=np.ones(2, dtype=bool),
         active=np.ones((2, 1), dtype=bool),
         left_players=np.full(2, 5),
@@ -31,7 +34,9 @@ def observation():
 
 
 def test_frames_round_trip_every_dtype_and_refuse_pickles():
-    arrays = {name: np.arange(6, dtype=name).reshape(2, 3) for name in client._DTYPES if name != 'bool'}
+    arrays = {
+        name: np.arange(6, dtype=name).reshape(2, 3) for name in client._DTYPES if name != 'bool'
+    }
     arrays['bool'] = np.array([True, False])
     frame = client.encode('act', {'a': arrays, 'n': [1, 2.5, 'x', None, True]}, extra=7)
     found = client.read(io.BytesIO(frame))
@@ -118,13 +123,17 @@ def test_closing_ends_the_tree_and_a_crash_is_a_controller_error():
         os.kill(pid, 0)
     broken = Process({'entry': 'cuju.agents.standard:NoSuchThing'}, timeout=30)
     with pytest.raises(agents.ControllerError) as caught:
-        broken.representation
+        assert broken.representation
     assert caught.value.reason == 'load'
     broken.close()
 
 
 def test_a_silent_child_times_out():
-    code = 'import time\nclass Slow:\n    representation = "raw"\n    def start(self, spec): pass\n    def act(self, o):\n        time.sleep(30)\n    def close(self): pass\n'
+    code = (
+        'import time\nclass Slow:\n    representation = "raw"\n'
+        '    def start(self, spec): pass\n    def act(self, o):\n        time.sleep(30)\n'
+        '    def close(self): pass\n'
+    )
     controller = Process({'entry': 'slowmod:Slow'}, timeout=1.0, env={'PYTHONPATH': ''}, cwd=None)
     folder = os.path.join(os.environ.get('TMPDIR', '/tmp'), 'cuju_slowmod')
     os.makedirs(folder, exist_ok=True)

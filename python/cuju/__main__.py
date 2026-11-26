@@ -19,6 +19,7 @@ _MODULES = {
     'replay': '._replay_command',
     'dump': '._dump_command',
     'recording': '._recording_command',
+    'agents': '._agents_command',
 }
 
 

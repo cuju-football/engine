@@ -80,8 +80,8 @@ def selected(control: dict[str, Any], players: list[tuple[int, bool]]) -> list[i
         raise ConfigurationError("expected the goalkeeper in the selection for goalkeeper 'agent'")
     if control['goalkeeper'] in ('builtin', 'scenario') and owns:
         raise ConfigurationError(
-            f"expected the goalkeeper outside the selection for goalkeeper "
-            f"{control['goalkeeper']!r}"
+            f'expected the goalkeeper outside the selection for goalkeeper '
+            f'{control["goalkeeper"]!r}'
         )
     if control['goalkeeper'] == 'scenario' and any(i in available for i in keeper):
         raise ConfigurationError(

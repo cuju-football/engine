@@ -22,7 +22,9 @@ def _spaces(match: Any, gymnasium: Any) -> tuple[Any, Any]:
             "'raw', so create the batch with representation='simple115v2' and raw=True"
         )
     shape = (len(columns), *single.shape[1:])
-    observation = gymnasium.spaces.Box(low=single.low.flat[0], high=single.high.flat[0], shape=shape, dtype=single.dtype)
+    observation = gymnasium.spaces.Box(
+        low=single.low.flat[0], high=single.high.flat[0], shape=shape, dtype=single.dtype
+    )
     action = gymnasium.spaces.MultiDiscrete([inner.action_count] * len(columns))
     return observation, action
 

@@ -19,6 +19,7 @@ __all__ = [
     'play',
     'play_batch',
     'to_gymnasium',
+    'to_pettingzoo',
 ]
 
 # These import PyTorch or the engine, so importing the package stays light.
@@ -36,6 +37,7 @@ _LAZY = {
     'play_batch': '_match',
     'check': '_check',
     'to_gymnasium': '_gym',
+    'to_pettingzoo': '_pettingzoo',
 }
 
 

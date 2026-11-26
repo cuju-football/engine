@@ -1282,9 +1282,7 @@ class Batch:
         episodes = (ctypes.c_int * (count * stride))()
         self._wait_for_device()
         with self._on_device():
-            pointer = self._library.cuju_environment_get_states(
-                self._handle(), sizes, episodes
-            )
+            pointer = self._library.cuju_environment_get_states(self._handle(), sizes, episodes)
         if not pointer:
             raise _from_library(self._library.cuju_last_error().decode())
         joined = ctypes.string_at(pointer, sum(sizes))
@@ -1293,7 +1291,9 @@ class Batch:
             match = joined[offset : offset + sizes[index]]
             offset += sizes[index]
             states.append(
-                self._assemble(index, match, episodes[index * stride : (index + 1) * stride], stacked)
+                self._assemble(
+                    index, match, episodes[index * stride : (index + 1) * stride], stacked
+                )
             )
         if self._frames is not None:
             for index in range(count):
@@ -1375,7 +1375,9 @@ class Batch:
         states = list(states)
         count = self.environment_count
         if len(states) != count:
-            raise ArgumentError(f'expected {count} states, one for each environment, found {len(states)}')
+            raise ArgumentError(
+                f'expected {count} states, one for each environment, found {len(states)}'
+            )
         parsed = [self._parse_state(index, state, stacked) for index, state in enumerate(states)]
         stride = 3 + _MAXIMUM_AGENTS
         episodes = (ctypes.c_int * (count * stride))()

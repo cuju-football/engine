@@ -35,7 +35,11 @@ PROFILE = Profile(
     module='cuju.__main__',
     globals=('--quiet', '--verbose'),
     settings=False,
-    no_json={'completion': 'prints a shell script', 'help': 'prints help text'},
+    no_json={
+        'completion': 'prints a shell script',
+        'help': 'prints help text',
+        'agents client': 'prints the source of a file',
+    },
     exempt={},
     allowed={'--list': 'keeps the self-check flag from 0.2.1'},
     variables={},
@@ -146,6 +150,8 @@ VERBS = {
     'on',
     'off',
     'status',
+    'parts',
+    'client',
 }
 _PROSE = re.compile(r'[;()\[\]{}`\"!?]|: ')
 _EXAMPLE = re.compile(r'^\s+(cuju .+)$', re.MULTILINE)

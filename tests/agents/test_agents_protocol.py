@@ -14,7 +14,10 @@ from cuju.agents import client, protocol
 
 def value():
     return {
-        'data': {'a': np.arange(12, dtype=np.float32).reshape(2, 2, 3), 'b': np.ones((2, 2), dtype=bool)},
+        'data': {
+            'a': np.arange(12, dtype=np.float32).reshape(2, 2, 3),
+            'b': np.ones((2, 2), dtype=bool),
+        },
         'first': np.array([True, False]),
         'meta': {'overage': 60},
         'list': [1, 2.5, 'x', None],
@@ -48,7 +51,8 @@ def test_the_message_constructors_decode():
 def test_a_connection_serves_a_child_over_a_socket():
     near, far = socket.socketpair()
     child = threading.Thread(
-        target=lambda: client.serve(far.makefile('rb'), far.makefile('wb', buffering=0)), daemon=True
+        target=lambda: client.serve(far.makefile('rb'), far.makefile('wb', buffering=0)),
+        daemon=True,
     )
     child.start()
     connection = protocol.Connection(near.makefile('rwb', buffering=0))
@@ -57,8 +61,14 @@ def test_a_connection_serves_a_child_over_a_socket():
     connection.send(protocol.start(agents.Spec(environments=2, agents=1, seed=1)))
     assert connection.receive()['kind'] == 'ready'
     observation = agents.Observation(
-        data={}, first=np.ones(2, bool), active=np.ones((2, 1), bool),
-        left_players=np.zeros(2), right_players=np.zeros(2), previous=None, step=np.zeros(2), side=np.zeros(2),
+        data={},
+        first=np.ones(2, bool),
+        active=np.ones((2, 1), bool),
+        left_players=np.zeros(2),
+        right_players=np.zeros(2),
+        previous=None,
+        step=np.zeros(2),
+        side=np.zeros(2),
     )
     connection.send(protocol.act(observation))
     assert connection.receive()['value']['actions'].shape == (2, 1)

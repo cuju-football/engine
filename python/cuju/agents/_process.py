@@ -13,7 +13,6 @@ import threading
 from pathlib import Path
 from typing import Any
 
-
 from ..errors import ConfigurationError
 from . import _tree, client, protocol
 from ._contract import Actions, Controller, ControllerError, Observation, Spec, normalize
@@ -126,7 +125,7 @@ class Process(Controller):
         if callable(sink) and not hasattr(sink, 'fileno'):
             target, callback = subprocess.PIPE, sink
         elif isinstance(sink, (str, os.PathLike)):
-            target = open(sink, 'ab')  # noqa: SIM115, closed after the spawn
+            target = open(sink, 'ab')
         elif sink is not None:
             target = sink
         environment = {**os.environ, **extra, **self.env}
@@ -142,7 +141,9 @@ class Process(Controller):
                 **_tree.popen_options(),
             )
         except OSError as error:
-            raise ControllerError(f'expected to start {argv[0]!r}, found {error}', 'start') from None
+            raise ControllerError(
+                f'expected to start {argv[0]!r}, found {error}', 'start'
+            ) from None
         finally:
             if isinstance(sink, (str, os.PathLike)) and target is not None:
                 target.close()

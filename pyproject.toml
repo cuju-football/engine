@@ -132,6 +132,8 @@ quote-style = "single"
 select = ["E", "F", "W", "I", "UP", "B", "N", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
+# client.py runs under Python 3.8, so it keeps the spellings of that version.
+"python/cuju/agents/client.py" = ["UP006", "UP007", "UP031", "UP035", "UP045", "UP024", "B904", "RUF012"]
 # GRF's scenario API keeps GRF's method names.
 "python/cuju/scenarios.py" = ["N802", "N815"]
 "python/cuju/_grf_config.py" = ["N802"]

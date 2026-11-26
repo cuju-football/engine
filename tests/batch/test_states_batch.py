@@ -3,9 +3,9 @@
 """Checks `get_states` and `set_states` against the loop of `get_state` and `set_state`."""
 
 import pytest
-from conftest import actions_at, tensor_bytes
 
 import cuju
+from conftest import actions_at, tensor_bytes
 from cuju.errors import ArgumentError
 
 COUNT = 3
@@ -44,9 +44,11 @@ def test_every_entry_equals_get_state(device, options):
 @pytest.mark.parametrize('options', [{}, {'rewards': 'scoring,checkpoints'}, {'stacked': True}])
 def test_set_states_plays_on_as_a_loop_of_set_state(device, options):
     stacked = bool(options.get('stacked'))
-    with make(device, **options) as source, make(device, **options) as together, make(
-        device, **options
-    ) as looped:
+    with (
+        make(device, **options) as source,
+        make(device, **options) as together,
+        make(device, **options) as looped,
+    ):
         for batch in (source, together, looped):
             batch.reset()
         advance(source, 7)

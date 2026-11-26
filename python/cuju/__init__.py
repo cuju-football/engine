@@ -20,6 +20,7 @@ __all__ = [
     'engine_status',
     'errors',
     'scenario_names',
+    'types',
 ]
 
 scenario_names.__module__ = __name__
@@ -27,6 +28,7 @@ scenario_names.__module__ = __name__
 _LAZY = {
     'BatchEnvironment': '_environment',
     'engine_status': 'engine_status',
+    'types': 'types',
 }
 
 

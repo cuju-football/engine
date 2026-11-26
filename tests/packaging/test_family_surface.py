@@ -4,7 +4,7 @@
 
 import inspect
 
-from cuju import _action_log, _batch, _kaggle, _raw, _state
+from cuju import _action_log, _batch, _raw, _state, agents
 
 
 def parameters(function):
@@ -113,21 +113,50 @@ def test_raw_keeps_grf_observations():
     assert parameters(_raw.grf_observations) == ['batch', 'environment', 'agents', 'final']
 
 
-def test_kaggle_keeps_the_runners_and_the_helpers():
-    assert parameters(_kaggle.AgentRunner.__init__) == ['self', 'function', 'configuration']
-    assert parameters(_kaggle.AgentRunner.act) == ['self', 'obs', 'count']
-    assert parameters(_kaggle.KaggleAgent.__init__) == [
+def test_agents_keeps_its_public_surface():
+    for name in (
+        'Actions',
+        'Controller',
+        'ControllerError',
+        'Match',
+        'Observation',
+        'Result',
+        'Spec',
+        'check',
+        'load',
+        'parts',
+        'play',
+        'play_batch',
+        'to_gymnasium',
+        'to_pettingzoo',
+    ):
+        assert name in agents.__all__ and getattr(agents, name) is not None
+    assert parameters(agents.load) == ['spec', 'base']
+    assert parameters(agents.Match.__init__) == [
         'self',
-        'function',
         'batch',
-        'agent',
-        'configuration',
-        'agents',
+        'left',
+        'right',
+        'control',
+        'seed',
+        'check',
     ]
-    assert parameters(_kaggle.action_index) == ['value', 'count']
-    assert parameters(_kaggle.action_indices) == ['value', 'count', 'players']
-    assert callable(_kaggle.accepts_configuration)
-    assert callable(_kaggle.observation)
+    for name in ('reset', 'step', 'step_async', 'step_wait', 'run', 'set', 'close'):
+        assert callable(getattr(agents.Match, name))
+    assert hasattr(agents.Match, 'episodes')
+    assert parameters(agents.play_batch)[:3] == ['left', 'right', 'scenario']
+    assert parameters(agents.play)[:3] == ['left', 'right', 'scenario']
+    assert parameters(agents.check)[:3] == ['spec', 'scenario', 'steps']
+    assert parameters(agents.Controller.start) == ['self', 'spec']
+    assert parameters(agents.Controller.act) == ['self', 'observation']
+    assert parameters(agents.Controller.receive) == ['self', 'timeout']
+    from cuju.agents import kaggle, protocol
+
+    assert parameters(kaggle.action_index) == ['value', 'count']
+    assert parameters(kaggle.action_indices) == ['value', 'count', 'players']
+    assert callable(kaggle.accepts_configuration) and callable(kaggle.observation)
+    assert callable(kaggle.players_raw)
+    assert callable(protocol.encode) and callable(protocol.Connection.receive)
 
 
 def test_action_log_keeps_the_digest_and_the_replay():

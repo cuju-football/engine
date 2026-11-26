@@ -12,6 +12,7 @@ from ._assets import _split_name
 from ._batch import log as _log
 from ._batch.environment import Batch
 from .errors import ConfigurationError, LibraryError
+from .types import ActionSet, Device, Representation, Rewards
 
 __all__ = ['BatchEnvironment']
 
@@ -54,14 +55,14 @@ class BatchEnvironment:
         self,
         scenario: str,
         environment_count: int = 1024,
-        device: str | torch.device = 'auto',
+        device: Device = 'auto',
         seed: int = 0,
         left_agents: int = 1,
         right_agents: int = 0,
         difficulty: tuple[float | None, float | None] | None = None,
-        representation: str = 'simple115v2',
-        rewards: str = 'scoring',
-        action_set: str = 'default',
+        representation: Representation = 'simple115v2',
+        rewards: Rewards = 'scoring',
+        action_set: ActionSet = 'default',
         auto_reset: bool = True,
         stacked: bool = False,
         channel_dimensions: tuple[int, int] = (96, 72),

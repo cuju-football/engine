@@ -7,6 +7,7 @@ from typing import Any
 import numpy as np
 
 from .._version import __version__
+from ..types import ActionSet, Device, Representation
 from . import _files
 from ._errors import RecordingError
 
@@ -59,7 +60,7 @@ class Recording:
         done: Any = None,
         *,
         right_agents: int = 0,
-        action_set: str = 'default',
+        action_set: ActionSet = 'default',
         difficulty: Sequence[float | None] | None = None,
         players: Sequence[int] | None = None,
         end: int | None = None,
@@ -196,14 +197,17 @@ class Recording:
         return _files.write_archive(self.header, members, target)
 
     def replay(
-        self, representation: str = 'simple115v2', device: str = 'cpu', scenario: Any = None
+        self,
+        representation: Representation = 'simple115v2',
+        device: Device = 'cpu',
+        scenario: Any = None,
     ) -> Any:
         """Plays the state and actions in the engine and checks the stored steps."""
         from . import _replay
 
         return _replay.replay(self, representation, device, scenario)
 
-    def with_steps(self, device: str = 'cpu', scenario: Any = None) -> 'Recording':
+    def with_steps(self, device: Device = 'cpu', scenario: Any = None) -> 'Recording':
         """Returns a copy whose step fields come from a replay of the state and actions."""
         from . import _replay
 

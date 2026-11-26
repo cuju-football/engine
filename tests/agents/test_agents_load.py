@@ -12,7 +12,7 @@ from cuju import agents
 from cuju.agents import standard
 from cuju.errors import ConfigurationError
 
-AGENT = "def agent(obs):\n    return [1]\n"
+AGENT = 'def agent(obs):\n    return [1]\n'
 
 
 def observation(environments=2, agents_per=1):
@@ -95,13 +95,21 @@ def test_the_standard_controllers_answer():
     each.start(spec)
     assert np.asarray(each.act(chosen).actions).tolist() == [[4], [4]]
     assert seen == [True, True]
-    function = standard.Function(lambda o: (torch.full(o.active.shape, 2), {'value': torch.zeros(2, 1)}))
+    function = standard.Function(
+        lambda o: (torch.full(o.active.shape, 2), {'value': torch.zeros(2, 1)})
+    )
     answer = function.act(chosen)
     assert answer.actions.tolist() == [[2], [2]] and 'value' in answer.extras
 
 
 def test_a_pool_draws_once_and_swaps():
-    pool = standard.Pool([standard.Function(lambda o: torch.zeros(o.active.shape, dtype=torch.int64)), standard.Function(lambda o: torch.ones(o.active.shape, dtype=torch.int64))], weights=[1, 0])
+    pool = standard.Pool(
+        [
+            standard.Function(lambda o: torch.zeros(o.active.shape, dtype=torch.int64)),
+            standard.Function(lambda o: torch.ones(o.active.shape, dtype=torch.int64)),
+        ],
+        weights=[1, 0],
+    )
     pool.start(agents.Spec(environments=3, agents=1, seed=1))
     chosen = observation(3)
     assert pool.act(chosen).actions.sum() == 0

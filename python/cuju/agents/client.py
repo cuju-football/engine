@@ -18,11 +18,9 @@ import inspect
 import json
 import math
 import os
-import queue
 import random
 import struct
 import sys
-import time
 import traceback
 import types
 from typing import Any, Dict, List, Optional
@@ -146,9 +144,7 @@ def decode(head, body):
     if not isinstance(header, dict) or not isinstance(header.get('kind'), str):
         raise FrameError('a frame header names no kind')
     if header.get('protocol') != PROTOCOL:
-        raise FrameError(
-            'a frame of protocol %r, expected %d' % (header.get('protocol'), PROTOCOL)
-        )
+        raise FrameError('a frame of protocol %r, expected %d' % (header.get('protocol'), PROTOCOL))
     arrays = []
     offset = 0
     view = memoryview(body)
@@ -299,7 +295,7 @@ class Observation:
     @property
     def count(self):
         """The environments that the observation holds."""
-        return int(len(self.first))
+        return len(self.first)
 
 
 class Actions:
@@ -349,7 +345,7 @@ def _numpy(value):
 
 
 def grf_observation(raw, environment, agent, own_players, other_players):
-    """Returns the raw observation of one agent as GRF's dictionary, with lists, as Kaggle's JSON."""
+    """Returns the raw observation of one agent as GRF's dictionary with lists, as Kaggle gives."""
     result = {}
     for name, array in raw.items():
         value = array[environment, agent]
@@ -405,7 +401,9 @@ def action_index(value, count):
     """Returns the action index of a Kaggle agent's answer for one controlled player."""
     if isinstance(value, (list, tuple)):
         if len(value) != 1:
-            raise ValueError('expected one action for the one controlled player, found %r' % (value,))
+            raise ValueError(
+                'expected one action for the one controlled player, found %r' % (value,)
+            )
         value = value[0]
     return _index(value, count)
 
@@ -533,7 +531,7 @@ class Kaggle:
         _seed_globals(spec.seed)
 
     def act(self, observation):
-        """Calls the agent of each environment with Kaggle's observation, and returns its actions."""
+        """Calls the agent of each environment with Kaggle's observation and returns its actions."""
         raw = dict((name, _numpy(value)) for name, value in observation.data.items())
         count = observation.count
         agents = raw['active'].shape[1]
@@ -557,7 +555,11 @@ class Kaggle:
             ]
             obs = kaggle_observation(entries, self._steps[environment], overage)
             function = self._agents[environment]
-            answer = function(obs, self.configuration) if function.accepts_configuration else function(obs)
+            answer = (
+                function(obs, self.configuration)
+                if function.accepts_configuration
+                else function(obs)
+            )
             self._steps[environment] += 1
             if agents == 1:
                 answers[row] = [action_index(answer, self._count)]
@@ -581,7 +583,8 @@ def resolve(entry, names):
         if entry in names:
             return names[entry]
         raise ConfigurationError(
-            "expected a name from %s or 'module:object', found %r" % (', '.join(sorted(names)), entry)
+            "expected a name from %s or 'module:object', found %r"
+            % (', '.join(sorted(names)), entry)
         )
     module_name, _, attributes = entry.partition(':')
     try:
@@ -620,7 +623,8 @@ def build(node, names, path=''):
         for key in options:
             if key not in parameters:
                 raise ConfigurationError(
-                    'expected a key that %s takes, found %s%s' % (entry, path + '.' if path else '', key)
+                    'expected a key that %s takes, found %s%s'
+                    % (entry, path + '.' if path else '', key)
                 )
     if parameters is not None and 'load' in parameters:
 
@@ -632,7 +636,9 @@ def build(node, names, path=''):
         controller = factory(**options)
     except TypeError as error:
         if 'argument' in str(error):
-            raise ConfigurationError('expected the keys of %s at %s, found %s' % (entry, path or 'the tree', error))
+            raise ConfigurationError(
+                'expected the keys of %s at %s, found %s' % (entry, path or 'the tree', error)
+            )
         raise
     for key in ('control', 'options'):
         if node.get(key) is not None:
@@ -640,23 +646,48 @@ def build(node, names, path=''):
     return controller
 
 
+class Random:
+    """Draws uniform actions of the action set, which a conformance check plays against."""
+
+    representation = 'raw'
+    control = None
+    options = None
+    asynchronous = False
+
+    def start(self, spec):
+        """Seeds the draws."""
+        self._count = ACTION_COUNTS[spec.action_set]
+        self._rng = np.random.default_rng(spec.seed)
+
+    def act(self, observation):
+        """Returns one action for each agent of each environment."""
+        shape = tuple(np.asarray(observation.active).shape)
+        return Actions(self._rng.integers(0, self._count, size=shape))
+
+    def close(self):
+        """Has nothing to free."""
+
+
 def child_names():
     """Returns the names that a child resolves without cuju, the loaders built into this file."""
-    return {'kaggle': Kaggle}
+    return {'kaggle': Kaggle, 'random': Random}
 
 
 # The loop of the child.
-
-
-class _Stop(Exception):
-    pass
 
 
 def _report(answers, reason, error):
     text = ''.join(traceback.format_exception(type(error), error, error.__traceback__))
     sys.stderr.write(text)
     sys.stderr.flush()
-    write(answers, 'error', None, reason=reason, message='%s: %s' % (type(error).__name__, error), traceback=text)
+    write(
+        answers,
+        'error',
+        None,
+        reason=reason,
+        message='%s: %s' % (type(error).__name__, error),
+        traceback=text,
+    )
 
 
 def _actions_value(answer):

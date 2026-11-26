@@ -1,6 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks Kaggle's `players_raw` and Kaggle agents against the raw tensors of a batch."""
+"""Checks Kaggle's `players_raw` and the `kaggle` controller against the raw tensors of a batch."""
 
 import enum
 import json
@@ -9,10 +9,12 @@ import pytest
 import torch
 
 from conftest import tensor_bytes
+from cuju import agents
 from cuju._batch import Batch
+from cuju.agents import kaggle
+from cuju.agents.client import Kaggle, grf_observation
 
 np = pytest.importorskip('numpy')
-kaggle = pytest.importorskip('cuju._kaggle')
 cuju_raw = pytest.importorskip('cuju._raw')
 
 # GRF: the 23 values of a raw observation of one agent.
@@ -83,96 +85,60 @@ class Action(enum.Enum):
     Shot = 12
 
 
-def test_kaggle_agent_plays_as_its_actions():
+def test_the_controllers_numpy_builder_equals_the_helpers_tensor_builder(batch):
+    raw = {name: tensor.numpy() for name, tensor in batch.raw().items()}
+    for agent in (0, 1):
+        assert grf_observation(raw, 1, agent, 5, 5) == kaggle.players_raw(batch, 1, agent)[0]
+
+
+def test_a_kaggle_agent_plays_as_its_actions(tmp_path):
+    (tmp_path / 'main.py').write_text(
+        'import enum\n\nclass Action(enum.Enum):\n    Idle = 0\n    Shot = 12\n\n'
+        'def agent(obs, configuration):\n'
+        '    player = obs["players_raw"][0]\n'
+        '    return [Action.Shot if player["ball_owned_team"] == 0 else Action.Idle]\n'
+    )
     options = dict(environment_count=3, device='cpu', representation='raw', seed=1)
     played = Batch('academy_3_vs_1_with_keeper_l1_r1', **options)
     direct = Batch('academy_3_vs_1_with_keeper_l1_r1', **options)
-    seen = []
-
-    def agent(obs, configuration):
-        seen.append((obs.step, configuration.get('name')))
-        player = obs['players_raw'][0]
-        return [Action.Shot if player['ball_owned_team'] == 0 else Action.Idle]
-
-    opponent = kaggle.KaggleAgent(agent, played, 1, configuration={'name': 'test'})
+    controller = Kaggle(str(tmp_path))
+    controller.start(agents.Spec(environments=3, agents=1, action_set='default'))
     played.reset()
     direct.reset()
-    for _ in range(40):
+    for number in range(40):
+        raw = played.raw()
         expected = [
             12 if entry['ball_owned_team'] == 0 else 0
             for entry in (kaggle.players_raw(direct, environment, 1)[0] for environment in range(3))
         ]
-        actions = opponent.act()
+        observation = agents.Observation(
+            data={name: tensor[:, 1:2] for name, tensor in raw.items()},
+            first=torch.full((3,), number == 0),
+            active=torch.ones((3, 1), dtype=torch.bool),
+            left_players=torch.full((3,), 3),
+            right_players=torch.full((3,), 3),
+        )
+        actions = torch.as_tensor(controller.act(observation).actions)[:, 0]
         assert actions.tolist() == expected
-        _, _, done, _ = played.step(torch.stack([torch.zeros(3, dtype=torch.int32), actions], 1))
+        played.step(torch.stack([torch.zeros(3, dtype=torch.int32), actions.int()], 1))
         theirs, _, _, _ = direct.step(torch.tensor([[0, action] for action in expected]))
         assert tensor_bytes(played.raw()['ball']) == tensor_bytes(theirs['ball'])
-        opponent.reset(done.bool())
-    assert seen[0] == (0, 'test') and seen[3] == (1, 'test')
     played.close()
     direct.close()
 
 
-def test_refusals():
-    plain = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu')
-    with pytest.raises(ValueError, match='raw'):
-        kaggle.KaggleAgent(lambda obs: [0], plain, 0)
-    plain.close()
-    batch = Batch('5_vs_5_l1_r0', environment_count=1, device='cpu', representation='raw')
-    batch.reset()
-    with pytest.raises(IndexError):
-        kaggle.KaggleAgent(lambda obs: [19], batch, 0).act()
-    with pytest.raises(ValueError, match='one action'):
-        kaggle.KaggleAgent(lambda obs: [1, 2], batch, 0).act()
-    batch.close()
-
-
-def test_evaluate_plays_one_match_per_environment():
-    def shooter(obs):
-        return [12]
-
-    scores = kaggle.evaluate(shooter, episodes=2, scenario='academy_empty_goal_close')
-    assert len(scores) == 2 and all(len(score) == 2 for score in scores)
-    assert all(isinstance(goals, int) for score in scores for goals in score)
-
-
-def test_agent_runner_calls_as_kaggle_and_checks_answers(batch):
-    seen = []
-
-    def one(obs):
-        seen.append(('one', obs.step))
-        return [Action.Shot]
-
-    def two(obs, configuration):
-        seen.append(('two', configuration.get('name')))
-        return np.array([3, -1])
-
-    def spread(*arguments):
-        seen.append(('spread', len(arguments)))
-        return 5
-
-    assert kaggle.accepts_configuration(two) and kaggle.accepts_configuration(spread)
-    assert not kaggle.accepts_configuration(one)
-    single = kaggle.observation(batch, 0, 0, step=4)
-    assert kaggle.AgentRunner(one).act(single, 19) == [12]
-    assert kaggle.AgentRunner(spread).act(single, 19) == [5]
-    host = {name: tensor.cpu() for name, tensor in batch.raw().items()}
-    several = kaggle.observation(batch, 0, [0, 1], step=2, raw=host)
-    assert several.controlled_players == 2
-    assert several.players_raw == [
-        kaggle.players_raw(batch, 0, 0)[0],
-        kaggle.players_raw(batch, 0, 1)[0],
-    ]
-    runner = kaggle.AgentRunner(two, configuration={'name': 'test'})
-    assert runner.accepts_configuration and runner.act(several, 19) == [3, -1]
-    assert seen == [('one', 4), ('spread', 2), ('two', 'test')]
-    with pytest.raises(ValueError, match='each of the 2'):
-        kaggle.AgentRunner(lambda obs: [1]).act(several, 19)
-    with pytest.raises(IndexError):
-        kaggle.AgentRunner(lambda obs: [19]).act(single, 19)
+def test_the_answers_are_checked_as_kaggle_checks_them():
+    assert kaggle.accepts_configuration(lambda obs, configuration: 0)
+    assert kaggle.accepts_configuration(lambda *arguments: 0)
+    assert not kaggle.accepts_configuration(lambda obs: 0)
+    assert kaggle.action_index(np.array([7]), 19) == 7
+    assert kaggle.action_index(Action.Shot, 19) == 12
+    assert kaggle.action_indices((1, Action.Idle), 19, 2) == [1, 0]
     with pytest.raises(TypeError):
         kaggle.action_index(['shot'], 19)
-    assert kaggle.action_index(np.array([7]), 19) == 7
-    assert kaggle.action_indices((1, Action.Idle), 19, 2) == [1, 0]
-    assert kaggle._action is kaggle.action_index and kaggle._actions is kaggle.action_indices
-    assert kaggle._accepts_configuration is kaggle.accepts_configuration
+    with pytest.raises(IndexError):
+        kaggle.action_index([19], 19)
+    with pytest.raises(ValueError, match='one action'):
+        kaggle.action_index([1, 2], 19)
+    with pytest.raises(ValueError, match='each of the 2'):
+        kaggle.action_indices([1], 19, 2)

@@ -10,6 +10,7 @@ SUMMARIES = {
     'replay': 'check a GRF dump bit for bit, without rendering',
     'dump': 'write a dump as text, without running its code',
     'recording': 'show, check and convert recordings of matches',
+    'agents': 'check and play controllers, and list their parts',
     'help': 'describe the commands of the family, or one of them',
     'completion': 'print the completion script of a shell',
 }
@@ -196,6 +197,118 @@ def recording(group: Any = None) -> Parser:
     return parser
 
 
+def agents(group: Any = None) -> Parser:
+    parser = _make(
+        group,
+        'agents',
+        'Check and play controllers. A controller sends the actions of the agents of a batch. '
+        'It can be a folder with a main.py in the form of Kaggle, a TOML file, or any entry of '
+        'the form module:object.',
+        examples(
+            'cuju agents check submission --scenario 5_vs_5',
+            'cuju agents play submission builtin@0.5 --scenario 5_vs_5 --episodes 10',
+            'cuju agents parts',
+        ),
+    )
+    add_globals(parser)
+    commands = parser.add_subparsers(dest='agents_command', metavar='COMMAND')
+
+    def child(name: str, summary: str, description: str, epilog: str) -> Parser:
+        found = commands.add_parser(name, help=summary, description=description, epilog=epilog)
+        found.set_defaults(_command_parser=found)
+        return found
+
+    def common(found: Parser) -> None:
+        found.add_argument(
+            '--scenario',
+            required=True,
+            metavar='SCENARIO',
+            help='the scenario to play',
+        )
+        found.add_argument('--device', default='cpu', metavar='DEVICE', help='cpu, cuda or auto')
+        add_json(found)
+        add_globals(found)
+
+    check = child(
+        'check',
+        'play short matches and report what fails',
+        'Play short matches with a controller on each side and report each failure with its '
+        'reason, the actions taken and the time of its calls. A folder or a Python file runs in '
+        'a process of its own, unless the option --in-process is given. The exit status is 0 '
+        'when the controller plays and 1 when it does not.',
+        examples(
+            'cuju agents check submission --scenario 5_vs_5',
+            'cuju agents check submission --scenario 5_vs_5 --twice --steps 50',
+            "cuju agents check --command './child --flag' --scenario 5_vs_5",
+        ),
+    )
+    check.add_argument('path', nargs='?', metavar='PATH', help='the folder, file or entry to check')
+    check.add_argument('--steps', type=int, default=10, metavar='N', help='the steps of each match')
+    check.add_argument('--twice', action='store_true', help='play twice and compare the actions')
+    check.add_argument('--process', action='store_true', help='run any tree in a process')
+    check.add_argument(
+        '--in-process', action='store_true', help='run a Kaggle folder in this process'
+    )
+    check.add_argument(
+        '--python', default=None, metavar='PATH', help='the interpreter of the process'
+    )
+    check.add_argument(
+        '--command',
+        dest='child',
+        default=None,
+        metavar='NAME',
+        help='check a child that speaks the protocol, started by this command line',
+    )
+    common(check)
+
+    play = child(
+        'play',
+        'play two controllers against each other',
+        'Play episodes of two controllers, the first on the left and the second on the right, '
+        'and print the wins, draws and losses of the left side with the interval of its win '
+        'rate. A side is a folder, a file, an entry or builtin with an optional difficulty '
+        'such as builtin@0.7.',
+        examples(
+            'cuju agents play submission builtin --scenario 5_vs_5 --episodes 10',
+            'cuju agents play a.toml b.toml --scenario 5_vs_5 --seed 3 --json',
+        ),
+    )
+    play.add_argument('a', metavar='A', help='the controller of the left side')
+    play.add_argument('b', metavar='B', help='the controller of the right side')
+    play.add_argument('--episodes', type=int, default=1, metavar='N', help='the episodes to play')
+    play.add_argument(
+        '--environments', type=int, default=64, metavar='N', help='the environments at most'
+    )
+    play.add_argument('--seed', type=int, default=0, metavar='N', help='the seed of the batch')
+    play.add_argument('--record', default=None, metavar='FILE', help='write the first episode')
+    play.add_argument(
+        '--in-process', action='store_true', help='run Kaggle folders in this process'
+    )
+    common(play)
+
+    parts = child(
+        'parts',
+        'list the names that a tree may use',
+        'List the standard controllers and the parts that installed packages provide. A name '
+        'in the column on the left is the entry of a node, and the group cuju.agents.parts '
+        'gives an installed part its short name.',
+        examples('cuju agents parts', 'cuju agents parts --json'),
+    )
+    add_json(parts)
+    add_globals(parts)
+
+    client = child(
+        'client',
+        'print the file that a child process runs',
+        'Print the source of client.py, the one file that runs a controller in another Python '
+        'environment, which needs only numpy. Copy it there, or pipe it into a container.',
+        examples('cuju agents client', 'cuju agents client -o client.py'),
+    )
+    client.add_argument('-o', '--output', metavar='OUT', help='write the file here')
+    add_globals(client)
+    return parser
+
+
 def help_command(group: Any = None) -> Parser:
     parser = _make(
         group,
@@ -241,6 +354,7 @@ BUILDERS = {
     'replay': replay,
     'dump': dump,
     'recording': recording,
+    'agents': agents,
     'help': help_command,
     'completion': completion,
 }

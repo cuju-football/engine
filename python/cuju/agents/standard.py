@@ -163,7 +163,8 @@ class Builtin(Controller):
 
 
 def _bot_core(own: Any, other: Any, device: Any, count: int) -> Any:
-    from ._scripted import _IDLE, Bot as Core
+    from ._scripted import _IDLE
+    from ._scripted import Bot as Core
 
     bot = Core.__new__(Core)
     bot._own, bot._other = own, other

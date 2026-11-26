@@ -113,7 +113,9 @@ def test_a_fixed_assignment_hands_the_rest_to_the_built_in_ai():
         calls.append(tuple(o.active.shape))
         return torch.zeros(o.active.shape, dtype=torch.int64)
 
-    controller = standard.Function(play_selected, control={'assignment': 'fixed', 'selection': [1, 2]})
+    controller = standard.Function(
+        play_selected, control={'assignment': 'fixed', 'selection': [1, 2]}
+    )
     with agents.Match(batch, controller, 'builtin') as match:
         match.reset()
         for _ in range(5):
@@ -173,23 +175,27 @@ def test_async_steps_equal_sync_steps():
 
 
 def test_play_and_play_batch_return_results():
-    result = agents.play('random', 'random', scenario='5_vs_5', episodes=2)
+    result = agents.play('random', 'random', '5_vs_5', episodes=2)
     assert result.episodes == 2 and result.error is None
-    again = agents.play_batch('random', 'random', environments=2, scenario='5_vs_5')
+    again = agents.play_batch('random', 'random', '5_vs_5', environments=2)
     assert again.episodes == 2
 
 
 def test_gymnasium_adapter_resets_in_the_same_step():
     pytest.importorskip('gymnasium')
     batch = make(
-        left_agents=2, right_agents=0, representation='simple115v2', auto_reset=True, environment_count=2
+        left_agents=2,
+        right_agents=0,
+        representation='simple115v2',
+        auto_reset=True,
+        environment_count=2,
     )
     with agents.Match(batch, right='builtin') as match:
         env = agents.to_gymnasium(match)
         observation, _ = env.reset(seed=1)
         assert tuple(observation.shape) == (2, 2, 115)
         for _ in range(3001):
-            observation, reward, terminated, truncated, info = env.step(env.action_space.sample())
+            observation, reward, _, truncated, info = env.step(env.action_space.sample())
         assert bool(truncated.all()) and bool(info['_final_observation'].all())
         assert tuple(info['final_observation'].shape) == (2, 2, 115)
     batch.close()

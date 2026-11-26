@@ -9,6 +9,7 @@ from typing import Any
 import numpy as np
 
 from .. import dumps
+from ..types import Device
 from . import _files, _views
 from ._errors import RecordingError
 from ._recording import Recording, engine_version
@@ -153,7 +154,7 @@ def _difference(
     return None
 
 
-def from_grf_dump(source: Any, device: Any = 'cpu') -> 'Recording':
+def from_grf_dump(source: Any, device: Device = 'cpu') -> 'Recording':
     """Converts a GRF dump by playing it again in the engine, and refuses one that differs."""
     path = os.fspath(source) if isinstance(source, (str, os.PathLike)) else None
     name = None if path is None else os.path.basename(path)

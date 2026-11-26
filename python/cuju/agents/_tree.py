@@ -82,7 +82,9 @@ class _Job:
             raise OSError('cannot limit a job object')
 
     def assign(self, process_handle: int) -> None:
-        if not self._kernel.AssignProcessToJobObject(self.handle, self._wintypes.HANDLE(process_handle)):
+        if not self._kernel.AssignProcessToJobObject(
+            self.handle, self._wintypes.HANDLE(process_handle)
+        ):
             raise OSError('cannot put the process in a job object')
 
     def terminate(self) -> None:
@@ -148,13 +150,18 @@ def base_interpreter(python: str) -> tuple[str, dict[str, str]]:
     """
     if not WINDOWS:
         return python, {}
-    if os.path.normcase(os.path.abspath(python)) == os.path.normcase(os.path.abspath(sys.executable)):
+    if os.path.normcase(os.path.abspath(python)) == os.path.normcase(
+        os.path.abspath(sys.executable)
+    ):
         base = getattr(sys, '_base_executable', python)
         if os.path.normcase(base) != os.path.normcase(python):
             return base, {'__PYVENV_LAUNCHER__': python}
         return python, {}
     folder = os.path.dirname(os.path.abspath(python))
-    for configuration in (os.path.join(folder, 'pyvenv.cfg'), os.path.join(os.path.dirname(folder), 'pyvenv.cfg')):
+    for configuration in (
+        os.path.join(folder, 'pyvenv.cfg'),
+        os.path.join(os.path.dirname(folder), 'pyvenv.cfg'),
+    ):
         if os.path.isfile(configuration):
             with open(configuration, encoding='utf-8') as handle:
                 for line in handle:

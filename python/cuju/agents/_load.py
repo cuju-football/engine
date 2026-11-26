@@ -107,7 +107,7 @@ def _read(path: Path) -> dict[str, Any]:
 
 
 def node_of(spec: Any, base: Path | None = None) -> dict[str, Any] | Controller:
-    """Returns the node, or the controller, that a form of a tree names, with paths made absolute."""
+    """Returns the node or the controller that a form of a tree names, with absolute paths."""
     if isinstance(spec, Controller) or (hasattr(spec, 'act') and not isinstance(spec, type)):
         return spec
     if isinstance(spec, dict):
@@ -143,7 +143,9 @@ def _difficulty(text: str) -> float:
     try:
         return float(text)
     except ValueError:
-        raise ConfigurationError(f'expected a difficulty from 0 to 1 after @, found {text!r}') from None
+        raise ConfigurationError(
+            f'expected a difficulty from 0 to 1 after @, found {text!r}'
+        ) from None
 
 
 def load(spec: Any, base: str | os.PathLike[str] | None = None) -> Controller:

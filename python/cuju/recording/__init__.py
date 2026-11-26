@@ -16,6 +16,7 @@ __all__ = [
     '__version__',
     'from_grf_dump',
     'from_kaggle',
+    'load',
     'read',
     'record',
 ]
@@ -26,6 +27,7 @@ _LAZY = {
     'record': '_recorder',
     'from_grf_dump': '_grf',
     'from_kaggle': '_kaggle',
+    'load': '_dataset',
 }
 
 

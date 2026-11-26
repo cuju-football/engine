@@ -12,8 +12,17 @@ import torch
 
 from .._batch import unwrap
 from ..errors import ConfigurationError
+from ..types import Device
 from . import _control
-from ._contract import ACTION_COUNTS, SIDES, Controller, ControllerError, Spec, as_actions, normalize
+from ._contract import (
+    ACTION_COUNTS,
+    SIDES,
+    Controller,
+    ControllerError,
+    Spec,
+    as_actions,
+    normalize,
+)
 from ._load import load
 from .client import Observation
 from .standard import Builtin, Pool
@@ -94,7 +103,7 @@ class Result:
         return max(0.0, center - half), min(1.0, center + half)
 
     def summary(self) -> dict[str, Any]:
-        """Returns the counts, the goal difference and the interval of the win rate as plain data."""
+        """Returns the counts, the goal difference and the win rate interval as plain data."""
         low, high = self.interval
         return {
             'episodes': self.episodes,
@@ -223,7 +232,9 @@ class Match:
         inner = self._inner
         if given is None:
             return _Side(index, None, False)
-        owned = not (isinstance(given, Controller) or (hasattr(given, 'act') and not isinstance(given, type)))
+        owned = not (
+            isinstance(given, Controller) or (hasattr(given, 'act') and not isinstance(given, type))
+        )
         controller = load(given)
         if isinstance(controller, Builtin):
             side = _Side(index, None, False)
@@ -231,12 +242,14 @@ class Match:
             side.difficulty = controller.difficulty
             if self._agents[index]:
                 raise ConfigurationError(
-                    f"expected {('left', 'right')[index]} to have no agents for the built-in AI, "
+                    f'expected {("left", "right")[index]} to have no agents for the built-in AI, '
                     f'found {self._agents[index]}, so create the batch with '
-                    f"{('left', 'right')[index]}_agents=0"
+                    f'{("left", "right")[index]}_agents=0'
                 )
             if controller.difficulty is not None:
-                pair = (controller.difficulty, None) if index == 0 else (None, controller.difficulty)
+                pair = (
+                    (controller.difficulty, None) if index == 0 else (None, controller.difficulty)
+                )
                 self.batch.set_difficulty(pair)
             return side
         side = _Side(index, controller, owned)
@@ -252,7 +265,7 @@ class Match:
             side.control['action_set'] == 'v2' and batch_count < 20
         ):
             raise ConfigurationError(
-                f"expected a batch with action_set={side.control['action_set']!r} for the "
+                f'expected a batch with action_set={side.control["action_set"]!r} for the '
                 f'{name} controller, found a batch of {batch_count} actions'
             )
         if side.control['assignment'] == 'fixed' and batch_count < 20:
@@ -307,12 +320,12 @@ class Match:
         if wanted != 'raw' and wanted != inner._representation:
             if not have_raw:
                 raise ConfigurationError(
-                    f"expected a batch with raw=True for the {name} controller, which observes "
-                    f"{wanted!r} while the batch gives {inner._representation!r}"
+                    f'expected a batch with raw=True for the {name} controller, which observes '
+                    f'{wanted!r} while the batch gives {inner._representation!r}'
                 )
             if wanted not in ('simple115', 'simple115v2'):
                 raise ConfigurationError(
-                    f"expected the batch to give {wanted!r} itself for the {name} controller, "
+                    f'expected the batch to give {wanted!r} itself for the {name} controller, '
                     "since only 'raw', 'simple115' and 'simple115v2' convert on the host"
                 )
             side.convert = wanted
@@ -380,7 +393,9 @@ class Match:
     def _yours_columns(self) -> list[int]:
         found: list[int] = []
         for index in self.yours:
-            first, last = (0, self._agents[0]) if index == 0 else (self._agents[0], self._inner.agents)
+            first, last = (
+                (0, self._agents[0]) if index == 0 else (self._agents[0], self._inner.agents)
+            )
             found.extend(range(first, last))
         return found
 
@@ -422,9 +437,9 @@ class Match:
         if side.representation == 'raw' or side.convert:
             raw = {name: value[:, low:high] for name, value in inner.raw().items()}
         if side.control['assignment'] == 'fixed':
-            columns, valid = self._fixed_columns(side, raw if raw is not None else {
-                'active': inner.raw()['active'][:, low:high]
-            })
+            columns, valid = self._fixed_columns(
+                side, raw if raw is not None else {'active': inner.raw()['active'][:, low:high]}
+            )
             active = valid.to(device)
         else:
             active = torch.ones((count, side.agents), dtype=torch.bool, device=device)
@@ -464,8 +479,8 @@ class Match:
         return self._observation
 
     def _convert(self, side: _Side, raw: dict[str, Any]) -> torch.Tensor:
-        from ..gfootball.env.wrappers import Simple115StateWrapper
         from .._raw import grf_observation
+        from ..gfootball.env.wrappers import Simple115StateWrapper
 
         cpu = {name: value.cpu() for name, value in raw.items()}
         own = int(self._players[side.index])
@@ -483,7 +498,10 @@ class Match:
 
     def _validate(self, side: _Side, answer: Any, active: torch.Tensor) -> torch.Tensor:
         name = side.index
-        expected = (self.environments, len(side.chosen) if side.control['assignment'] == 'fixed' else side.agents)
+        expected = (
+            self.environments,
+            len(side.chosen) if side.control['assignment'] == 'fixed' else side.agents,
+        )
         actions = answer.actions
         if not isinstance(actions, torch.Tensor):
             try:
@@ -510,44 +528,66 @@ class Match:
             if bool(outside.any()):
                 row, column = (int(item) for item in outside.nonzero()[0])
                 raise ControllerError(
-                    f'expected actions from {-count} to {count - 1} of the {side.control["action_set"]} '
-                    f'set, found {int(actions[row, column])}',
+                    f'expected actions from {-count} to {count - 1} of the '
+                    f'{side.control["action_set"]} set, found {int(actions[row, column])}',
                     'range',
                     name,
                     environment=row,
                 )
         return torch.where(actions < 0, actions + count, actions)
 
-    def _place(self, side: _Side, actions: torch.Tensor, columns: Any, active: torch.Tensor, full: torch.Tensor) -> None:
+    def _place(
+        self,
+        side: _Side,
+        actions: torch.Tensor,
+        columns: Any,
+        active: torch.Tensor,
+        full: torch.Tensor,
+    ) -> None:
         low, high = side.columns
         # An environment that has ended its quota idles, and the built-in AI plays what no
         # answer covers in a batch that has it.
         idle = 0
         if side.control['assignment'] == 'fixed':
-            block = torch.full((self.environments, side.agents), _control.BUILTIN_AI, dtype=torch.int32, device=self._device)
+            block = torch.full(
+                (self.environments, side.agents),
+                _control.BUILTIN_AI,
+                dtype=torch.int32,
+                device=self._device,
+            )
             usable = active & self._live[:, None]
             rows = torch.arange(self.environments, device=self._device)[:, None].expand_as(actions)
             target = columns.to(self._device)
-            values = torch.where(usable, actions.to(torch.int32), torch.full_like(actions, _control.BUILTIN_AI, dtype=torch.int32))
+            values = torch.where(
+                usable,
+                actions.to(torch.int32),
+                torch.full_like(actions, _control.BUILTIN_AI, dtype=torch.int32),
+            )
             block[rows, target] = values
             block[~self._live] = idle
             full[:, low:high] = block
         else:
             full[:, low:high] = torch.where(
-                self._live[:, None], actions.to(torch.int32), torch.zeros_like(actions, dtype=torch.int32)
+                self._live[:, None],
+                actions.to(torch.int32),
+                torch.zeros_like(actions, dtype=torch.int32),
             )
 
     def _yours_actions(self, actions: Any) -> torch.Tensor | None:
         columns = self._yours_columns()
         if not columns:
             if actions is not None:
-                raise ConfigurationError('expected no actions, found some, since every side has a controller')
+                raise ConfigurationError(
+                    'expected no actions, found some, since every side has a controller'
+                )
             return None
         if actions is None:
             raise ConfigurationError(
                 f'expected actions for the {len(columns)} agents that are yours, found none'
             )
-        values = actions if isinstance(actions, torch.Tensor) else torch.as_tensor(np.asarray(actions))
+        values = (
+            actions if isinstance(actions, torch.Tensor) else torch.as_tensor(np.asarray(actions))
+        )
         if values.dim() == 1 and len(columns) == 1:
             values = values[:, None]
         if tuple(values.shape) != (self.environments, len(columns)):
@@ -572,9 +612,15 @@ class Match:
         else:
             chosen = torch.as_tensor(mask).to(self._device).bool()
             self._first = self._first | chosen
-            self._count_steps = torch.where(chosen, torch.zeros_like(self._count_steps), self._count_steps)
-            self._episode_return = torch.where(chosen, torch.zeros_like(self._episode_return), self._episode_return)
-            self._episode_length = torch.where(chosen, torch.zeros_like(self._episode_length), self._episode_length)
+            self._count_steps = torch.where(
+                chosen, torch.zeros_like(self._count_steps), self._count_steps
+            )
+            self._episode_return = torch.where(
+                chosen, torch.zeros_like(self._episode_return), self._episode_return
+            )
+            self._episode_length = torch.where(
+                chosen, torch.zeros_like(self._episode_length), self._episode_length
+            )
         self._start()
         return self._slice_yours(observation)
 
@@ -597,7 +643,10 @@ class Match:
                 continue
             observation, columns, active = self._observe(side)
             if side.controller.asynchronous:
-                self._guard(side, lambda side=side, observation=observation: side.controller.send(observation))
+                self._guard(
+                    side,
+                    lambda side=side, observation=observation: side.controller.send(observation),
+                )
             prepared.append((side, observation, columns, active))
         self._in_flight = (mine, prepared)
 
@@ -607,20 +656,35 @@ class Match:
             raise RuntimeError('no step is in flight; call step_async first')
         mine, prepared = self._in_flight
         try:
-            full = torch.zeros((self.environments, self._inner.agents), dtype=torch.int32, device=self._device)
+            full = torch.zeros(
+                (self.environments, self._inner.agents), dtype=torch.int32, device=self._device
+            )
             columns = self._yours_columns()
             if columns:
                 full[:, columns[0] : columns[-1] + 1] = mine
             for side, observation, picked, active in prepared:
                 controller = side.controller
                 if controller.asynchronous:
-                    answer = self._guard(side, lambda controller=controller, side=side: controller.receive(side.timeout))
+                    answer = self._guard(
+                        side,
+                        lambda controller=controller, side=side: controller.receive(side.timeout),
+                    )
                     if answer is None:
                         raise ControllerError(
-                            f'no answer within {side.timeout:g} s', 'timeout', side.index, int(self._count_steps.max())
+                            f'no answer within {side.timeout:g} s',
+                            'timeout',
+                            side.index,
+                            int(self._count_steps.max()),
                         )
                 else:
-                    answer = as_actions(self._guard(side, lambda controller=controller, observation=observation: controller.act(observation)))
+                    answer = as_actions(
+                        self._guard(
+                            side,
+                            lambda controller=controller, observation=observation: controller.act(
+                                observation
+                            ),
+                        )
+                    )
                 answer = as_actions(answer)
                 try:
                     values = self._validate(side, answer, active)
@@ -647,7 +711,9 @@ class Match:
         return self._slice_yours(observation), out_reward, done, information
 
     def _account(self, reward: torch.Tensor, done: torch.Tensor) -> None:
-        columns = self._yours_columns() or list(range(self._sides[0].columns[0], self._sides[0].columns[1]))
+        columns = self._yours_columns() or list(
+            range(self._sides[0].columns[0], self._sides[0].columns[1])
+        )
         if not columns:
             columns = list(range(self._inner.agents))
         step = reward[:, columns[0] : columns[-1] + 1].sum(1).to(torch.float64)
@@ -657,15 +723,17 @@ class Match:
         self._total_return = self._total_return + (self._episode_return * ended).sum()
         self._total_length = self._total_length + (self._episode_length * ended).sum()
         self._total_count = self._total_count + ended.sum()
-        self._episode_return = torch.where(ended, torch.zeros_like(self._episode_return), self._episode_return)
-        self._episode_length = torch.where(ended, torch.zeros_like(self._episode_length), self._episode_length)
+        self._episode_return = torch.where(
+            ended, torch.zeros_like(self._episode_return), self._episode_return
+        )
+        self._episode_length = torch.where(
+            ended, torch.zeros_like(self._episode_length), self._episode_length
+        )
 
     @property
     def episodes(self) -> Episodes:
         """Returns the totals of the finished episodes, which waits for the device once."""
-        return Episodes(
-            int(self._total_count), float(self._total_return), int(self._total_length)
-        )
+        return Episodes(int(self._total_count), float(self._total_return), int(self._total_length))
 
     # Swapping, running and closing.
 
@@ -678,7 +746,7 @@ class Match:
             side = self._sides[index]
             if side.controller is None:
                 raise ConfigurationError(
-                    f"expected a side that has a controller, found the {('left', 'right')[index]} "
+                    f'expected a side that has a controller, found the {("left", "right")[index]} '
                     'side yours or built-in, so make a new Match to change it'
                 )
             if not isinstance(side.controller, Pool) or not side.controller.swappable:
@@ -698,7 +766,8 @@ class Match:
                     f'found {wanted!r}'
                 )
             owned = not (
-                isinstance(given, Controller) or (hasattr(given, 'act') and not isinstance(given, type))
+                isinstance(given, Controller)
+                or (hasattr(given, 'act') and not isinstance(given, type))
             )
             side.controller.set_pool([new], owned=[owned])
 
@@ -800,7 +869,7 @@ def _batch_for(
     scenario: str,
     environments: int,
     seed: int,
-    device: str,
+    device: Device,
     controls: dict[str, dict[str, Any]],
 ) -> Any:
     import os
@@ -842,11 +911,11 @@ def _batch_for(
 def play_batch(
     left: Any,
     right: Any,
+    scenario: str,
     environments: int = 64,
     episodes: int | None = None,
-    scenario: str = '11_vs_11_kaggle',
     seed: int = 0,
-    device: str = 'cpu',
+    device: Device = 'cpu',
     record: bool = False,
     control: dict[str, dict[str, Any]] | None = None,
 ) -> Result:
@@ -866,12 +935,12 @@ def play_batch(
 def play(
     left: Any,
     right: Any,
-    scenario: str = '11_vs_11_kaggle',
+    scenario: str,
     seed: int = 0,
-    device: str = 'cpu',
+    device: Device = 'cpu',
     episodes: int = 1,
     record: bool = False,
     control: dict[str, dict[str, Any]] | None = None,
 ) -> Result:
     """Plays `episodes` episodes of two controllers, one environment for each, and returns them."""
-    return play_batch(left, right, episodes, episodes, scenario, seed, device, record, control)
+    return play_batch(left, right, scenario, episodes, episodes, seed, device, record, control)
