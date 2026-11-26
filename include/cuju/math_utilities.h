@@ -24,7 +24,7 @@ CUJU_HOST_DEVICE float NormalizedClamp(float value, float min, float max) {
 
 CUJU_HOST_DEVICE int SignSide(float value) { return value >= 0 ? 1 : -1; }
 
-}
+}  // namespace cuju
 
 namespace cuju {
 CUJU_HOST_DEVICE float ModulateIntoRange(float min, float max, float value) {
@@ -35,4 +35,4 @@ CUJU_HOST_DEVICE float ModulateIntoRange(float min, float max, float value) {
     return newValue;
 }
 
-}
+}  // namespace cuju

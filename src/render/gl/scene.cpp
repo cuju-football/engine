@@ -560,7 +560,7 @@ void ShadeTile(Task &task, const SceneTriangle &tri, const float *coefs) {
     }
 }
 
-}
+}  // namespace
 
 namespace {
 void FillTile(const Task &task, std::uint8_t *data, std::size_t stride, int bpp,
@@ -577,7 +577,7 @@ void FillTile(const Task &task, std::uint8_t *data, std::size_t stride, int bpp,
     }
 }
 
-}
+}  // namespace
 
 void Scene::RasterizeTile(int tile, std::uint64_t *blocks) {
     Task task;
@@ -638,7 +638,7 @@ CUJU_GL_NOINLINE void RunTile(Scene *scene, int tile, std::atomic<std::uint64_t>
     blocks->fetch_add(n, std::memory_order_relaxed);
 }
 
-}
+}  // namespace
 
 void Scene::Rasterize(ThreadPool *pool, std::uint64_t *blocks_shaded) {
     if (empty_) {
@@ -752,7 +752,7 @@ CUJU_GL_NOINLINE void RunListTile(SceneList *list, int tile, std::atomic<std::ui
     blocks->fetch_add(n, std::memory_order_relaxed);
 }
 
-}
+}  // namespace
 
 void SceneList::Rasterize(ThreadPool *pool, std::uint64_t *blocks_shaded) {
     if (Empty()) {
@@ -798,7 +798,7 @@ bool Overlap(const std::vector<MemorySpan> &a, const std::vector<MemorySpan> &b)
     return false;
 }
 
-}
+}  // namespace
 
 void SceneList::Reads(std::vector<MemorySpan> *out) const {
     const Texture *last = nullptr;
@@ -835,4 +835,4 @@ void SceneList::FinishRasterize(ThreadPool *pool, std::uint64_t *blocks_shaded) 
     Reset();
 }
 
-}
+}  // namespace cuju::render::gl

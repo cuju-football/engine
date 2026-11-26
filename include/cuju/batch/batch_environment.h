@@ -699,5 +699,5 @@ private:
     simulation::SimulationContext hostContext_{};
 };
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

@@ -99,6 +99,6 @@ inline std::uint16_t DepthD16(float z) { return Unorm16(MaxPs(MinPs(z, 1.0f), 0.
 inline float Unorm8ToFloat(std::uint8_t v) { return static_cast<float>(v) * FromBits(0x3B808081u); }
 inline float D16ToFloat(std::uint16_t v) { return static_cast<float>(v) * FromBits(0x37800080u); }
 
-}
+}  // namespace cuju::render
 
 #endif

@@ -183,5 +183,5 @@ CUJU_FUNCTION inline bool GetKeyFrame(const Animation &animationData, int bodyPa
     return false;
 }
 
-}
-}
+}  // namespace animation
+}  // namespace cuju

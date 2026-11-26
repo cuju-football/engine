@@ -128,9 +128,7 @@ bool RectIntersects(const Rect &a, const Rect &b) {
              a.y1 < a.y0 || b.x1 < b.x0 || b.y1 < b.y0);
 }
 
-inline std::int32_t AsrInt(std::int32_t v, int s) {
-    return v >> s;
-}
+inline std::int32_t AsrInt(std::int32_t v, int s) { return v >> s; }
 
 std::uint32_t FloorPot(std::uint32_t n) {
     if (n == 0) {
@@ -346,7 +344,7 @@ void DoTriangleCcw(const RasterState &rs, const DrawState *state, Scene &scene, 
     BinTriangle(rs, scene, index, use_32bits, bbox, nr_planes);
 }
 
-}
+}  // namespace
 
 void SetupTriangle(const RasterState &rs, const DrawState *state, Scene &scene, bool ieee,
                    const float (*v0)[4], const float (*v1)[4], const float (*v2)[4]) {
@@ -375,4 +373,4 @@ void SetupTriangle(const RasterState &rs, const DrawState *state, Scene &scene, 
     }
 }
 
-}
+}  // namespace cuju::render::gl

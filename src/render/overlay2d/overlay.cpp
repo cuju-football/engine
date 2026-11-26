@@ -21,7 +21,7 @@ inline float Clamp(float v, float lo, float hi) {
 
 inline std::uint8_t ToUint8(float v) { return static_cast<std::uint8_t>(static_cast<int>(v)); }
 
-}
+}  // namespace
 
 WindowGeometry::WindowGeometry(int context_w, int context_h, float aspect, float margin)
     : context_w_(context_w), context_h_(context_h), aspect_(aspect), margin_(margin) {
@@ -171,7 +171,7 @@ inline int Shift(std::uint32_t mask) {
     return s;
 }
 
-}
+}  // namespace
 
 bool DecodeBmp(const std::uint8_t *data, std::size_t size, SourceImage &out) {
     if (size < 54 || data[0] != 'B' || data[1] != 'M') return false;
@@ -284,4 +284,4 @@ Color3 PlayerColor(int controller_index) {
 
 Color3 OutlineOf(const Color3 &c) { return {c[0] * 0.4f, c[1] * 0.4f, c[2] * 0.4f}; }
 
-}
+}  // namespace cuju::render::overlay2d

@@ -27,7 +27,7 @@ public:
     NvtxRange &operator=(const NvtxRange &) = delete;
 };
 
-}
+}  // namespace cuju
 
 #define CUJU_NVTX_RANGE(name)                                  \
     static const nvtxStringHandle_t cujuNvtxName =             \

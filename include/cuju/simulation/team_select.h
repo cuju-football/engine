@@ -192,5 +192,5 @@ CUJU_FUNCTION_NO_INLINE inline void TeamHumanGamersSelectAnyone(World &world,
     }
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

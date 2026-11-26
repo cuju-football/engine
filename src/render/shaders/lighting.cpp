@@ -81,7 +81,7 @@ inline F8 Dot3(const F8 *a, const F8 *b) {
     return Add(Add(Mul(a[2], b[2]), Mul(a[1], b[1])), Mul(a[0], b[0]));
 }
 
-}
+}  // namespace
 
 LightingProgram::LightingProgram()
     : gl::Program({{"modelMatrix", gl::kMat4, 1},
@@ -210,8 +210,7 @@ void LightingProgram::ShadeBlock(const gl::FragmentBlock &b) const {
         const F8 nd = MaxPs(ndotl, zero);
         const F8 fall = Div(MaxPs(Add(radius, Neg(Sqrt(llen2))), zero), radius);
         const F8 fall2 = Mul(fall, fall);
-        const F8 resulting =
-            Add(Mul(nd, K(0x3F19999Au)), Mul(scatter, K(0x3ECCCCCDu)));
+        const F8 resulting = Add(Mul(nd, K(0x3F19999Au)), Mul(scatter, K(0x3ECCCCCDu)));
         const F8 lit = Mul(Mul(resulting, fall2), two);
 
         for (int c = 0; c < 3; ++c) {
@@ -281,4 +280,4 @@ void LightingProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kLighting, LightingProgram);
 
-}
+}  // namespace cuju::render::shaders

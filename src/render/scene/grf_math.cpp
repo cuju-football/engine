@@ -133,4 +133,4 @@ bool Aabb::Intersects(const std::vector<Plane> &planes) const {
     return inside;
 }
 
-}
+}  // namespace cuju::render::scene

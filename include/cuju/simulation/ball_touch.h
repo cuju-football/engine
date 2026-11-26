@@ -131,5 +131,5 @@ CUJU_FUNCTION inline bool TeamSetLastTouchPlayer(World &world, const SimulationC
     return RefereeBallTouched(world, context);
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

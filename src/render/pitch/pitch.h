@@ -51,6 +51,6 @@ bool LoadPitchMedia(const std::string &mediaDirectory, PitchMedia *media, std::s
 bool GeneratePitch(const PitchMedia &media, const PitchOptions &options, PitchTextures *textures,
                    std::string *error);
 
-}
+}  // namespace cuju::render::pitch
 
 #endif

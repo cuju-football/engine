@@ -32,6 +32,6 @@ inline std::string Sha256Hex(const void *data, std::size_t size) {
     return h.HexDigest();
 }
 
-}
+}  // namespace cuju::render
 
 #endif

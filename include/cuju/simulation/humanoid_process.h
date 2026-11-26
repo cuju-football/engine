@@ -672,5 +672,5 @@ CUJU_FUNCTION_NO_INLINE inline bool HumanoidProcess(
     return true;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

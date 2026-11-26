@@ -118,6 +118,6 @@ VertexBufferData ConcatenateMeshes(const GeometryData &data);
 
 GeometryData IndexFullbody(const GeometryData &fullbody, float z_multiplier);
 
-}
+}  // namespace cuju::render::assets
 
 #endif

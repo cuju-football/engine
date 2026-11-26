@@ -97,5 +97,5 @@ void ProcessEnvironmentState(Archive &archive, EnvironmentStateFull &environment
     ProcessMatch(archive, environment.match, freeControllerCount);
 }
 
-}
-}
+}  // namespace state
+}  // namespace cuju

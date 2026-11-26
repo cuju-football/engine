@@ -63,5 +63,5 @@ struct Scope {
 #define CUJU_PROFILE_SCOPE(id)
 #endif
 
-}
-}
+}  // namespace profiling
+}  // namespace cuju

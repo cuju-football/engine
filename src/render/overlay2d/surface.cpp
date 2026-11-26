@@ -52,7 +52,7 @@ inline std::uint8_t Mix(int s, int d, int a) {
     return static_cast<std::uint8_t>(d + q);
 }
 
-}
+}  // namespace
 
 void BlitBlend(const Surface &src, Surface &dst, int x, int y) {
     const int sx0 = std::max(0, -x), sy0 = std::max(0, -y);
@@ -89,4 +89,4 @@ void SetSurfaceAlpha(Surface &s, int alpha) {
     }
 }
 
-}
+}  // namespace cuju::render::overlay2d

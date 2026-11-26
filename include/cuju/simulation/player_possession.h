@@ -117,5 +117,5 @@ CUJU_FUNCTION_NO_INLINE inline void PlayerUpdatePossessionStatistics(World &worl
     }
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

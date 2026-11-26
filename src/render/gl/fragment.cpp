@@ -108,7 +108,7 @@ inline std::uint8_t *LanePtr(std::uint8_t *base, int stride, int lane, int bpp) 
     return base + kLaneY[lane] * stride + kLaneX[lane] * bpp;
 }
 
-}
+}  // namespace
 
 #if CUJU_RENDER_LANES_AVX2
 
@@ -124,7 +124,7 @@ inline unsigned Mask16Bits(__m128i m) {
     return static_cast<unsigned>(_mm_movemask_epi8(_mm_packs_epi16(m, _mm_setzero_si128())));
 }
 
-}
+}  // namespace
 
 std::uint16_t DepthTest(const FragmentBlock &b, const std::uint16_t *d16, std::uint16_t lanes) {
     const FragmentOps &ops = b.state->ops;
@@ -284,7 +284,7 @@ inline __m128i LaneMask8(unsigned bits) {
 
 inline __m128i Select16(__m128i mask, __m128i t, __m128i f) { return _mm_blendv_epi8(f, t, mask); }
 
-}
+}  // namespace
 
 void StoreRgba16f(const FragmentBlock &b, int buffer, const float *rgba, std::uint16_t lanes) {
     std::uint8_t *base = b.color[buffer];
@@ -335,7 +335,7 @@ CUJU_GL_NOINLINE void BlendAddKernel(const FragmentBlock *b, int buffer, const f
     }
 }
 
-}
+}  // namespace
 
 #else
 
@@ -382,7 +382,7 @@ CUJU_GL_NOINLINE void BlendAddKernel(const FragmentBlock *b, int buffer, const f
     }
 }
 
-}
+}  // namespace
 
 #endif
 
@@ -405,4 +405,4 @@ void Load10(const FragmentBlock &b, int buffer, std::uint32_t *words) {
     }
 }
 
-}
+}  // namespace cuju::render::gl

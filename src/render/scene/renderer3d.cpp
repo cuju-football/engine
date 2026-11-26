@@ -116,7 +116,7 @@ ProgramKind KindOf(const std::string &name) {
     return ProgramKind::kOverlay;
 }
 
-}
+}  // namespace
 
 Texture::~Texture() { DeleteTexture(); }
 
@@ -862,4 +862,4 @@ void Renderer3D::SetFramebufferGammaCorrection(bool on) {
         gl_.Disable(kFramebufferSrgb);
 }
 
-}
+}  // namespace cuju::render::scene

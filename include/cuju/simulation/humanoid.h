@@ -391,5 +391,5 @@ CUJU_FUNCTION inline Vector3 MentalBallPrediction(const World &world, int imageI
     return mentalResult.EnforceMaximumDeviation(realResult, mentalImage.maximumDistanceDeviation);
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

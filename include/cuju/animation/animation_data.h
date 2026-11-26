@@ -285,5 +285,5 @@ inline std::unique_ptr<AnimationStore> ParseAnimations(const std::string &bytes)
     return store;
 }
 
-}
-}
+}  // namespace animation
+}  // namespace cuju

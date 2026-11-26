@@ -2486,7 +2486,7 @@ CUJU_FUNCTION inline bool PlayerRequestCommand(World &world, const SimulationCon
     return ElizaRequestCommand(world, context, player, queue);
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju
 
 #include "team_ai.h"

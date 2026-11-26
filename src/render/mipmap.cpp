@@ -93,7 +93,7 @@ constexpr RsqrtTable BuildRsqrtTable() {
 
 constexpr RsqrtTable kRsqrt = BuildRsqrtTable();
 
-}
+}  // namespace
 
 float RsqrtZen3(float x) {
     const std::uint32_t b = Bits(x);
@@ -244,7 +244,7 @@ void GenerateChain(Texture &texture) {
     }
 }
 
-}
+}  // namespace
 
 int MipLevelCount(int width, int height) {
     int size = width > height ? width : height;
@@ -269,4 +269,4 @@ void GenerateMipmaps(Texture &texture) {
     GenerateChain(texture);
 }
 
-}
+}  // namespace cuju::render

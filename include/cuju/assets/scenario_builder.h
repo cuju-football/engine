@@ -771,5 +771,5 @@ inline std::string BuildBundle(const std::string &name, const ScenarioDescriptio
     return out;
 }
 
-}
-}
+}  // namespace assets
+}  // namespace cuju

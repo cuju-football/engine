@@ -29,7 +29,7 @@ void CheckRenderStateSize(unsigned long long size) {
             " bytes, version " + std::to_string(cuju::render::RENDER_STATE_VERSION) + ", found " +
             std::to_string(size) + " bytes");
 }
-}
+}  // namespace
 
 #if !defined(_MSC_VER)
 #pragma GCC visibility push(default)
@@ -78,7 +78,6 @@ struct cuju_engine_info {
     int left_controllers[11], right_controllers[11];
     int left_goals, right_goals, game_mode, is_in_play, ball_owned_team, ball_owned_player, step;
 };
-
 }
 
 namespace {
@@ -177,7 +176,7 @@ void ToScenario(const cuju::engine::ScenarioConfig &config, cuju_engine_scenario
     out.cache_controllable_left = config.cachedControllableLeft;
     out.cache_controllable_right = config.cachedControllableRight;
 }
-}
+}  // namespace
 
 extern "C" {
 int cuju_engine_version() { return CUJU_ENGINE_VERSION; }
@@ -446,7 +445,6 @@ int cuju_engine_render_state(void *engine, void *state, unsigned long long size,
         return EngineFail(exception);
     }
 }
-
 }
 #if !defined(_MSC_VER)
 #pragma GCC visibility pop

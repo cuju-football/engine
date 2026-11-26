@@ -343,7 +343,7 @@ void Build(const Tree *data, GeometryData *geometry) {
     }
 }
 
-}
+}  // namespace
 
 bool LoadAse(const std::string &data_dir, const std::string &path, GeometryData *data,
              std::string *error) {
@@ -362,4 +362,4 @@ bool LoadAse(const std::string &data_dir, const std::string &path, GeometryData 
     return true;
 }
 
-}
+}  // namespace cuju::render::assets

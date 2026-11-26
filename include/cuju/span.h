@@ -22,4 +22,4 @@ struct Span {
     CUJU_HOST_DEVICE const T &back() const { return pointer[count - 1]; }
 };
 
-}
+}  // namespace cuju

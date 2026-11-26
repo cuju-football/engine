@@ -335,4 +335,4 @@ CUJU_HOST_DEVICE_NO_INLINE BallSpatialInformation BallCalculatePrediction(BallLa
     return information;
 }
 
-}
+}  // namespace cuju

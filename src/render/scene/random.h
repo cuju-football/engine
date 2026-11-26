@@ -48,6 +48,6 @@ inline float GetDistance(const Vector3 &a, const Vector3 &b) {
     return length;
 }
 
-}
+}  // namespace cuju::render::scene
 
 #endif

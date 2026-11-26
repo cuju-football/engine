@@ -55,7 +55,7 @@ void Add(Aabb &aabb, const Aabb &add) {
         if (aabb.max.v[i] < add.max.v[i]) aabb.max.v[i] = add.max.v[i];
 }
 
-}
+}  // namespace
 
 void Aabb::Reset() {
     for (int i = 0; i < 3; i++) {
@@ -179,4 +179,4 @@ GeometryData IndexFullbody(const GeometryData &fullbody, float z_multiplier) {
     return out;
 }
 
-}
+}  // namespace cuju::render::assets

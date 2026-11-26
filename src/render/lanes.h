@@ -446,6 +446,6 @@ inline void FetchNearest(const NearestLevel &l, F8 s, F8 t, F8 *rgba) {
 #endif
 }
 
-}
+}  // namespace cuju::render::lanes
 
 #endif

@@ -733,5 +733,5 @@ private:
     std::vector<uint8_t> animationMirrored_;
 };
 
-}
-}
+}  // namespace engine
+}  // namespace cuju

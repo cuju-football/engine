@@ -47,7 +47,7 @@ inline int TruncToInt(double v) {
     return static_cast<int>(v);
 }
 
-}
+}  // namespace
 
 void ZoomSurfaceSize(int width, int height, double zoomx, double zoomy, int &dstw, int &dsth) {
     if (zoomx < 0.0) zoomx = -zoomx;
@@ -116,4 +116,4 @@ Surface ZoomSurface(const Surface &src, double zoomx, double zoomy) {
     return dst;
 }
 
-}
+}  // namespace cuju::render::overlay2d

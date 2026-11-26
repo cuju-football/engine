@@ -176,5 +176,5 @@ CUJU_FUNCTION inline state::NodeState RenderRoot(const World &world, int humanoi
     return out;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

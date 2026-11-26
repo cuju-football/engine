@@ -524,7 +524,7 @@ void DrawRunner::RunSegments() {
 CUJU_GL_NOINLINE void RunSegmentsOf(DrawRunner *r) { r->RunSegments(); }
 CUJU_GL_NOINLINE void FinalFlushOf(DrawRunner *r) { r->FinalFlush(); }
 
-}
+}  // namespace
 
 void RunDraw(const DrawState &state, const RasterState &rs, const DrawInput &input, Scene &scene) {
     DrawRunner runner(state, rs, input, scene);
@@ -539,4 +539,4 @@ void RunDraw(const DrawState &state, const RasterState &rs, const DrawInput &inp
     }
 }
 
-}
+}  // namespace cuju::render::gl

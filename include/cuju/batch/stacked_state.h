@@ -69,5 +69,5 @@ void SetStackedFrames(Batch &batch, int environment, const std::string &name, co
                             marks.size() * sizeof(int32_t));
 }
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

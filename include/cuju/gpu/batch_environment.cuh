@@ -224,5 +224,5 @@ private:
 
 using BatchEnvironment = batch::BackendBatchEnvironment<CudaBackend>;
 
-}
-}
+}  // namespace gpu
+}  // namespace cuju

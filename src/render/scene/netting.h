@@ -37,6 +37,6 @@ private:
     bool resetNetting_ = false;
 };
 
-}
-}
-}
+}  // namespace scene
+}  // namespace render
+}  // namespace cuju

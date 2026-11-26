@@ -47,6 +47,6 @@ Surface ZoomSurface(const Surface &src, double zoomx, double zoomy);
 
 void ZoomSurfaceSize(int width, int height, double zoomx, double zoomy, int &dstw, int &dsth);
 
-}
+}  // namespace cuju::render::overlay2d
 
 #endif

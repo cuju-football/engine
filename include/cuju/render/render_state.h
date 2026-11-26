@@ -127,5 +127,5 @@ struct RenderState {
     int32_t lastWorldGoals[2];
 };
 
-}
-}
+}  // namespace render
+}  // namespace cuju

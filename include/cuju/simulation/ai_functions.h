@@ -181,5 +181,5 @@ CUJU_FUNCTION_NO_INLINE inline Vector3 GetShotDirection(const World &world, int 
         .GetNormalized(inputDirection);
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

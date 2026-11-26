@@ -39,7 +39,7 @@ std::size_t Bytes(const std::vector<TextureLevel> &levels) {
     return n;
 }
 
-}
+}  // namespace
 
 MipCache::MipCache(std::size_t budget) : budget_(budget) {}
 
@@ -89,4 +89,4 @@ std::size_t MipCache::bytes() const {
     return bytes_;
 }
 
-}
+}  // namespace cuju::render::gl

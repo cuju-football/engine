@@ -30,6 +30,6 @@ std::string DataPath(const std::string &data_dir, const std::string &path);
 
 bool ReadFile(const std::string &path, std::string *contents, std::string *error);
 
-}
+}  // namespace cuju::render::assets::text
 
 #endif

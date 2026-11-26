@@ -84,7 +84,7 @@ std::uint64_t I(std::int64_t v) { return static_cast<std::uint64_t>(v); }
 
 constexpr std::uint32_t kCompileStatus = 0x8B81;
 
-}
+}  // namespace
 
 const char *OpName(Op op) { return kOpNames[static_cast<int>(op)]; }
 
@@ -527,4 +527,4 @@ void GlStream::ReadPixels(int x, int y, int width, int height, std::uint32_t for
     }
 }
 
-}
+}  // namespace cuju::render::scene

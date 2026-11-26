@@ -219,4 +219,4 @@ CUJU_HOST_DEVICE void WarpReset(T &destination) {
     WarpCopy(destination, prototype);
 }
 
-}
+}  // namespace cuju

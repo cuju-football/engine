@@ -211,6 +211,6 @@ private:
 
 std::size_t UploadBytes(int width, int height, std::uint32_t format, std::uint32_t type);
 
-}
+}  // namespace cuju::render::scene
 
 #endif

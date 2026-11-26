@@ -22,7 +22,7 @@ bool IsSpace(char c) {
     return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
 }
 
-}
+}  // namespace
 
 double Atof(const char *s) {
     while (IsSpace(*s)) s++;
@@ -103,4 +103,4 @@ bool ReadFile(const std::string &path, std::string *contents, std::string *error
     return true;
 }
 
-}
+}  // namespace cuju::render::assets::text

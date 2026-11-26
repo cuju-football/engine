@@ -64,6 +64,6 @@ private:
     std::vector<std::int32_t> line0_, line1_;
 };
 
-}
+}  // namespace cuju::render
 
 #endif

@@ -45,6 +45,6 @@ void SampleLevelQuads(SamplerKind kind, Format format, const TextureLevel &level
 void SampleShadowQuads(const Texture &texture, int quads, const float *s, const float *t,
                        const float *ref, float *out);
 
-}
+}  // namespace cuju::render
 
 #endif

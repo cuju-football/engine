@@ -109,4 +109,4 @@ CUJU_HOST_DEVICE float RandomInRange(uint8_t *stateBytes, float min, float max) 
     return min + (generator.Uniform() * stretch);
 }
 
-}
+}  // namespace cuju

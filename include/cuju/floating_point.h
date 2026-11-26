@@ -51,4 +51,4 @@ private:
 
 #endif
 
-}
+}  // namespace cuju

@@ -625,7 +625,7 @@ void Generate(const PitchMedia &media, const PitchOptions &options, PitchTexture
     });
 }
 
-}
+}  // namespace
 
 bool LoadPitchMedia(const std::string &mediaDirectory, PitchMedia *media, std::string *error) {
     const std::string pitch = mediaDirectory + "/textures/pitch/";
@@ -651,4 +651,4 @@ bool GeneratePitch(const PitchMedia &media, const PitchOptions &options, PitchTe
     return true;
 }
 
-}
+}  // namespace cuju::render::pitch

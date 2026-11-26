@@ -374,4 +374,4 @@ void Scoreboard::SetGoalCount(int team, int count) {
     goals[team]->SetCaption(overlay2d::GoalString(count));
 }
 
-}
+}  // namespace cuju::render::scene

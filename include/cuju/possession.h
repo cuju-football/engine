@@ -116,4 +116,4 @@ CUJU_HOST_DEVICE_NO_INLINE PossessionScanResult PossessionScan(const Vector3 *st
     return scan;
 }
 
-}
+}  // namespace cuju

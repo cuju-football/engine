@@ -309,7 +309,7 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamProcess(World &world, const SimulationCo
     return true;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju
 
 #include "ai_controller.h"

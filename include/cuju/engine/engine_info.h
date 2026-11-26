@@ -89,5 +89,5 @@ inline void EnvironmentGetInfo(const simulation::World &world,
     info.step = world.serialized.step;
 }
 
-}
-}
+}  // namespace engine
+}  // namespace cuju

@@ -104,7 +104,7 @@ CUJU_FUNCTION inline int WriteNumber(char *text, int at, int value) {
     return at;
 }
 
-}
+}  // namespace detail
 
 // Match::SetRandomSunParams from its six draws in the order of the RNG: two in -1.7 to 1.7, one in
 // 0 to 1, three in -0.1 to 0.1.
@@ -278,5 +278,5 @@ CUJU_FUNCTION inline void ExtractRenderState(const simulation::World &world,
     overlay.message[length] = 0;
 }
 
-}
-}
+}  // namespace render
+}  // namespace cuju

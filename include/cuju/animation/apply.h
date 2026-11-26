@@ -343,5 +343,5 @@ CUJU_FUNCTION_NO_INLINE inline void FetchPutBuffersBatch(const AnimationCollecti
     });
 }
 
-}
-}
+}  // namespace animation
+}  // namespace cuju

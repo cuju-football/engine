@@ -19,6 +19,6 @@ bool CanGenerateMipmaps(Format format, int width, int height);
 
 void GenerateMipmaps(Texture &texture);
 
-}
+}  // namespace cuju::render
 
 #endif

@@ -67,7 +67,7 @@ bool CheckState(const void *state, size_t size, std::string *error) {
     return true;
 }
 
-}
+}  // namespace
 
 struct cuju_renderer {
     std::unique_ptr<Renderer> renderer;
@@ -129,7 +129,7 @@ int Resize(cuju_renderer *r, int width, int height, bool gray, std::uint8_t *out
     return CUJU_RENDER_OK;
 }
 
-}
+}  // namespace
 
 extern "C" {
 uint32_t cuju_render_api_version(void) { return CUJU_RENDER_API_VERSION; }
@@ -330,5 +330,4 @@ int cuju_render_has_frame(cuju_renderer *renderer, int *out) {
         return CUJU_RENDER_OK;
     });
 }
-
 }

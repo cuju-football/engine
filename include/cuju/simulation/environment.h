@@ -589,5 +589,5 @@ CUJU_FUNCTION inline bool EnvironmentCoreAfterReset(World &world, const Simulati
     }
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

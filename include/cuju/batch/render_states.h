@@ -51,5 +51,5 @@ inline std::vector<uint8_t> AnimationMirroredNames(const std::vector<std::string
     return mirrored;
 }
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

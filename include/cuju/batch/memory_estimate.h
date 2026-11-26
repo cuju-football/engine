@@ -59,5 +59,5 @@ size_t EstimateMemory(const BatchEnvironmentConfiguration &configuration) {
     return BackendBatchEnvironment<MeasuringBackend<Real>>(configuration).MemoryBytes();
 }
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

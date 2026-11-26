@@ -104,4 +104,4 @@ float Perlin::Get(float x, float y) const {
     return result;
 }
 
-}
+}  // namespace cuju::render::pitch

@@ -19,7 +19,7 @@ constexpr std::uint32_t K[64] = {
 
 inline std::uint32_t Rotr(std::uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
 
-}
+}  // namespace
 
 void Sha256::Reset() {
     const std::uint32_t init[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
@@ -97,4 +97,4 @@ std::string Sha256::HexDigest() {
     return out;
 }
 
-}
+}  // namespace cuju::render

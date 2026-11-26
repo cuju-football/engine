@@ -514,7 +514,7 @@ CUJU_FUNCTION_NO_INLINE inline bool TeamCalculateManMarking(World &world,
     return true;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju
 
 #include "referee.h"

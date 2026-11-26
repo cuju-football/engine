@@ -190,5 +190,5 @@ CUJU_FUNCTION_NO_INLINE inline void CalculateGeometryOffsets(World &world,
     }
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

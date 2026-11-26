@@ -158,5 +158,5 @@ CUJU_FUNCTION_NO_INLINE inline void UpdateCamera(World &world, const SimulationC
     }
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

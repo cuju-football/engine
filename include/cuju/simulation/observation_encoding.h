@@ -159,5 +159,5 @@ CUJU_FUNCTION inline float CheckpointReward(const AgentView &view, float reward,
     return reward;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

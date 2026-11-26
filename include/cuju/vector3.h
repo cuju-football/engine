@@ -179,7 +179,7 @@ struct Vector3 {
     }
 };
 
-}
+}  // namespace cuju
 
 #include "libm/inverse_trigonometric_float.h"
 #include "libm/sincosf.h"
@@ -221,4 +221,4 @@ CUJU_HOST_DEVICE float Vector3::GetAngle2D(const Vector3 &test) const {
     return ModulateIntoRange(-PI, PI, angle);
 }
 
-}
+}  // namespace cuju

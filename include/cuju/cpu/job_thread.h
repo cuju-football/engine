@@ -106,5 +106,5 @@ private:
     std::atomic<bool> launched_{false};
 };
 
-}
-}
+}  // namespace cpu
+}  // namespace cuju

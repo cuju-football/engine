@@ -25,7 +25,6 @@ CUJU_CPU_EXPORT int cuju_cpu_quota(const char *root) {
         return Fail(exception);
     }
 }
-
 }
 #if !defined(_MSC_VER)
 #pragma GCC visibility pop

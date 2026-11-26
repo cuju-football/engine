@@ -93,7 +93,7 @@ Registry &GetRegistry() {
     return registry;
 }
 
-}
+}  // namespace
 
 bool RegisterProgram(ProgramKind kind, ProgramFactory factory) {
     Registry &r = GetRegistry();
@@ -112,4 +112,4 @@ std::unique_ptr<Program> MakeProgram(ProgramKind kind) {
     return f ? f() : nullptr;
 }
 
-}
+}  // namespace cuju::render::gl

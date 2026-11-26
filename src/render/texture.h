@@ -76,6 +76,6 @@ struct Texture {
     int Height(int level = 0) const { return levels[level].height; }
 };
 
-}
+}  // namespace cuju::render
 
 #endif

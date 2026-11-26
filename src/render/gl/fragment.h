@@ -97,6 +97,6 @@ inline std::uint32_t AddSat16(std::uint32_t a, std::uint32_t b) {
     return s > 0xFFFFu ? 0xFFFFu : s;
 }
 
-}
+}  // namespace cuju::render::gl
 
 #endif

@@ -384,5 +384,5 @@ CUJU_FUNCTION inline bool OfficialsProcess(World &world, const SimulationContext
     return true;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

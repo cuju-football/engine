@@ -15,7 +15,7 @@ struct Index3 {
     int index[3];
 };
 
-}
+}  // namespace
 
 bool LoadVertexColors(const std::string &data_dir, VertexColorMap *colors, std::string *error) {
     std::string data;
@@ -77,4 +77,4 @@ bool LoadVertexColors(const std::string &data_dir, VertexColorMap *colors, std::
     return true;
 }
 
-}
+}  // namespace cuju::render::scene

@@ -18,4 +18,4 @@ inline std::filesystem::path FilePath(const std::string &utf8) {
 inline const std::string &FilePath(const std::string &path) { return path; }
 #endif
 
-}
+}  // namespace cuju

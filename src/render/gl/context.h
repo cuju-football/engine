@@ -255,6 +255,6 @@ private:
     std::uint32_t mapped_array_ = 0, mapped_element_ = 0;
 };
 
-}
+}  // namespace cuju::render::gl
 
 #endif

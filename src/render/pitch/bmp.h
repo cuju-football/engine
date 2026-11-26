@@ -24,6 +24,6 @@ struct Image {
 bool DecodeBmp(const std::uint8_t *data, std::size_t size, Image *image, std::string *error);
 bool LoadBmp(const std::string &path, Image *image, std::string *error);
 
-}
+}  // namespace cuju::render::pitch
 
 #endif

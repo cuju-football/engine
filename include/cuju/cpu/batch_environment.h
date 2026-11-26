@@ -421,5 +421,5 @@ private:
 
 using BatchEnvironment = batch::BackendBatchEnvironment<CpuBackend>;
 
-}
-}
+}  // namespace cpu
+}  // namespace cuju

@@ -133,7 +133,7 @@ void SkinSubmeshInto(const SkinSubmesh &submesh, const Joint *joints, const Vect
     }
 }
 
-}
+}  // namespace
 
 const BindPose &FullbodyBindPose() {
     static const BindPose pose = {
@@ -308,6 +308,6 @@ void FullbodyRestBuffer(const SkinnedModel &model, float *buffer) {
     }
 }
 
-}
-}
-}
+}  // namespace scene
+}  // namespace render
+}  // namespace cuju

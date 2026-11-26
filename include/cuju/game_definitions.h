@@ -30,4 +30,4 @@ constexpr float GOAL_HALF_WIDTH = 3.7f;
 constexpr float LINE_HALF_WIDTH = 0.06f;
 constexpr float DEFAULT_PLAYER_HEIGHT = 1.92f;
 
-}
+}  // namespace cuju

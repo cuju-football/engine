@@ -156,5 +156,5 @@ inline std::vector<AnimationDerived> DeriveAll(const AnimationStore &store) {
     return derived;
 }
 
-}
-}
+}  // namespace animation
+}  // namespace cuju

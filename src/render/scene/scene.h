@@ -242,6 +242,6 @@ private:
     bool render_ = true;
 };
 
-}
+}  // namespace cuju::render::scene
 
 #endif

@@ -66,6 +66,6 @@ void SkinFullbody(const SkinnedModel &model, const RenderJoint joints[RENDER_JOI
 
 void FullbodyRestBuffer(const SkinnedModel &model, float *buffer);
 
-}
-}
-}
+}  // namespace scene
+}  // namespace render
+}  // namespace cuju

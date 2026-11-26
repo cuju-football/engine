@@ -246,7 +246,7 @@ void UntransposeRows(const float *group, int width, int count, float *const *row
     }
 }
 
-}
+}  // namespace
 
 void RgbToGray(const std::uint8_t *src, std::ptrdiff_t src_step, std::uint8_t *dst,
                std::ptrdiff_t dst_step, int width, int height) {
@@ -538,4 +538,4 @@ void AreaResize::RunLinear(const std::uint8_t *src, std::ptrdiff_t src_step, std
     }
 }
 
-}
+}  // namespace cuju::render

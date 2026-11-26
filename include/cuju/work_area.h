@@ -84,4 +84,4 @@ private:
 #endif
 };
 
-}
+}  // namespace cuju

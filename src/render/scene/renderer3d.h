@@ -232,6 +232,6 @@ private:
     VertexBufferId overlay_buffer_, quad_buffer_;
 };
 
-}
+}  // namespace cuju::render::scene
 
 #endif

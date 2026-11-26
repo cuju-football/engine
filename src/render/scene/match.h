@@ -175,6 +175,6 @@ private:
     std::unique_ptr<Match> match_;
 };
 
-}
+}  // namespace cuju::render::scene
 
 #endif

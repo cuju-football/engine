@@ -133,5 +133,5 @@ inline int QuotaProcessors(const std::string &root = "") {
     return smallest;
 }
 
-}
-}
+}  // namespace cpu
+}  // namespace cuju

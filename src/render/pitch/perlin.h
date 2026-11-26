@@ -43,6 +43,6 @@ private:
     float g2_[kSampleSize + kSampleSize + 2][2];
 };
 
-}
+}  // namespace cuju::render::pitch
 
 #endif

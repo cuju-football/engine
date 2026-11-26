@@ -205,6 +205,6 @@ void RunDraw(const DrawState &state, const RasterState &rs, const DrawInput &inp
 void SetupTriangle(const RasterState &rs, const DrawState *state, Scene &scene, bool ieee,
                    const float (*v0)[4], const float (*v1)[4], const float (*v2)[4]);
 
-}
+}  // namespace cuju::render::gl
 
 #endif

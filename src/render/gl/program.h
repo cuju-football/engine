@@ -151,6 +151,6 @@ bool RegisterProgram(ProgramKind kind, ProgramFactory factory);
                                                 return std::make_unique<Class>();                  \
                                             })
 
-}
+}  // namespace cuju::render::gl
 
 #endif

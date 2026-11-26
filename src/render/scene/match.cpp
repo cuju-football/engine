@@ -108,7 +108,7 @@ void CollectGeometry(Node &node, std::vector<ObjectPtr> &out) {
     node.Collect(out, ObjectType::kGeometry);
 }
 
-}
+}  // namespace
 
 Context::Context(GlStream &gl, int width, int height, const Shared &shared) : shared_(shared) {
     MediaSource media;
@@ -602,4 +602,4 @@ void Match::UploadNetting(const std::function<void(GeometryData &goals)> &nettin
     context_.scene().OnUpdateGeometryData(*goals, false);
 }
 
-}
+}  // namespace cuju::render::scene

@@ -5,9 +5,9 @@
 // plain and once with outline 2, and renders each caption with TTF_RenderUTF8_Blended. The atlas
 // holds every glyph of the font as SDL_ttf loads it through FreeType 2.13.2, filled and stroked,
 // with HarfBuzz 8.3.0's advances, kerning, ligatures and contextual forms for every pair of
-// characters. ci/make/make_glyph_atlas.py writes it. The composition here gives SDL_ttf's surface byte
-// for byte for every string over the atlas's characters, which are the font's cmap without control
-// characters, default ignorables, combining marks and the Greek spacing accents.
+// characters. ci/make/make_glyph_atlas.py writes it. The composition here gives SDL_ttf's surface
+// byte for byte for every string over the atlas's characters, which are the font's cmap without
+// control characters, default ignorables, combining marks and the Greek spacing accents.
 //
 // File layout, little-endian:
 //   char[8] "CUJGLYF1", u8[32] SHA-256 of the font,
@@ -88,6 +88,6 @@ private:
     std::vector<std::uint8_t> pixels_;
 };
 
-}
+}  // namespace cuju::render::overlay2d
 
 #endif

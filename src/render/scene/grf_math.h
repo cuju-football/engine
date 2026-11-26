@@ -257,6 +257,6 @@ struct Aabb {
     bool Intersects(const std::vector<Plane> &planes) const;
 };
 
-}
+}  // namespace cuju::render::scene
 
 #endif

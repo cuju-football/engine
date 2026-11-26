@@ -374,5 +374,5 @@ CUJU_FUNCTION inline bool GameTaskProcessPhase(World &world, const SimulationCon
     return true;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

@@ -29,6 +29,6 @@ public:
     void ShadeBlock(const gl::FragmentBlock &block) const override;
 };
 
-}
+}  // namespace cuju::render::shaders
 
 #endif

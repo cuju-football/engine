@@ -176,5 +176,5 @@ void ProcessVector(Archive &archive, FixedVector<T, Capacity> &container,
     }
 }
 
-}
-}
+}  // namespace state
+}  // namespace cuju

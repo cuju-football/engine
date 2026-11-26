@@ -21,7 +21,7 @@ inline std::uint32_t StoreUnorm16(float c) {
     return gl::Unorm16Ftz(ftz::MinPs(ftz::MaxPs(c, 0.0f), 1.0f));
 }
 
-}
+}  // namespace
 
 OverlayProgram::OverlayProgram()
     : gl::Program({{"model", gl::kMat4, 1},
@@ -87,4 +87,4 @@ void OverlayProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kOverlay, OverlayProgram);
 
-}
+}  // namespace cuju::render::shaders

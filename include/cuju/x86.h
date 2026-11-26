@@ -16,7 +16,7 @@ CUJU_HOST_DEVICE uint32_t FloatToUnsigned32(float value) {
     return (uint32_t)(uint64_t)(int64_t)value;
 }
 
-}
+}  // namespace cuju
 
 namespace cuju {
 CUJU_HOST_DEVICE int32_t DoubleToInt32(double value) {
@@ -24,4 +24,4 @@ CUJU_HOST_DEVICE int32_t DoubleToInt32(double value) {
     return (int32_t)value;
 }
 
-}
+}  // namespace cuju

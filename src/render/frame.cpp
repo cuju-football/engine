@@ -105,7 +105,7 @@ std::vector<scene::PlanarMesh> PlanarMeshes(const scene::GeometryData &data) {
     return out;
 }
 
-}
+}  // namespace
 
 SharedMedia::SharedMedia(std::string media_path, int threads)
     : media_path_(std::move(media_path)),
@@ -504,4 +504,4 @@ const std::vector<std::uint8_t> &Renderer::RenderMatch(const RenderState &state,
     return screen_;
 }
 
-}
+}  // namespace cuju::render

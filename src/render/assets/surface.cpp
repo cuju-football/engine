@@ -52,4 +52,4 @@ bool LoadSurface(const std::string &path, Surface *surface, std::string *error) 
     return true;
 }
 
-}
+}  // namespace cuju::render::assets

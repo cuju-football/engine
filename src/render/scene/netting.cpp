@@ -33,7 +33,7 @@ inline float Distance(const Vector3 &a, const Vector3 &b) {
     return length;
 }
 
-}
+}  // namespace
 
 void GoalNetting::Prepare(const std::vector<PlanarMesh> &meshes) {
     size_t total = 0;
@@ -111,6 +111,6 @@ bool GoalNetting::Update(const Vector3 &ball, bool ballTouchesNet) {
     return false;
 }
 
-}
-}
-}
+}  // namespace scene
+}  // namespace render
+}  // namespace cuju

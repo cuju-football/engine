@@ -41,6 +41,6 @@ private:
     std::size_t bytes_ = 0, hits_ = 0, misses_ = 0;
 };
 
-}
+}  // namespace cuju::render::gl
 
 #endif

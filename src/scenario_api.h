@@ -100,7 +100,6 @@ int cuju_scenario_build_bundle(const cuju_scenario_description *even,
         return Fail(exception);
     }
 }
-
 }
 #if !defined(_MSC_VER)
 #pragma GCC visibility pop

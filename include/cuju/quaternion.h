@@ -274,4 +274,4 @@ struct Quaternion {
     }
 };
 
-}
+}  // namespace cuju

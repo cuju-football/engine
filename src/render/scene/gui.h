@@ -149,6 +149,6 @@ public:
 
 void AssignSurface(assets::Surface *dst, const overlay2d::Surface &src);
 
-}
+}  // namespace cuju::render::scene
 
 #endif

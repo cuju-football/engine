@@ -384,4 +384,4 @@ struct TimeNeededWalk {
 };
 #endif
 
-}
+}  // namespace cuju

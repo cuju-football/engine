@@ -48,7 +48,7 @@ void WriteFpcr(std::uint64_t v) {
 }
 #endif
 
-}
+}  // namespace
 
 FpScope::FpScope(FpMode mode) {
 #if CUJU_RENDER_X86
@@ -137,7 +137,7 @@ float RoundToFloat(double x, bool ftz) {
     return FromBits(sign | static_cast<std::uint32_t>(q));
 }
 
-}
+}  // namespace
 
 float Fma(float a, float b, float c, bool ftz) {
     if (ftz) {
@@ -169,6 +169,6 @@ float Fma(float a, float b, float c, bool ftz) {
     return RoundToFloat(odd, ftz);
 }
 
-}
+}  // namespace fpmodel
 
-}
+}  // namespace cuju::render

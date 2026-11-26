@@ -390,5 +390,5 @@ CUJU_FUNCTION_NO_INLINE inline Vector3 GetBestPossibleTouch(World &world,
     return resultTouch;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

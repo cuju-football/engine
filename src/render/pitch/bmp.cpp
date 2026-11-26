@@ -25,7 +25,7 @@ int ByteShift(std::uint32_t mask) {
     return -1;
 }
 
-}
+}  // namespace
 
 bool DecodeBmp(const std::uint8_t *data, std::size_t size, Image *image, std::string *error) {
     if (size < 54 || data[0] != 'B' || data[1] != 'M') return Fail(error, "not a BMP file");
@@ -111,4 +111,4 @@ bool LoadBmp(const std::string &path, Image *image, std::string *error) {
     return true;
 }
 
-}
+}  // namespace cuju::render::pitch

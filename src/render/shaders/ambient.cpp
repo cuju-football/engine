@@ -41,7 +41,7 @@ inline F8 Affine(const float *m, int r, F8 x, F8 y, F8 z) {
                Splat(m[12 + r]));
 }
 
-}
+}  // namespace
 
 AmbientProgram::AmbientProgram()
     : gl::Program({{"orthoViewMatrix", gl::kMat4, 1},
@@ -100,8 +100,7 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     const F8 minus_one = Splat(-1.0f);
     const F8 c0_7 = Splat(FromBits(0x3F333333u));
     const F8 c0_3 = Splat(FromBits(0x3E99999Au));
-    const F8 tint[3] = {Splat(FromBits(0x3E0A3D71u)),
-                        Splat(FromBits(0x3E19999Au)),
+    const F8 tint[3] = {Splat(FromBits(0x3E0A3D71u)), Splat(FromBits(0x3E19999Au)),
                         Splat(FromBits(0x3E3851ECu))};
     const F8 radius = Splat(FromBits(0x3E3851ECu));
     const F8 min_delta = Splat(FromBits(0x3727C5ACu));
@@ -285,4 +284,4 @@ void AmbientProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kAmbient, AmbientProgram);
 
-}
+}  // namespace cuju::render::shaders

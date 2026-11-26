@@ -36,7 +36,7 @@ inline void Mul3(const float *m, const float *v, float *out) {
     }
 }
 
-}
+}  // namespace
 
 void SimpleProgram::RunVertices(const gl::DrawState &state, int count, const float *const *attribs,
                                 float *clip, float *inputs) const {
@@ -154,7 +154,7 @@ void SampleUnit(const Texture *tex, unsigned quads, const float *s, const float 
     }
 }
 
-}
+}  // namespace
 
 void SimpleProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     float X[16], Y[16], z[16];
@@ -267,4 +267,4 @@ void SimpleProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kSimple, SimpleProgram);
 
-}
+}  // namespace cuju::render::shaders

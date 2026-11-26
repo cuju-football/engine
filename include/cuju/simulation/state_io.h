@@ -83,5 +83,5 @@ struct StateCodec {
     }
 };
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

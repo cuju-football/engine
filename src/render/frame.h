@@ -135,6 +135,6 @@ private:
     std::unique_ptr<RenderState> pending_state_;
 };
 
-}
+}  // namespace cuju::render
 
 #endif

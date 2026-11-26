@@ -194,5 +194,5 @@ inline void ReleaseUntouched(void *pointer, size_t bytes) {
 #endif
 }
 
-}
-}
+}  // namespace cpu
+}  // namespace cuju

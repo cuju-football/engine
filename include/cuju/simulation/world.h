@@ -231,5 +231,5 @@ CUJU_FUNCTION_NO_INLINE inline void CanonicalToRest(World &world) {
 }
 CUJU_FUNCTION inline void RestToCanonical(World &world) { CanonicalToRest(world); }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

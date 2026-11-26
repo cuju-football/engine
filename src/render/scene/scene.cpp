@@ -50,7 +50,7 @@ Aabb MeshAabb(const Mesh &mesh) {
 
 constexpr int kElements = 5;
 
-}
+}  // namespace
 
 GeometryData GeometryData::Copy() {
     GeometryData c;
@@ -825,4 +825,4 @@ void Scene::CameraPoke(Object &camera) {
     buffer.lights.clear();
 }
 
-}
+}  // namespace cuju::render::scene

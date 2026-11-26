@@ -54,5 +54,5 @@ CUJU_FUNCTION inline void InitializePlayerTeams(World &world) {
         world.formationOverride[player] = 0;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

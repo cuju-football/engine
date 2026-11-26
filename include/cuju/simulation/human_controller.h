@@ -111,5 +111,5 @@ CUJU_FUNCTION inline Vector3 HumanGetDirection(World &world, int player) {
         .GetNormalized(Humanoid(world, player).spatialState.directionVector);
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

@@ -33,6 +33,6 @@ inline void OrthoQuadVertices(const float *V, const float *P, int count, const f
     }
 }
 
-}
+}  // namespace cuju::render::shaders
 
 #endif

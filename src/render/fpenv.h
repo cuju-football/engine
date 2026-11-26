@@ -126,7 +126,7 @@ inline float MaxPs(float a, float b) { return cuju::render::MaxPs(Daz(a), Daz(b)
 inline float Floor(float a) { return std::floor(Daz(a)); }
 inline float Ceil(float a) { return std::ceil(Daz(a)); }
 
-}
+}  // namespace fpmodel
 
 namespace ftz {
 #if CUJU_RENDER_HARDWARE_FTZ
@@ -182,14 +182,14 @@ inline bool Ugt(float a, float b) { return !(Daz(a) <= Daz(b)); }
 inline bool Uge(float a, float b) { return !(Daz(a) < Daz(b)); }
 inline bool Ueq(float a, float b) { return !(Daz(a) < Daz(b) || Daz(a) > Daz(b)); }
 
-}
+}  // namespace ftz
 
 // The operations of IEEE stages, correct on every host inside an FpScope(FpMode::kIeee).
 namespace ieee {
 inline float Fma(float a, float b, float c) { return std::fma(a, b, c); }
 
-}
+}  // namespace ieee
 
-}
+}  // namespace cuju::render
 
 #endif

@@ -129,7 +129,7 @@ std::uint32_t UnormRound(float v, float scale) {
     return static_cast<std::uint32_t>(std::lrint(c * scale));
 }
 
-}
+}  // namespace
 
 Context::Context(const ContextOptions &options) : options_(options) {
     pool_ = std::make_unique<ThreadPool>(std::max(1, options.threads));
@@ -231,7 +231,7 @@ void Unpack(TextureLevel &level, Format format, int x, int y, int w, int h,
     }
 }
 
-}
+}  // namespace
 
 void Context::TexImage2D(std::uint32_t, int level, std::uint32_t internalformat, int width,
                          int height, std::uint32_t format, std::uint32_t, const void *data) {
@@ -828,7 +828,7 @@ struct Unorm10To8 {
 
 const Unorm10To8 kUnorm10To8;
 
-}
+}  // namespace
 
 void Context::ReadPixels(int x, int y, int width, int height, std::uint32_t format,
                          std::uint32_t type, void *out) {
@@ -869,4 +869,4 @@ std::vector<std::uint32_t> Context::ReadDefaultFramebufferWords() {
     return out;
 }
 
-}
+}  // namespace cuju::render::gl

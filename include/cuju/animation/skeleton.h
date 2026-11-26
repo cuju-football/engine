@@ -225,5 +225,5 @@ CUJU_FUNCTION inline WorldGeometry GeometryWorld(const SkeletonGeometry &geometr
                          derived.position};
 }
 
-}
-}
+}  // namespace animation
+}  // namespace cuju

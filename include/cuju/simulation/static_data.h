@@ -96,5 +96,5 @@ inline StaticData ParseStatic(const std::string &bytes) {
     return staticData;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

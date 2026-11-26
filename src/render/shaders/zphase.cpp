@@ -63,4 +63,4 @@ void ZphaseProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kZphase, ZphaseProgram);
 
-}
+}  // namespace cuju::render::shaders

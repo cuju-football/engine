@@ -111,6 +111,6 @@ struct OverlayInputs {
     std::vector<Tag> tags;
 };
 
-}
+}  // namespace cuju::render::overlay2d
 
 #endif

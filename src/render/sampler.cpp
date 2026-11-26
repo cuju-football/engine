@@ -716,7 +716,7 @@ bool AnisoLanes(SamplerKind kind, const Texture &texture, int quads, const float
     }
 }
 
-}
+}  // namespace
 
 void SampleQuads(SamplerKind kind, const Texture &texture, int quads, const float *s,
                  const float *t, float *out) {
@@ -786,7 +786,7 @@ lanes::I8 ShadowPassBelow(lanes::F8 r) {
     return below;
 }
 
-}
+}  // namespace
 
 void SampleShadowQuads(const Texture &texture, int quads, const float *s, const float *t,
                        const float *ref, float *out) {
@@ -913,4 +913,4 @@ void SampleShadowQuads(const Texture &texture, int quads, const float *s, const 
     }
 }
 
-}
+}  // namespace cuju::render

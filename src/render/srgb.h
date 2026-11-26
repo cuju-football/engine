@@ -40,6 +40,6 @@ inline std::int32_t SrgbEncodeByte(float v) {
     return CvtPs2Dq(ftz::Ule(x, FromBits(0x3B4D2E1Cu)) ? lin : pw);
 }
 
-}
+}  // namespace cuju::render
 
 #endif

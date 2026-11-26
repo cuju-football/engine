@@ -114,5 +114,5 @@ inline std::string ScenarioDifference(const state::ScenarioState &loaded,
     return closest;
 }
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

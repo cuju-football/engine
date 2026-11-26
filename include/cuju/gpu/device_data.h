@@ -117,5 +117,5 @@ struct DeviceTables {
     }
 };
 
-}
-}
+}  // namespace gpu
+}  // namespace cuju

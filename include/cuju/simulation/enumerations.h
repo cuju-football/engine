@@ -58,5 +58,5 @@ enum e_PlayerCommandModifier {
     e_PlayerCommandModifier_KnockOn = 1
 };
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

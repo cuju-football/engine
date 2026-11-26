@@ -18,5 +18,5 @@ using AnimationList = InlineVector<int16_t, MAXIMUM_ANIMATIONS>;
 using CommandQueue = InlineVector<state::PlayerCommand, MAXIMUM_COMMAND_QUEUE>;
 using PositionList = InlineVector<Vector3, MAXIMUM_POSITIONS>;
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

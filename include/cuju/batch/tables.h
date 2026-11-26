@@ -84,5 +84,5 @@ void UploadTables(Tables &tables, const animation::AnimationStore &store,
     tables.context.requestCommand = nullptr;
 }
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

@@ -44,4 +44,4 @@ CUJU_HOST_DEVICE_NO_INLINE float RoundTripSixDecimals(float value) {
     return negative ? -result : result;
 }
 
-}
+}  // namespace cuju

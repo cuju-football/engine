@@ -83,4 +83,4 @@ struct InlineVector {
     }
 };
 
-}
+}  // namespace cuju

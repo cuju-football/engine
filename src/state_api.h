@@ -94,7 +94,6 @@ int cuju_state_gather(const char *bytes, unsigned long long size, int frame,
         return Fail(exception);
     }
 }
-
 }
 #if !defined(_MSC_VER)
 #pragma GCC visibility pop

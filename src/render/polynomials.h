@@ -100,11 +100,11 @@ inline float SinOrCos(float a, bool cos) {
     return (a_bits & 0x7F800000u) != 0x7F800000u ? clamped : FromBits(0x7FC00000u);
 }
 
-}
+}  // namespace detail
 
 inline float Cos(float a) { return detail::SinOrCos(a, true); }
 inline float Sin(float a) { return detail::SinOrCos(a, false); }
 
-}
+}  // namespace cuju::render
 
 #endif

@@ -713,5 +713,5 @@ CUJU_FUNCTION_NO_INLINE inline bool RefereePrepareSetPiece(World &world,
     return true;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

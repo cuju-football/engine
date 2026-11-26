@@ -786,5 +786,5 @@ inline Assets LoadAssets(const std::string &path, int leftAgents = -1, int right
     return assets;
 }
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

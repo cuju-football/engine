@@ -35,7 +35,7 @@ inline std::uint32_t StoreUnorm16(float c) {
     return gl::Unorm16Ftz(ftz::MinPs(ftz::MaxPs(c, 0.0f), 1.0f));
 }
 
-}
+}  // namespace
 
 PostprocessProgram::PostprocessProgram()
     : gl::Program({{"orthoViewMatrix", gl::kMat4, 1},
@@ -81,7 +81,7 @@ inline void FetchRgb(const lanes::NearestLevel &l, F8 s, F8 t, F8 *rgb) {
     rgb[2] = rgba[2];
 }
 
-}
+}  // namespace
 
 void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
     using namespace lanes;
@@ -215,4 +215,4 @@ void PostprocessProgram::ShadeBlock(const gl::FragmentBlock &b) const {
 
 CUJU_GL_REGISTER_PROGRAM(kPostprocess, PostprocessProgram);
 
-}
+}  // namespace cuju::render::shaders

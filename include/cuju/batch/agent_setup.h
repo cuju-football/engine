@@ -147,5 +147,5 @@ inline void SetupAgents(simulation::World &world, const simulation::StaticData &
     }
 }
 
-}
-}
+}  // namespace batch
+}  // namespace cuju

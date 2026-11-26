@@ -2749,5 +2749,5 @@ CUJU_FUNCTION_NO_INLINE inline SelectResult Selector::SelectAnimation(
     return SELECT_TRUE;
 }
 
-}
-}
+}  // namespace simulation
+}  // namespace cuju

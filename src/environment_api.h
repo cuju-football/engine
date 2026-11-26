@@ -24,7 +24,7 @@ int Fail(const std::exception &exception) {
     lastError = exception.what();
     return -1;
 }
-}
+}  // namespace
 
 #if !defined(_MSC_VER)
 #pragma GCC visibility push(default)
@@ -489,7 +489,6 @@ int cuju_environment_render_states(void *environment, const int *environments, i
         return Fail(exception);
     }
 }
-
 }
 #if !defined(_MSC_VER)
 #pragma GCC visibility pop

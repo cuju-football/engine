@@ -860,5 +860,5 @@ void ProcessEnvironmentState(Archive &archive, EnvironmentStateFull &environment
                              int freeControllerCount);
 void ProcessEnvironmentScenario(Archive &archive, EnvironmentStateFull &environment);
 
-}
-}
+}  // namespace state
+}  // namespace cuju
