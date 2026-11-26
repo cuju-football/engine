@@ -127,7 +127,17 @@ Context::Context(GlStream &gl, int width, int height, const Shared &shared) : sh
     scene_ = std::make_unique<Scene>(gl, width, height, media);
 }
 
-Context::~Context() = default;
+// The nodes hold buffers that delete themselves through the scene, so they go first.
+Context::~Context() {
+    match_.reset();
+    gui_.reset();
+    fullbody_template.reset();
+    stadium.reset();
+    stadium_no_render.reset();
+    goals.reset();
+    anim_skeleton.reset();
+    scene_.reset();
+}
 
 void Context::CreateContext() {
     assets::Surface noise;
