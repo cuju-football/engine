@@ -14,7 +14,12 @@ from ._version import __version__
 GROUP = 'cuju.commands'
 ENGINE = 'cuju-engine'
 FAMILY = {'arena': 'cuju-arena', 'render': 'cuju-render'}
-_MODULES = {'check': '.check', 'replay': '._replay_command', 'dump': '._dump_command'}
+_MODULES = {
+    'check': '.check',
+    'replay': '._replay_command',
+    'dump': '._dump_command',
+    'recording': '._recording_command',
+}
 
 
 def _entries() -> dict[str, metadata.EntryPoint]:

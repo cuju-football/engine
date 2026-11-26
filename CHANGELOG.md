@@ -7,6 +7,20 @@ compare only within one version, or across versions whose entries say the output
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - unreleased
+
+### Added
+
+- `cuju.recording` keeps one match as one file, a `.cjr` archive in numpy's `.npz` layout that
+    holds the engine state at the start, the actions and the rewards, so the engine plays the match
+    again bit for bit. `record` follows a batch and hands each finished episode to a function,
+    `read` and `Recording.write` read and write files, `Recording.replay` and `with_steps` play a
+    file in the engine, and `from_grf_dump` and `from_kaggle` convert GRF dumps and Kaggle
+    episodes. A dump converts only when its replay equals it step for step. The module moves from
+    the package cuju-recording, whose files read unchanged. See [Recording](docs/recording.md).
+- `cuju recording show`, `check` and `convert` are commands of the engine, with the schemas
+    `recording.show/1`, `recording.check/1` and `recording.convert/1`.
+
 ## [0.4.0] - 2026-11-25
 
 Every output of a batch and of `cuju.env` stays as it was in 0.3.0, bit for bit, on both backends,

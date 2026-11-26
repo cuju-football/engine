@@ -9,6 +9,7 @@ SUMMARIES = {
     'check': 'check the engine against known match outputs',
     'replay': 'check a GRF dump bit for bit, without rendering',
     'dump': 'write a dump as text, without running its code',
+    'recording': 'show, check and convert recordings of matches',
     'help': 'describe the commands of the family, or one of them',
     'completion': 'print the completion script of a shell',
 }
@@ -113,6 +114,88 @@ def dump(group: Any = None) -> Parser:
     return parser
 
 
+def recording(group: Any = None) -> Parser:
+    parser = _make(
+        group,
+        'recording',
+        'Show, check and convert recordings of matches. A recording is one episode in one file '
+        'with the extension cjr, which holds the state, the actions and the rewards.',
+        examples(
+            'cuju recording show match.cjr',
+            'cuju recording check match.cjr --replay',
+            'cuju recording convert episode_done.dump -o recordings',
+        ),
+    )
+    add_globals(parser)
+    commands = parser.add_subparsers(dest='recording_command', metavar='COMMAND')
+
+    def child(name: str, summary: str, description: str, epilog: str) -> Parser:
+        found = commands.add_parser(name, help=summary, description=description, epilog=epilog)
+        found.set_defaults(_command_parser=found)
+        return found
+
+    def device_option(found: Parser) -> None:
+        option = found.add_argument(
+            '--device',
+            default='cpu',
+            metavar='DEVICE',
+            help='cpu, cuda, cuda:N or auto, cpu by default',
+        )
+        option.completion = ('auto', 'cpu', 'cuda')
+
+    show = child(
+        'show',
+        'print what a recording holds',
+        'Print what a recording holds. The output gives the header, the number of steps, the '
+        'score at the end and the names of the step fields and arrays.',
+        examples('cuju recording show match.cjr', 'cuju recording show match.cjr --json'),
+    )
+    show.add_argument('file', metavar='FILE', help='the recording to show')
+    add_json(show)
+    add_globals(show)
+
+    check = child(
+        'check',
+        'validate a recording and replay it',
+        'Validate every member of a recording. With the option --replay the command also plays '
+        'the state and actions in the installed engine and compares each stored step, and exits '
+        'with status 1 when the recording does not reproduce.',
+        examples(
+            'cuju recording check match.cjr',
+            'cuju recording check match.cjr --replay --device cpu --json',
+        ),
+    )
+    check.add_argument('file', metavar='FILE', help='the recording to check')
+    check.add_argument('--replay', action='store_true', help='also replay it in the engine')
+    device_option(check)
+    add_json(check)
+    add_globals(check)
+
+    convert = child(
+        'convert',
+        'convert GRF dumps and Kaggle episodes',
+        'Convert GRF dumps and Kaggle episodes to recordings. A dump is played again in the '
+        'engine and converted only when every step equals the dump. A Kaggle episode keeps the '
+        'steps that it holds and no state. Each recording is written to the folder under the '
+        'name of its source and the extension cjr.',
+        examples(
+            'cuju recording convert episode_done.dump -o recordings',
+            'cuju recording convert a.dump b.json -o recordings --device cpu --json',
+        ),
+    )
+    convert.add_argument(
+        'paths', nargs='+', metavar='PATH', help='the dumps and episodes to convert'
+    )
+    convert.add_argument(
+        '-o', '--output', required=True, metavar='DIR', help='the folder to write to'
+    )
+    device_option(convert)
+    convert.add_argument('--overwrite', action='store_true', help='replace a file that exists')
+    add_json(convert)
+    add_globals(convert)
+    return parser
+
+
 def help_command(group: Any = None) -> Parser:
     parser = _make(
         group,
@@ -157,6 +240,7 @@ BUILDERS = {
     'check': check,
     'replay': replay,
     'dump': dump,
+    'recording': recording,
     'help': help_command,
     'completion': completion,
 }

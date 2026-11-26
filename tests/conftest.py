@@ -103,3 +103,29 @@ def play_digest(assets, device, steps, seed=7, environments=4, **options):
             digest.update(batch.get_state(index))
     batch.close()
     return digest.hexdigest()
+
+
+TEN_STEPS = """from . import *
+
+
+def build_scenario(builder):
+    builder.config().game_duration = 10
+    builder.config().end_episode_on_score = False
+    builder.config().end_episode_on_out_of_play = False
+    builder.config().end_episode_on_possession_change = False
+    builder.SetBallPosition(0.0, 0.0)
+    builder.SetTeam(Team.e_Left)
+    builder.AddPlayer(-1.0, 0.0, e_PlayerRole_GK)
+    builder.AddPlayer(0.0, 0.0, e_PlayerRole_CF)
+    builder.SetTeam(Team.e_Right)
+    builder.AddPlayer(-1.0, 0.0, e_PlayerRole_GK)
+    builder.AddPlayer(-0.2, 0.0, e_PlayerRole_CB)
+"""
+
+
+@pytest.fixture(scope='session')
+def scenario_file(tmp_path_factory):
+    """A scenario file of 10 steps that only its time limit ends."""
+    path = tmp_path_factory.mktemp('scenario') / 'ten_steps.py'
+    path.write_text(TEN_STEPS)
+    return str(path)

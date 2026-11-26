@@ -67,8 +67,8 @@ only a pull request.
 4. Keep the compiler flags as they are. The build refuses flags that change floating-point results,
     and a pull request that needs one explains why.
 5. Use GRF's names for GRF's things in the documentation.
-6. Keep the private names that `tests/packaging/test_family_surface.py` lists. Cuju-recording,
-    cuju-arena and cuju-render import them, so a change to one breaks the family and needs a
+6. Keep the private names that `tests/packaging/test_family_surface.py` lists. Cuju-arena and
+    cuju-render import them, so a change to one breaks the family and needs a
     coordinated release.
 
 ## Rules for exactness

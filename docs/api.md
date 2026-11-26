@@ -154,6 +154,7 @@ Bundles built from scenario files are cached in the user cache folder, `$XDG_CAC
 | `cuju.scenarios` | `build_bundle`, `describe`, `load_scenario`, `cached_bundle`, `cache_directory`, `ScenarioError` and GRF's builder classes. See [Scenarios](scenarios.md). |
 | `cuju.dumps` | `DumpWriter(batch, logdir, environments=None, write_full_episode_dumps=True, write_goal_dumps=False, dump_frequency=1)` with `record(actions)`, `close()` and `paths`, `read_dump(path)` and `iterate_dump(path)`, which read dumps under limits on depth and size. See [Migrating from GRF](migrating-from-grf.md). |
 | `cuju.env` | `create_environment` with GRF's arguments plus `device`, `threads` and `api`, and `register_environments()`. See [Migrating from GRF](migrating-from-grf.md). |
+| `cuju.recording` | `Recording`, `read(source)`, `record(batch, environments, on_episode, steps=True, provenance=None, teams=None)` and its `Recorder`, `from_grf_dump(source, device='cpu')`, `from_kaggle(source)` and `RecordingError`. See [Recording](recording.md). |
 | `cuju.gfootball` | GRF's package `gfootball`, so GRF code runs with its imports switched. |
 | `cuju.gfootball_engine` | GRF's engine package over cuju's engine, with `SignatureError` and `TrackerError`. |
 
@@ -185,6 +186,7 @@ Every class lives in `cuju.errors`, derives from `cuju.Error` and from a built-i
 | `cuju check [--device D] [--long] [--case NAME] [--list] [--json]` | The self-check of the package data and of the matches each backend plays, with the config path and its non-default values. |
 | `cuju replay FILE [--device D] [--json]` | Replays a GRF dump without rendering, compares each step with the recorded one, and runs no code from the dump. |
 | `cuju dump FILE [-o OUT] [--json]` | Writes a dump as text to standard output, or to `OUT`. |
+| `cuju recording show FILE`, `check FILE [--replay]`, `convert PATH... -o DIR` | Shows what a recording holds, validates it and replays it, and converts GRF dumps and Kaggle episodes. See [Recording](recording.md). |
 | `cuju help [NAME ...]`, `cuju completion SHELL`, `cuju -V` | Family help, a completion script for `bash`, `zsh`, `fish` or `powershell`, and the installed versions. |
 
 ```sh
@@ -193,7 +195,7 @@ cuju replay episode_done.dump --json
 cuju dump episode_done.dump -o episode_done.txt
 ```
 
-With `--json`, output is one object whose first key is `schema`, such as `engine.check/1`, `engine.check.list/1`, `engine.replay/1` and `engine.dump/1`, and errors use `error/1`. Progress goes to standard error, and `--quiet` hides it. Exit status 0 is success, 1 a negative result such as a difference in a replay, 2 a usage error, 3 an environment that cannot run the command, 70 an unexpected error and 130 Ctrl+C. Add `--verbose` for a traceback.
+With `--json`, output is one object whose first key is `schema`, such as `engine.check/1`, `engine.check.list/1`, `engine.replay/1`, `engine.dump/1` and `recording.show/1`, and errors use `error/1`. Progress goes to standard error, and `--quiet` hides it. Exit status 0 is success, 1 a negative result such as a difference in a replay, 2 a usage error, 3 an environment that cannot run the command, 70 an unexpected error and 130 Ctrl+C. Add `--verbose` for a traceback.
 
 Packages add commands through entry points in the group `cuju.commands`, one `main(arguments)` function each, and install as modules `cuju.<name>`.
 

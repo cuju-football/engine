@@ -122,6 +122,7 @@ VERBS = {
     'remove',
     'restore',
     'export',
+    'convert',
     'check',
     'run',
     'resume',

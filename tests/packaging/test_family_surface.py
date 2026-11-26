@@ -1,10 +1,10 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-"""Checks the private names that cuju-recording, cuju-arena and cuju-render import."""
+"""Checks the private names that cuju-arena and cuju-render import."""
 
 import inspect
 
-from cuju import _action_log, _batch, _cli_contract, _kaggle, _raw, _state
+from cuju import _action_log, _batch, _kaggle, _raw, _state
 
 
 def parameters(function):
@@ -134,26 +134,3 @@ def test_action_log_keeps_the_digest_and_the_replay():
     assert parameters(_action_log.Digest.update) == ['self', 'value']
     assert parameters(_action_log.Digest.hexdigest) == ['self']
     assert parameters(_action_log.replay)[:2] == ['path', 'device']
-
-
-def test_cli_contract_keeps_the_helpers_of_the_family():
-    for name in (
-        'Parser',
-        'examples',
-        'add_globals',
-        'add_json',
-        'quote_path',
-        'emit',
-        'fail',
-        'guarded',
-    ):
-        assert callable(getattr(_cli_contract, name))
-    codes = (
-        _cli_contract.EXIT_NO,
-        _cli_contract.EXIT_USAGE,
-        _cli_contract.EXIT_ENVIRONMENT,
-        _cli_contract.EXIT_INTERNAL,
-        _cli_contract.EXIT_INTERRUPTED,
-    )
-    assert codes == (1, 2, 3, 70, 130)
-    assert parameters(_cli_contract.guarded) == ['prog', 'function', 'arguments']
