@@ -1260,7 +1260,9 @@ class Batch:
             )
         if not pointer:
             raise _from_library(self._library.cuju_last_error().decode())
-        match = ctypes.string_at(pointer, size.value)
+        return self._assemble(index, ctypes.string_at(pointer, size.value), episode, stacked)
+
+    def _assemble(self, index, match, episode, stacked):
         collected = list(episode[3 : 3 + self.agents]) if self._checkpoints else None
         frames = None
         if stacked:
@@ -1272,8 +1274,33 @@ class Batch:
         data = _pickle_episode(list(episode[:3]), collected, frames)
         return struct.pack('<i', len(data)) + data + match
 
-    def set_state(self, index: int, state: bytes, stacked: bool = False) -> None:
-        index = self._environment_index(index)
+    def get_states(self, stacked: bool = False) -> list[bytes]:
+        self._check_stack(stacked)
+        count = self.environment_count
+        sizes = (ctypes.c_ulonglong * count)()
+        stride = 3 + _MAXIMUM_AGENTS
+        episodes = (ctypes.c_int * (count * stride))()
+        self._wait_for_device()
+        with self._on_device():
+            pointer = self._library.cuju_environment_get_states(
+                self._handle(), sizes, episodes
+            )
+        if not pointer:
+            raise _from_library(self._library.cuju_last_error().decode())
+        joined = ctypes.string_at(pointer, sum(sizes))
+        states, offset = [], 0
+        for index in range(count):
+            match = joined[offset : offset + sizes[index]]
+            offset += sizes[index]
+            states.append(
+                self._assemble(index, match, episodes[index * stride : (index + 1) * stride], stacked)
+            )
+        if self._frames is not None:
+            for index in range(count):
+                self._frames.state_processed(index)
+        return states
+
+    def _parse_state(self, index, state, stacked):
         self._check_stack(stacked)
         if len(state) < 4 or not 0 < struct.unpack_from('<i', state)[0] <= len(state) - 4:
             raise StateError(
@@ -1309,22 +1336,19 @@ class Batch:
                 stack = _frame_stack.stack_bytes(unpickled['FrameStack'], agents, shape, dtype)
             except ValueError as error:
                 raise StateError(str(error)) from error
-        match = state[4 + length :]
-        self._wait_for_device()
-        with self._on_device():
-            status = self._library.cuju_environment_set_state(
-                self._handle(), index, match, len(match), episode
+        return state[4 + length :], episode, stack
+
+    def _state_error(self, message):
+        if 'found another' in message:
+            # GRF: a state loads only where the constant part of the scenario is the same.
+            message += (
+                '; a state loads only into an environment of the same scenario, agent counts, '
+                'episode end flags, duration, ball position, formation and difficulties'
             )
-        if status != 0:
-            message = self._library.cuju_last_error().decode()
-            if 'found another' in message:
-                # GRF: a state loads only where the constant part of the scenario is the same.
-                message += (
-                    '; a state loads only into an environment of the same scenario, agent counts, '
-                    'episode end flags, duration, ball position, formation and difficulties'
-                )
-            error = _from_library(message)
-            raise StateError(message) if type(error) is LibraryError else error
+        error = _from_library(message)
+        return StateError(message) if type(error) is LibraryError else error
+
+    def _after_load(self, index, stack):
         if self._frames is not None:
             self._frames.state_processed(index)
         if stack is not None:
@@ -1334,6 +1358,40 @@ class Batch:
                         self._handle(), index, self._observation_name.encode(), stack, len(stack)
                     )
                 )
+
+    def set_state(self, index: int, state: bytes, stacked: bool = False) -> None:
+        index = self._environment_index(index)
+        match, episode, stack = self._parse_state(index, state, stacked)
+        self._wait_for_device()
+        with self._on_device():
+            status = self._library.cuju_environment_set_state(
+                self._handle(), index, match, len(match), episode
+            )
+        if status != 0:
+            raise self._state_error(self._library.cuju_last_error().decode())
+        self._after_load(index, stack)
+
+    def set_states(self, states: Any, stacked: bool = False) -> None:
+        states = list(states)
+        count = self.environment_count
+        if len(states) != count:
+            raise ArgumentError(f'expected {count} states, one for each environment, found {len(states)}')
+        parsed = [self._parse_state(index, state, stacked) for index, state in enumerate(states)]
+        stride = 3 + _MAXIMUM_AGENTS
+        episodes = (ctypes.c_int * (count * stride))()
+        for index, (_, episode, _) in enumerate(parsed):
+            episodes[index * stride : (index + 1) * stride] = list(episode)
+        sizes = (ctypes.c_ulonglong * count)(*(len(match) for match, _, _ in parsed))
+        joined = b''.join(match for match, _, _ in parsed)
+        self._wait_for_device()
+        with self._on_device():
+            status = self._library.cuju_environment_set_states(
+                self._handle(), joined, sizes, count, episodes
+            )
+        if status != 0:
+            raise self._state_error(self._library.cuju_last_error().decode())
+        for index, (_, _, stack) in enumerate(parsed):
+            self._after_load(index, stack)
 
     def roles(self, index: int) -> dict[str, torch.Tensor]:
         index = self._environment_index(index)

@@ -341,6 +341,54 @@ int cuju_environment_set_state(void *environment, int index, const char *bytes,
     }
 }
 
+const char *cuju_environment_get_states(void *environment, unsigned long long *sizes,
+                                        int *episodes) {
+    thread_local std::string joined;
+    try {
+        CUJU_NVTX_RANGE("get_states");
+        cuju::DefaultFloatingPoint floatingPoint;
+        BatchEnvironment *batch = static_cast<BatchEnvironment *>(environment);
+        std::vector<std::string> states;
+        std::vector<cuju::simulation::EnvironmentCore> cores;
+        std::vector<cuju::batch::EnvironmentSlot> slots;
+        batch->GetStates(states, cores, slots);
+        const int stride = 3 + cuju::batch::MAXIMUM_AGENTS;
+        joined.clear();
+        for (size_t index = 0; index < states.size(); index++) {
+            sizes[index] = states[index].size();
+            joined += states[index];
+            int *episode = episodes + index * stride;
+            episode[0] = cores[index].previousScoreDifference;
+            episode[1] = cores[index].previousGameMode;
+            episode[2] = cores[index].previousBallOwnedTeam;
+            for (int agent = 0; agent < batch->Agents(); agent++)
+                episode[3 + agent] = slots[index].collected[agent];
+        }
+        return joined.data();
+    } catch (const std::exception &exception) {
+        Fail(exception);
+        return nullptr;
+    }
+}
+
+int cuju_environment_set_states(void *environment, const char *bytes,
+                                const unsigned long long *sizes, int count, const int *episodes) {
+    try {
+        CUJU_NVTX_RANGE("set_states");
+        cuju::DefaultFloatingPoint floatingPoint;
+        BatchEnvironment *batch = static_cast<BatchEnvironment *>(environment);
+        std::vector<std::string> states;
+        for (int index = 0; index < count; index++) {
+            states.emplace_back(bytes, sizes[index]);
+            bytes += sizes[index];
+        }
+        batch->SetStates(0, count, states.data(), episodes, 3 + cuju::batch::MAXIMUM_AGENTS);
+        return 0;
+    } catch (const std::exception &exception) {
+        return Fail(exception);
+    }
+}
+
 int cuju_environment_roles(void *environment, int index, int *roles, int capacity) {
     try {
         int32_t written[cuju::state::MAXIMUM_PLAYERS];

@@ -165,6 +165,9 @@ def _load_library(path=None, device='cuda'):
         ctypes.c_ulonglong,
         pointer,
     ]
+    library.cuju_environment_get_states.restype = pointer
+    library.cuju_environment_get_states.argtypes = [pointer, pointer, pointer]
+    library.cuju_environment_set_states.argtypes = [pointer, pointer, pointer, integer, pointer]
     library.cuju_environment_set_stack.argtypes = [
         pointer,
         integer,

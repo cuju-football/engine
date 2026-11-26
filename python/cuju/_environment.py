@@ -223,6 +223,12 @@ class BatchEnvironment:
     def set_state(self, index: int, state: bytes, stacked: bool = False) -> None:
         self._batch.set_state(index, state, stacked)
 
+    def get_states(self, stacked: bool = False) -> list[bytes]:
+        return self._batch.get_states(stacked)
+
+    def set_states(self, states: Any, stacked: bool = False) -> None:
+        self._batch.set_states(states, stacked)
+
     def raw(self) -> dict[str, torch.Tensor]:
         if not self._raw_on:
             raise LibraryError(

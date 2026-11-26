@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <memory>
+#include <new>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -442,6 +443,23 @@ public:
     }
     int RenderEventCapacity() const { return buffers_.renderEvents.capacity; }
 
+    // The bytes of one environment's state, from its world copied to the host. The save and the
+    // mark of a rendering match are the same for one environment and for all of them.
+    std::string SaveWorld(int environment, simulation::World &world, const EnvironmentSlot &slot) {
+        simulation::StateCodec codec;
+        codec.freeControllerCount = Variant(slot.variant).freeControllerCount;
+        std::string bytes = codec.SaveFrame(world, 0, nullptr);
+        // GRF: a save marks every node of a rendering match to compute afresh.
+        if (world.renderMode) {
+            simulation::ProcessStateMarks(world);
+            backend_.ToDevice(buffers_.worlds[environment].rootCaches, world.rootCaches,
+                              sizeof(world.rootCaches));
+            backend_.ToDevice(&buffers_.worlds[environment].stateProcessed, &world.stateProcessed,
+                              sizeof(world.stateProcessed));
+        }
+        return bytes;
+    }
+
     std::string GetState(int environment, simulation::EnvironmentCore &core,
                          EnvironmentSlot &slot) {
         CheckEnvironment(environment);
@@ -449,47 +467,64 @@ public:
         backend_.ToHost(world.get(), buffers_.worlds + environment, sizeof(simulation::World));
         backend_.ToHost(&core, buffers_.cores + environment, sizeof(core));
         backend_.ToHost(&slot, buffers_.slots + environment, sizeof(slot));
-        simulation::StateCodec codec;
-        codec.freeControllerCount = Variant(slot.variant).freeControllerCount;
-        std::string bytes = codec.SaveFrame(*world, 0, nullptr);
-        // GRF: a save marks every node of a rendering match to compute afresh.
-        if (world->renderMode) {
-            simulation::ProcessStateMarks(*world);
-            backend_.ToDevice(buffers_.worlds[environment].rootCaches, world->rootCaches,
-                              sizeof(world->rootCaches));
-            backend_.ToDevice(&buffers_.worlds[environment].stateProcessed, &world->stateProcessed,
-                              sizeof(world->stateProcessed));
-        }
-        return bytes;
+        return SaveWorld(environment, *world, slot);
     }
 
-    void SetState(int environment, const std::string &bytes, int previousScoreDifference,
-                  int previousGameMode, int previousBallOwnedTeam, const int32_t *collected) {
-        CheckEnvironment(environment);
-        auto world = std::make_unique<simulation::World>();
+    // The states of every environment, with one copy of the worlds, the cores and the slots for
+    // each chunk of environments, and the serializer of `GetState` on each one.
+    void GetStates(std::vector<std::string> &states,
+                   std::vector<simulation::EnvironmentCore> &cores,
+                   std::vector<EnvironmentSlot> &slots) {
+        const int count = buffers_.environmentCount;
+        states.assign(count, std::string());
+        cores.assign(count, simulation::EnvironmentCore());
+        slots.assign(count, EnvironmentSlot());
+        const int chunk = std::max(1, std::min(StateChunk(), count));
+        auto worlds = std::make_unique<simulation::World[]>(chunk);
+        for (int first = 0; first < count; first += chunk) {
+            const int size = std::min(chunk, count - first);
+            backend_.ToHost(worlds.get(), buffers_.worlds + first,
+                            sizeof(simulation::World) * size);
+            backend_.ToHost(cores.data() + first, buffers_.cores + first,
+                            sizeof(simulation::EnvironmentCore) * size);
+            backend_.ToHost(slots.data() + first, buffers_.slots + first,
+                            sizeof(EnvironmentSlot) * size);
+            for (int index = 0; index < size; index++)
+                states[first + index] =
+                    SaveWorld(first + index, worlds[index], slots[first + index]);
+        }
+    }
+
+    // Rebuilds one environment from the bytes of a state into `world`, `core` and `slot`. What
+    // the load keeps of the environment's present state comes from `current`.
+    void BuildState(int environment, const std::string &bytes, int previousScoreDifference,
+                    int previousGameMode, int previousBallOwnedTeam, const int32_t *collected,
+                    const simulation::World &current, const EnvironmentSlot &currentSlot,
+                    simulation::World &world, simulation::EnvironmentCore &core,
+                    EnvironmentSlot &slot) {
         simulation::StateCodec codec;
         codec.animationCount = (int)store_->animations.size();
         const int bundle = hostSlots_[environment].bundle;
-        if (!codec.LoadFrame(bytes, 0, *world))
+        if (!codec.LoadFrame(bytes, 0, world))
             throw std::invalid_argument(
                 "expected the bytes of a state, found bytes that do not load" +
                 LoadFailure(bundle, bytes));
         // GRF: scenarios compare without the state's `real_time`, so the bundle's stands in.
-        const bool realTime = world->serialized.scenario.realTime;
-        world->serialized.scenario.realTime =
+        const bool realTime = world.serialized.scenario.realTime;
+        world.serialized.scenario.realTime =
             bundles_[bundle].variants[0].world->serialized.scenario.realTime;
-        const std::string scenario = SaveScenario(*world);
+        const std::string scenario = SaveScenario(world);
         int parity = 0;
         while (parity < 4 && bundles_[bundle].variants[parity].scenario != scenario) parity++;
         if (parity == 4)
             throw std::invalid_argument(
                 "expected a state of the scenario of the environment, found another: " +
-                ScenarioDifference(world->serialized.scenario, BundleScenarios(bundle)));
-        world->serialized.scenario.realTime = realTime;
+                ScenarioDifference(world.serialized.scenario, BundleScenarios(bundle)));
+        world.serialized.scenario.realTime = realTime;
         // GRF: an environment runs one scenario, so a state continues only under its difficulties.
         const state::ScenarioState &bundleScenario =
             bundles_[bundle].variants[parity].world->serialized.scenario;
-        const state::ScenarioState &loaded = world->serialized.scenario;
+        const state::ScenarioState &loaded = world.serialized.scenario;
         float expected[2] = {bundleScenario.leftTeamDifficulty, bundleScenario.rightTeamDifficulty};
         for (int side = 0; side < 2; side++)
             if (!hostDifficulty_.empty() && hostDifficulty_[environment * 2 + side] >= 0.0f)
@@ -504,62 +539,104 @@ public:
         // GRF: the state's order of the teams loads into the scenario, while the players keep the
         // formation entries of the reset in their `TeamData`, so an environment that was reset
         // plays on with the variant of the state's order and of its reset's parity.
-        EnvironmentSlot current;
-        backend_.ToHost(&current, buffers_.slots + environment, sizeof(current));
         int index = parity;
-        if (current.episode > 0) index = (parity & 2) | ((current.variant - bundle * 4) & 1);
+        if (currentSlot.episode > 0) index = (parity & 2) | ((currentSlot.variant - bundle * 4) & 1);
         const int variant = bundle * 4 + index;
-        simulation::EnvironmentCore core;
+        core = simulation::EnvironmentCore();
         core.previousScoreDifference = previousScoreDifference;
         core.previousGameMode = previousGameMode;
         core.previousBallOwnedTeam = previousBallOwnedTeam;
         // GRF: a sent-off keeper's hand-over lives in team data outside the state, so it carries
         // over, and the observation after the load already reads the roles through it.
-        backend_.ToHost(world->formationOverride, buffers_.worlds[environment].formationOverride,
-                        sizeof(world->formationOverride));
-        simulation::EnvironmentGetState(*world, HostContext(variant), core.observation);
-        EnvironmentSlot slot;
-        backend_.ToHost(&slot, buffers_.slots + environment, sizeof(slot));
+        memcpy(world.formationOverride, current.formationOverride, sizeof(world.formationOverride));
+        simulation::EnvironmentGetState(world, HostContext(variant), core.observation);
+        slot = currentSlot;
         slot.variant = variant;
         const int agents = slot.leftAgents + slot.rightAgents;
         for (int agent = 0; agent < MAXIMUM_AGENTS; agent++)
             slot.collected[agent] = collected && agent < agents ? collected[agent] : 0;
         for (int agent = 0; agent < agents; agent++) {
             const bool leftTeam = agent < slot.leftAgents;
-            simulation::StickyActions(*world, buffers_.actionSet, leftTeam,
+            simulation::StickyActions(world, buffers_.actionSet, leftTeam,
                                       leftTeam ? agent : agent - slot.leftAgents,
                                       slot.stickyActions[agent]);
         }
         // GRF: the referee's flag, fixed at the match's reset, carries over as well.
-        backend_.ToHost(&world->refereeAnimations, &buffers_.worlds[environment].refereeAnimations,
-                        sizeof(world->refereeAnimations));
-        backend_.ToHost(&world->renderMode, &buffers_.worlds[environment].renderMode,
-                        sizeof(world->renderMode));
-        backend_.ToHost(&world->message, &buffers_.worlds[environment].message,
-                        sizeof(world->message));
-        backend_.ToHost(&world->draws, &buffers_.worlds[environment].draws, sizeof(world->draws));
-        backend_.ToHost(world->scoreboardGoals, buffers_.worlds[environment].scoreboardGoals,
-                        sizeof(world->scoreboardGoals));
-        backend_.ToHost(world->humanoidHidden, buffers_.worlds[environment].humanoidHidden,
-                        sizeof(world->humanoidHidden));
-        backend_.ToHost(&world->stateProcessed, &buffers_.worlds[environment].stateProcessed,
-                        sizeof(world->stateProcessed));
-        world->stateProcessed++;
-        backend_.ToDevice(buffers_.worlds + environment, world.get(), sizeof(simulation::World));
-        backend_.ToDevice(buffers_.cores + environment, &core, sizeof(core));
-        backend_.ToDevice(buffers_.slots + environment, &slot, sizeof(slot));
-        backend_.Fill(buffers_.reward + (size_t)environment * Agents(), 0,
-                      sizeof(float) * Agents());
-        backend_.Fill(buffers_.done + environment, 0, 1);
-        backend_.Fill(buffers_.scoreReward + environment, 0, sizeof(int32_t));
-        backend_.Fill(outputMask_, 0, buffers_.environmentCount);
-        backend_.Fill(outputMask_ + environment, 1, 1);
-        backend_.Outputs(buffers_, outputMask_, false);
-        backend_.SynchronizeAll();
-        if (!started_[environment]) {
-            started_[environment] = true;
-            unstarted_--;
+        memcpy(&world.refereeAnimations, &current.refereeAnimations,
+               sizeof(world.refereeAnimations));
+        memcpy(&world.renderMode, &current.renderMode, sizeof(world.renderMode));
+        memcpy(&world.message, &current.message, sizeof(world.message));
+        memcpy(&world.draws, &current.draws, sizeof(world.draws));
+        memcpy(world.scoreboardGoals, current.scoreboardGoals, sizeof(world.scoreboardGoals));
+        memcpy(world.humanoidHidden, current.humanoidHidden, sizeof(world.humanoidHidden));
+        memcpy(&world.stateProcessed, &current.stateProcessed, sizeof(world.stateProcessed));
+        world.stateProcessed++;
+    }
+
+    // Loads the states of `count` environments from `first`, with one copy of their worlds and
+    // slots to the host and one copy of the rebuilt ones back, and the rebuild of `BuildState`
+    // for each. The episode values of an environment are three counters and its collected
+    // checkpoints, `stride` integers in all.
+    void SetStates(int first, int count, const std::string *states, const int *episodes,
+                   int stride) {
+        if (count < 1) throw std::invalid_argument("expected at least one state, found none");
+        CheckEnvironment(first);
+        CheckEnvironment(first + count - 1);
+        const int chunk = std::min(StateChunk(), count);
+        auto current = std::make_unique<simulation::World[]>(chunk);
+        auto rebuilt = std::make_unique<simulation::World[]>(chunk);
+        std::vector<simulation::EnvironmentCore> cores(chunk);
+        std::vector<EnvironmentSlot> before(chunk), slots(chunk);
+        for (int start = 0; start < count; start += chunk) {
+            const int size = std::min(chunk, count - start);
+            const int base = first + start;
+            backend_.ToHost(current.get(), buffers_.worlds + base,
+                            sizeof(simulation::World) * size);
+            backend_.ToHost(before.data(), buffers_.slots + base, sizeof(EnvironmentSlot) * size);
+            for (int index = 0; index < size; index++) {
+                const int *episode = episodes + (size_t)(start + index) * stride;
+                new (&rebuilt[index]) simulation::World();
+                BuildState(base + index, states[start + index], episode[0], episode[1], episode[2],
+                           episode + 3, current[index], before[index], rebuilt[index],
+                           cores[index], slots[index]);
+            }
+            backend_.ToDevice(buffers_.worlds + base, rebuilt.get(),
+                              sizeof(simulation::World) * size);
+            backend_.ToDevice(buffers_.cores + base, cores.data(),
+                              sizeof(simulation::EnvironmentCore) * size);
+            backend_.ToDevice(buffers_.slots + base, slots.data(), sizeof(EnvironmentSlot) * size);
+            backend_.Fill(buffers_.reward + (size_t)base * Agents(), 0,
+                          sizeof(float) * Agents() * size);
+            backend_.Fill(buffers_.done + base, 0, size);
+            backend_.Fill(buffers_.scoreReward + base, 0, sizeof(int32_t) * size);
+            backend_.Fill(outputMask_, 0, buffers_.environmentCount);
+            backend_.Fill(outputMask_ + base, 1, size);
+            backend_.Outputs(buffers_, outputMask_, false);
+            backend_.SynchronizeAll();
+            for (int index = 0; index < size; index++) {
+                if (!started_[base + index]) {
+                    started_[base + index] = true;
+                    unstarted_--;
+                }
+            }
         }
+    }
+
+    void SetState(int environment, const std::string &bytes, int previousScoreDifference,
+                  int previousGameMode, int previousBallOwnedTeam, const int32_t *collected) {
+        CheckEnvironment(environment);
+        std::vector<int> episode(3 + MAXIMUM_AGENTS, 0);
+        episode[0] = previousScoreDifference;
+        episode[1] = previousGameMode;
+        episode[2] = previousBallOwnedTeam;
+        for (int agent = 0; collected && agent < MAXIMUM_AGENTS; agent++)
+            episode[3 + agent] = collected[agent];
+        SetStates(environment, 1, &bytes, episode.data(), 3 + MAXIMUM_AGENTS);
+    }
+
+    // The environments that one chunk of states holds in host memory, about 128 MiB of worlds.
+    static int StateChunk() {
+        return (int)std::max<size_t>(1, ((size_t)128 << 20) / sizeof(simulation::World));
     }
 
     const simulation::SimulationContext &HostContext(int variant) {
