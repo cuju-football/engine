@@ -722,6 +722,22 @@ class Batch:
         )
         return states.raw[: count * size], list(processed)[:count]
 
+    def _scene_states(self, indices):
+        count = len(indices)
+        size = self._library.cuju_scene_state_size()
+        environments = (ctypes.c_int * max(count, 1))(*indices)
+        states = ctypes.create_string_buffer(max(count * size, 1))
+        self._check(
+            self._library.cuju_environment_scene_states(
+                self._handle(),
+                ctypes.cast(environments, ctypes.c_void_p),
+                count,
+                ctypes.cast(states, ctypes.c_void_p),
+                count * size,
+            )
+        )
+        return states.raw[: count * size]
+
     def _describe_raw(self):
         fields = []
         element_type, offset = ctypes.c_int(), ctypes.c_ulonglong()

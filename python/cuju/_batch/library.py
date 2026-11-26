@@ -133,6 +133,19 @@ def _load_library(path=None, device='cuda'):
     library.cuju_environment_render_event_size.argtypes = []
     library.cuju_environment_enable_render_events.argtypes = [pointer, integer]
     library.cuju_environment_render_events.argtypes = [pointer, integer, pointer, integer, pointer]
+    library.cuju_scene_state_size.restype = ctypes.c_ulonglong
+    library.cuju_scene_state_size.argtypes = []
+    library.cuju_scene_state_version.restype = ctypes.c_uint
+    library.cuju_scene_state_version.argtypes = []
+    library.cuju_scene_team_players.restype = integer
+    library.cuju_scene_team_players.argtypes = []
+    library.cuju_environment_scene_states.argtypes = [
+        pointer,
+        pointer,
+        integer,
+        pointer,
+        ctypes.c_ulonglong,
+    ]
     library.cuju_environment_render_states.argtypes = [
         pointer,
         pointer,
