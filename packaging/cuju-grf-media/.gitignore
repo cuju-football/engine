@@ -1,7 +1,7 @@
 # What ci/make/make_render_media.py writes.
 /LICENSE
 /LICENSES/
-/src/cuju_grf_media/data/
-/src/cuju_grf_media/fonts/
-/src/cuju_grf_media/manifest.json
-/src/cuju_grf_media/SHA256SUMS
+/src/cuju/grf_media/data/
+/src/cuju/grf_media/fonts/
+/src/cuju/grf_media/manifest.json
+/src/cuju/grf_media/SHA256SUMS

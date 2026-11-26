@@ -5,39 +5,12 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
 from typing import Any
 
 VARIABLE = 'CUJU_BATCH_HOOKS'
 GROUP = 'cuju.batch_hooks'
 _LOGGER = logging.getLogger('cuju')
 _warned: set[str] = set()
-
-
-def hint(module: str) -> str:
-    package = 'cuju-' + module.partition('.')[2].partition('.')[0].replace('_', '-')
-    return (
-        f'No module named {module!r}. A package that installs beside cuju provides it, and '
-        f'{package} may be that package: pip install {package}'
-    )
-
-
-class _Missing:
-    def find_spec(self, name: str, path: Any = None, target: Any = None) -> None:
-        parts = name.split('.')
-        if len(parts) == 2 and parts[0] == 'cuju' and not parts[1].startswith('_'):
-            raise ModuleNotFoundError(hint(name), name=name)
-        return None
-
-
-def install_finder() -> None:
-    if not any(isinstance(finder, _Missing) for finder in sys.meta_path):
-        sys.meta_path.append(_Missing())
-
-
-def is_missing(error: BaseException) -> bool:
-    name = getattr(error, 'name', None) or ''
-    return isinstance(error, ModuleNotFoundError) and name.count('.') == 1 and name[:5] == 'cuju.'
 
 
 def requested() -> list[str]:

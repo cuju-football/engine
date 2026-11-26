@@ -152,7 +152,7 @@ Bundles built from scenario files are cached in the user cache folder, `$XDG_CAC
 | Module | Holds |
 | --- | --- |
 | `cuju.scenarios` | `build_bundle`, `describe`, `load_scenario`, `cached_bundle`, `cache_directory`, `ScenarioError` and GRF's builder classes. See [Scenarios](scenarios.md). |
-| `cuju.dumps` | `DumpWriter(batch, logdir, environments=None, write_full_episode_dumps=True, write_goal_dumps=False, dump_frequency=1)` with `record(actions)`, `close()` and `paths`, and `read_dump(path)`. See [Migrating from GRF](migrating-from-grf.md). |
+| `cuju.dumps` | `DumpWriter(batch, logdir, environments=None, write_full_episode_dumps=True, write_goal_dumps=False, dump_frequency=1)` with `record(actions)`, `close()` and `paths`, `read_dump(path)` and `iterate_dump(path)`, which read dumps under limits on depth and size. See [Migrating from GRF](migrating-from-grf.md). |
 | `cuju.env` | `create_environment` with GRF's arguments plus `device`, `threads` and `api`, and `register_environments()`. See [Migrating from GRF](migrating-from-grf.md). |
 | `cuju.gfootball` | GRF's package `gfootball`, so GRF code runs with its imports switched. |
 | `cuju.gfootball_engine` | GRF's engine package over cuju's engine, with `SignatureError` and `TrackerError`. |
@@ -235,4 +235,7 @@ Both libraries export the same C functions, declared in `src/environment_api.h` 
 | `ActionLog`, `Digest`, `replay` | Private. `cuju replay FILE` replays a dump. |
 | `CUJU_NUMA_NODES`, `CUJU_RENDER_THREADS`, `CUJU_RENDER_WORKERS`, `CUJU_LOG` | The keys `numa`, `render_threads`, `render_workers` and `log`. |
 | `CUJU_BUNDLE_CACHE` | Removed. The bundle cache is always on. |
+| `import cuju` registering the Gymnasium ids | `import cuju.env`, or `gymnasium.make('cuju.env:GFootball-...')`. Gymnasium before 1.0 also loads them at its own import. |
+| `cuju_gfootball`, `python -m cuju_gfootball` | `cuju.gfootball_alias`, `python -m cuju.gfootball_alias` |
+| `cuju_grf_media` | `cuju.grf_media` |
 | `cuju replay --trace_file FILE`, `cuju dump-to-txt --trace_file FILE --output OUT` | `cuju replay FILE`, `cuju dump FILE -o OUT` |

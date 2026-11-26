@@ -5,6 +5,7 @@
 import os
 import pickle
 
+import numpy as np
 import pytest
 import torch
 
@@ -268,6 +269,107 @@ def test_read_dump_refuses_other_objects(tmp_path):
     path.write_bytes(pickle.dumps(os.system))
     with pytest.raises(pickle.UnpicklingError):
         cuju.dumps.read_dump(path)
+
+
+def test_read_dump_refuses_values_nested_too_deep(tmp_path):
+    value = {}
+    for _ in range(40):
+        value = {'next': value}
+    path = tmp_path / 'deep.dump'
+    path.write_bytes(pickle.dumps(value))
+    with pytest.raises(pickle.UnpicklingError, match='nested'):
+        cuju.dumps.read_dump(path)
+
+
+def test_read_dump_refuses_a_value_bomb(tmp_path):
+    value = [0] * 100
+    for _ in range(5):
+        value = [value] * 100
+    path = tmp_path / 'bomb.dump'
+    path.write_bytes(pickle.dumps({'bomb': value}))
+    assert path.stat().st_size < 4096
+    with pytest.raises(pickle.UnpicklingError, match='more values'):
+        cuju.dumps.read_dump(path)
+
+
+def test_iterate_dump_equals_read_dump(tmp_path):
+    steps = [{'step': index, 'values': [index, 'a', (1.5, None)]} for index in range(4)]
+    path = tmp_path / 'steps.dump'
+    path.write_bytes(b''.join(pickle.dumps(step) for step in steps))
+    iterator = cuju.dumps.iterate_dump(path)
+    assert next(iterator) == steps[0]
+    assert list(iterator) == steps[1:]
+    assert list(cuju.dumps.iterate_dump(path)) == cuju.dumps.read_dump(path) == steps
+
+
+class _Runs:
+    def __reduce__(self):
+        return (eval, ('1 + 1',))
+
+
+@pytest.mark.parametrize('protocol', [0, 1, 2, 4])
+def test_read_dump_reads_what_numpy_pickles(tmp_path, protocol):
+    step = {
+        'a': np.arange(6, dtype=np.int64).reshape(2, 3),
+        'b': np.float32(1.5),
+        'c': np.int32(-7),
+        'd': np.bool_(True),
+        'e': [np.array([0.5], dtype=np.float64)],
+    }
+    path = tmp_path / 'numpy.dump'
+    path.write_bytes(pickle.dumps(step, protocol=protocol) * 2)
+    for steps in (cuju.dumps.read_dump(path), list(cuju.dumps.iterate_dump(path))):
+        assert len(steps) == 2
+        assert steps[0]['a'].tolist() == [[0, 1, 2], [3, 4, 5]]
+        assert steps[0]['a'].dtype == torch.int64
+        assert (steps[0]['b'], steps[0]['c'], steps[0]['d']) == (1.5, -7, True)
+        assert steps[0]['e'][0].tolist() == [0.5]
+
+
+READERS = [cuju.dumps.read_dump, lambda path: list(cuju.dumps.iterate_dump(path))]
+
+
+@pytest.mark.parametrize('reader', READERS)
+def test_dump_readers_refuse_code(tmp_path, reader):
+    for value in (_Runs(), {'step': [_Runs()]}, os.system):
+        path = tmp_path / 'code.dump'
+        path.write_bytes(pickle.dumps(value))
+        with pytest.raises(pickle.UnpicklingError):
+            reader(path)
+
+
+@pytest.mark.parametrize('reader', READERS)
+def test_dump_readers_refuse_an_array_that_claims_more_than_its_size(tmp_path, reader):
+    data = pickle.dumps({'a': np.zeros(4, dtype=np.float32)}, protocol=2)
+    claim = data.replace(b'K\x04\x85', b'J\xff\xff\xff\x7f\x85', 1)
+    assert claim != data
+    path = tmp_path / 'claim.dump'
+    path.write_bytes(claim)
+    with pytest.raises(pickle.UnpicklingError, match='more values'):
+        reader(path)
+
+
+def test_dumps_of_a_match_read_by_both_readers(tmp_path):
+    batch = Batch('academy_empty_goal_close', environment_count=1, device='cpu')
+    writer = cuju.dumps.DumpWriter(batch, tmp_path)
+    batch.reset()
+    play(batch, writer, 1, 0, 'cpu')
+    (path,) = writer.paths
+    steps = cuju.dumps.read_dump(path)
+    streamed = list(cuju.dumps.iterate_dump(path))
+    assert len(steps) == len(streamed) > 1
+    for step, other in zip(steps, streamed, strict=True):
+        assert pickle.dumps(_listed(step)) == pickle.dumps(_listed(other))
+
+
+def _listed(value):
+    if isinstance(value, torch.Tensor):
+        return (str(value.dtype), tuple(value.shape), value.flatten().tolist())
+    if isinstance(value, dict):
+        return {key: _listed(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_listed(item) for item in value]
+    return value
 
 
 @pytest.mark.skipif(not CUDA, reason='no CUDA device or library')

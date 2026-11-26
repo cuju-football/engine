@@ -31,7 +31,7 @@ Some code cannot change its imports, for example a library that imports `gfootba
 pip install cuju-gfootball
 ```
 
-The alias stays off when a GRF is installed, so the two never fight over the name. `python -m cuju_gfootball` prints which case holds. `pip uninstall cuju-gfootball` removes it.
+The alias stays off when a GRF is installed, so the two never fight over the name. `python -m cuju.gfootball_alias` prints which case holds. `pip uninstall cuju-gfootball` removes it.
 
 The extras `gfootball-video`, `gfootball-play`, `gfootball-remote` and `pixels` install OpenCV, pygame, gRPC and GRF's media for GRF's frames, players and remote environments, as in `pip install 'cuju-engine[pixels]'`.
 
@@ -59,7 +59,7 @@ observation = env.reset()
 observation, reward, done, info = env.step(12)
 ```
 
-Three keyword-only arguments come on top of GRF's, `device`, which defaults to `'cpu'`, `threads`, which defaults to 1, and `api`. `api='gymnasium'` returns Gymnasium's interface, where `reset()` returns `(observation, info)` and `step` returns five values. `import cuju` registers the ids `GFootball-<scenario>-<representation>-v0` with Gymnasium for every shipped scenario, with the representations `SMM`, `simple115` and `simple115v2`.
+Three keyword-only arguments come on top of GRF's, `device`, which defaults to `'cpu'`, `threads`, which defaults to 1, and `api`. `api='gymnasium'` returns Gymnasium's interface, where `reset()` returns `(observation, info)` and `step` returns five values. `import cuju.env` registers the ids `GFootball-<scenario>-<representation>-v0` with Gymnasium for every shipped scenario, with the representations `SMM`, `simple115` and `simple115v2`, and `gymnasium.make('cuju.env:GFootball-<scenario>-<representation>-v0')` imports it first.
 
 The environment keeps GRF's negative action indices, `get_state`, `set_state`, `observation()` for GRF's raw dictionaries and `close`. `env.batch` is the batch of one environment underneath. `render=True` and `write_video=True` belong to `cuju.gfootball`, and frames from a batch are in [Observations, rewards and actions](observations-rewards-actions.md).
 
@@ -226,6 +226,8 @@ A difficulty that differs from the scenario's names the level `<scenario>_diffic
 ### Reading, replaying and videos
 
 `cuju.dumps.read_dump(path)` reads any dump, cuju's, GRF's or one of `cuju.gfootball`, and runs no code from it.
+
+The reader refuses a file whose values nest more than 32 deep or whose count passes what its size can hold, so a small file cannot expand into a large one. `cuju.dumps.iterate_dump(path)` yields the steps one at a time under the same limits and returns the same steps as `read_dump`, for dumps too long to hold at once.
 
 ```sh
 cuju replay match.dump

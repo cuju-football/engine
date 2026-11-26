@@ -65,6 +65,11 @@ cuju = "cuju.__main__:main"
 # `cuju.engine_status`.
 cuju-repair = "cuju.engine_status:main"
 
+# Gymnasium before 1.0 loads this group at import. Later versions load nothing, so `import cuju.env`
+# registers the ids there.
+[project.entry-points."gymnasium.envs"]
+__root__ = "cuju.env:register_environments"
+
 [project.urls]
 Homepage = "https://github.com/cuju-football/engine"
 Documentation = "https://github.com/cuju-football/engine/tree/main/docs"
@@ -75,10 +80,10 @@ Changelog = "https://github.com/cuju-football/engine/blob/main/CHANGELOG.md"
 spaces = ["gymnasium>=0.29"]
 test = ["pytest>=8", "psutil"]
 # GRF's media, which cuju's software renderer draws, the package cuju-grf-media.
-pixels = ["cuju-grf-media>=0.3.0,<0.4"]
+pixels = ["cuju-grf-media>=0.4.0,<0.5"]
 # What GRF's Python package needs for frames and videos, for its game and keyboard players, and
 # for its remote environments. Its frames take GRF's media.
-gfootball-video = ["opencv-python", "cuju-grf-media>=0.3.0,<0.4"]
+gfootball-video = ["opencv-python", "cuju-grf-media>=0.4.0,<0.5"]
 gfootball-play = ["pygame"]
 gfootball-remote = ["grpcio", "protobuf"]
 

@@ -79,47 +79,69 @@ def test_import_of_gfootball_binds_env():
     assert found == ['True', 'True']
 
 
-@pytest.mark.skipif(importlib.util.find_spec('gymnasium') is None, reason='no gymnasium')
-def test_gymnasium_imported_later_gets_the_ids():
+def test_import_does_nothing_beyond_defining_names():
     found = run(
-        'import cuju, gymnasium; '
-        "print('GFootball-11_vs_11_kaggle-simple115v2-v0' in gymnasium.envs.registry)"
+        'import sys, time; before = list(sys.meta_path); start = time.perf_counter(); import cuju; '
+        'spent = time.perf_counter() - start; '
+        "print(sys.meta_path == before, [name for name in ('torch', 'numpy', 'gymnasium', 'gym') "
+        'if name in sys.modules], spent < 0.25)'
     )
-    assert found == ['True']
+    assert found == ['True', '[]', 'True']
 
 
-def test_only_a_portion_of_a_package_joins_the_package(tmp_path):
-    stray = tmp_path / 'stray' / 'cuju'
-    (stray / 'fakepkg').mkdir(parents=True)
-    (stray / '__init__.py').write_text("raise SystemExit('the stray cuju was imported')\n")
-    (stray / 'fakepkg' / '__init__.py').write_text('STRAY = True\n')
+@pytest.mark.skipif(importlib.util.find_spec('gymnasium') is None, reason='no gymnasium')
+@pytest.mark.parametrize('order', ['import gymnasium, cuju.env', 'import cuju.env, gymnasium'])
+def test_gymnasium_gets_the_ids_in_either_import_order(order):
+    found = run(
+        f'{order}; print(gymnasium.make("GFootball-academy_empty_goal_close-simple115v2-v0")'
+        '.spec.id)'
+    )
+    assert found == ['GFootball-academy_empty_goal_close-simple115v2-v0']
+
+
+@pytest.mark.skipif(importlib.util.find_spec('gymnasium') is None, reason='no gymnasium')
+def test_gymnasium_makes_an_id_by_the_module_that_registers_it():
+    found = run(
+        'import gymnasium; '
+        'print(gymnasium.make("cuju.env:GFootball-5_vs_5-simple115v2-v0").spec.id)'
+    )
+    assert found == ['GFootball-5_vs_5-simple115v2-v0']
+
+
+def test_the_ids_are_declared_as_a_gymnasium_entry_point():
+    root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    path = os.path.join(root, 'pyproject.toml')
+    if not os.path.isfile(path):
+        pytest.skip('no source tree')
+    text = open(path, encoding='utf-8').read()
+    assert '[project.entry-points."gymnasium.envs"]' in text
+    assert '__root__ = "cuju.env:register_environments"' in text
+
+
+def test_a_portion_of_the_package_on_the_path_joins_it(tmp_path):
     portion = tmp_path / 'portion' / 'cuju'
     (portion / 'fakepkg').mkdir(parents=True)
     (portion / 'fakepkg' / '__init__.py').write_text('PORTION = True\n')
     home = os.path.dirname(os.path.dirname(importlib.util.find_spec('cuju').origin))
     code = (
         'import json, os, cuju\n'
-        'path = list(cuju.__path__)\n'
         'import cuju.fakepkg\n'
-        'stray = hasattr(cuju.fakepkg, "STRAY")\n'
-        'print(json.dumps([path, os.path.dirname(cuju.__file__), stray]))\n'
+        'print(json.dumps([list(cuju.__path__), os.path.dirname(cuju.__file__), '
+        'cuju.fakepkg.PORTION]))\n'
     )
     environment = dict(os.environ)
     environment.pop('CUJU_BATCH_HOOKS', None)
-    environment['PYTHONPATH'] = os.pathsep.join([home, str(tmp_path / 'stray')])
+    environment['PYTHONPATH'] = os.pathsep.join([home, str(tmp_path / 'portion')])
     result = subprocess.run(
         [sys.executable, '-c', code],
         capture_output=True,
         text=True,
         timeout=120,
-        cwd=tmp_path / 'portion',
         env=environment,
     )
     assert result.returncode == 0, result.stderr
-    path, own, stray_loaded = json.loads(result.stdout)
+    path, own, found = json.loads(result.stdout)
     normal = [os.path.normcase(folder) for folder in path]
     assert normal[0] == os.path.normcase(own)
     assert os.path.normcase(str(portion)) in normal
-    assert os.path.normcase(str(stray)) not in normal
-    assert all(os.path.isabs(folder) for folder in path)
-    assert not stray_loaded
+    assert found

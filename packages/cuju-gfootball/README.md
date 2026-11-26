@@ -43,7 +43,7 @@ the interpreter. It places one import finder at the front of `sys.meta_path` and
 else, so the start of Python stays as fast as before. The finder answers only for GRF's names and
 for the modules of the port, and it decides whether to activate at the first import of one of them.
 
-An interpreter started with `python -S` skips `.pth` files, and there `import cuju_gfootball`
+An interpreter started with `python -S` skips `.pth` files, and there `import cuju.gfootball_alias`
 activates the alias. The modules of the port imported before that point receive GRF's module names
 at the activation.
 
@@ -57,9 +57,9 @@ it finds any of them, it activates nothing, `cuju.gfootball` keeps its own modul
 `RuntimeWarning` names what it found. Installing GRF after cuju-gfootball has the same effect at the
 next start of Python.
 
-The command `python -m cuju_gfootball` prints whether the alias is active and the reason where it
-is not, and exits with status 1 in that case. In code, `cuju_gfootball.active()` and
-`cuju_gfootball.status()` say the same.
+The command `python -m cuju.gfootball_alias` prints whether the alias is active and the reason where it
+is not, and exits with status 1 in that case. In code, `cuju.gfootball_alias.active()` and
+`cuju.gfootball_alias.status()` say the same.
 
 To keep both GRF and cuju in one environment, leave cuju-gfootball out and import the port as
 `cuju.gfootball`. To have the alias, uninstall GRF's `gfootball`.

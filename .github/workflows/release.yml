@@ -375,7 +375,7 @@ jobs:
             - name: Upload cuju-gfootball only where PyPI lacks its version
               id: pypi
               run: |
-                  version=$(python3 -c "import runpy; print(runpy.run_path('packages/cuju-gfootball/src/cuju_gfootball/_version.py')['__version__'])")
+                  version=$(python3 -c "import runpy; print(runpy.run_path('packages/cuju-gfootball/src/cuju/gfootball_alias/_version.py')['__version__'])")
                   status=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/cuju-gfootball/$version/json")
                   case "$status" in
                       200) echo "cuju-gfootball $version is on PyPI, so nothing uploads"; echo "upload=false" >> "$GITHUB_OUTPUT" ;;
@@ -415,7 +415,7 @@ jobs:
             - name: Upload cuju-grf-media only where PyPI lacks its version
               id: pypi
               run: |
-                  version=$(python3 -c "import runpy; print(runpy.run_path('packaging/cuju-grf-media/src/cuju_grf_media/__init__.py')['__version__'])")
+                  version=$(python3 -c "import runpy; print(runpy.run_path('packaging/cuju-grf-media/src/cuju/grf_media/__init__.py')['__version__'])")
                   status=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/cuju-grf-media/$version/json")
                   case "$status" in
                       200) echo "cuju-grf-media $version is on PyPI, so nothing uploads"; echo "upload=false" >> "$GITHUB_OUTPUT" ;;

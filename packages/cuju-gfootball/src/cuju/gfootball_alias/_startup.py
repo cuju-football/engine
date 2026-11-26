@@ -89,7 +89,7 @@ def _decide():
             f'cuju-gfootball leaves in place'
         )
     try:
-        cuju = importlib.util.find_spec('cuju')
+        cuju = importlib.util.find_spec('cuju._version')
     except (ImportError, ValueError):
         cuju = None
     if cuju is None:
@@ -210,7 +210,7 @@ def install():
     """Puts the finder at the front of `sys.meta_path` once, and renames the port's loaded modules.
 
     The modules of the port load after the finder where `site` reads `cuju_gfootball.pth`. Under
-    `python -S`, or with an import of the port before `cuju_gfootball`, some loaded first.
+    `python -S`, or with an import of the port before `cuju.gfootball_alias`, some loaded first.
     """
     with _lock:
         if not any(isinstance(finder, _Finder) for finder in sys.meta_path):

@@ -6,8 +6,8 @@ Python's `site` activates the alias at startup through `cuju_gfootball.pth`, and
 package activates it as well, for an interpreter started without `site`.
 """
 
-from cuju_gfootball import _startup
-from cuju_gfootball._version import __version__
+from cuju.gfootball_alias import _startup
+from cuju.gfootball_alias._version import __version__
 
 __all__ = ['__version__', 'active', 'status']
 

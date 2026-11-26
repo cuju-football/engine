@@ -3,7 +3,7 @@ Copyright 2026 The cuju Authors (the contributors in the git history of cuju).
 
 This package holds media files of Google Research Football
 (https://github.com/google-research/football), commit 3d9e754720a95621bba6475c4d3b0d56fe919014,
-copied byte for byte for the software renderer of cuju. cuju_grf_media/manifest.json names each
+copied byte for byte for the software renderer of cuju. cuju/grf_media/manifest.json names each
 file, its path in Google Research Football, its size, its SHA-256 and its license.
 
 The models, textures, scene files and menu images descend from Gameplay Football by Bastiaan Konings

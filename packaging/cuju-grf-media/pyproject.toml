@@ -1,12 +1,12 @@
 # The data wheel of GRF's media for cuju's renderer. `ci/make/make_render_media.py` fills
-# `src/cuju_grf_media` and the license files from a GRF tree, and only then does the wheel build.
+# `src/cuju/grf_media` and the license files from a GRF tree, and only then does the wheel build.
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
 name = "cuju-grf-media"
-# The version is `__version__` in `src/cuju_grf_media/__init__.py`.
+# The version is `__version__` in `src/cuju/grf_media/__init__.py`.
 dynamic = ["version"]
 description = "The media of Google Research Football that cuju's software renderer draws, unchanged"
 readme = "README.md"
@@ -29,11 +29,11 @@ Documentation = "https://github.com/cuju-football/engine/blob/main/docs/observat
 Issues = "https://github.com/cuju-football/engine/issues"
 
 [tool.hatch.version]
-path = "src/cuju_grf_media/__init__.py"
+path = "src/cuju/grf_media/__init__.py"
 
 # The converter's output is ignored by git, so the build takes its files from the folder.
 [tool.hatch.build]
 ignore-vcs = true
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cuju_grf_media"]
+packages = ["src/cuju"]

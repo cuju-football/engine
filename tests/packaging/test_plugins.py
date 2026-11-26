@@ -81,49 +81,6 @@ def test_a_portion_on_the_path_joins_the_package(site):
     assert result.stdout.split() == ['True']
 
 
-def test_a_whole_cuju_on_the_path_stays_out(tmp_path):
-    stray = tmp_path / 'stray' / 'cuju'
-    (stray / 'strayed').mkdir(parents=True)
-    (stray / '__init__.py').write_text("raise SystemExit('the stray cuju was imported')\n")
-    result = run('import cuju; print(any("stray" in p for p in cuju.__path__))', tmp_path / 'stray')
-    assert result.returncode == 0, result.stderr
-    assert result.stdout.split() == ['False']
-
-
-def test_a_missing_portion_suggests_its_package():
-    code = """
-        import importlib.util
-        import cuju
-
-        for attempt in (
-            lambda: __import__('cuju.fakepkg'),
-            lambda: importlib.util.find_spec('cuju.fakepkg'),
-            lambda: __import__('cuju.no_such_one'),
-        ):
-            try:
-                attempt()
-            except ModuleNotFoundError as error:
-                print(error.name)
-                print(error)
-        try:
-            __import__('cuju.fakepkg.deeper')
-        except ModuleNotFoundError as error:
-            print(error.name)
-        try:
-            __import__('cuju._private_missing')
-        except ModuleNotFoundError as error:
-            print(error)
-    """
-    result = run(code)
-    assert result.returncode == 0, result.stderr
-    lines = result.stdout.splitlines()
-    assert lines[0] == 'cuju.fakepkg' and 'pip install cuju-fakepkg' in lines[1]
-    assert lines[2] == 'cuju.fakepkg' and 'cuju-fakepkg' in lines[3]
-    assert lines[4] == 'cuju.no_such_one' and 'cuju-no-such-one' in lines[5]
-    assert lines[6] == 'cuju.fakepkg'
-    assert lines[7] == "No module named 'cuju._private_missing'"
-
-
 def test_a_present_portion_is_found(site):
     result = run(
         "import importlib.util; print(importlib.util.find_spec('cuju.fakepkg') is None)", site

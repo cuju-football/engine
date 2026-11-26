@@ -11,8 +11,8 @@ The package holds data alone and is installed with cuju's extra `pixels`.
 pip install 'cuju-engine[pixels]'
 ```
 
-`cuju_grf_media/manifest.json` names each file, its path in GRF, its size, its SHA-256 and its
-license, and `cuju_grf_media/SHA256SUMS` lists the SHA-256 of every file for `sha256sum -c`. The
+`cuju/grf_media/manifest.json` names each file, its path in GRF, its size, its SHA-256 and its
+license, and `cuju/grf_media/SHA256SUMS` lists the SHA-256 of every file for `sha256sum -c`. The
 models and textures descend from Gameplay Football by Bastiaan Konings Schuiling, dedicated to the
 public domain under the Unlicense, with Google's changes under the Apache License 2.0, and the font
 Alegreya Sans SC is licensed under the SIL Open Font License 1.1. NOTICE gives the details.

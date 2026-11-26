@@ -78,7 +78,7 @@ def fake(tmp_path, converter):
     grf_ofl = converter.OFL_HEADER + ofl[len(converter.FONT_COPYRIGHT) :]
     write(tree / converter.GRF_OFL[0], grf_ofl.encode('ascii'))
     project = tmp_path / 'project'
-    write(project / 'src' / 'cuju_grf_media' / '__init__.py', b"__version__ = '0.3.0'\n")
+    write(project / 'src' / 'cuju' / 'grf_media' / '__init__.py', b"__version__ = '0.4.0'\n")
     return tree, sources, project
 
 
@@ -146,7 +146,7 @@ def test_the_pinned_list_covers_what_the_renderer_reads(converter):
 def test_the_converter_copies_every_file_unchanged(converter, fake):
     manifest = convert(converter, fake)
     _, _, project = fake
-    package = project / 'src' / 'cuju_grf_media'
+    package = project / 'src' / 'cuju' / 'grf_media'
     assert [entry['path'] for entry in manifest['files']] == list(FAKE_FILES)
     for name, (data, license_name, role) in FAKE_FILES.items():
         assert (package / name).read_bytes() == data
@@ -164,7 +164,7 @@ def test_the_converter_copies_every_file_unchanged(converter, fake):
         'data/media/textures/adboards/ad_b.bmp',
     ]
     assert manifest['source']['commit'] == converter.GRF_COMMIT
-    assert manifest['version'] == '0.3.0'
+    assert manifest['version'] == '0.4.0'
     assert json.loads((package / 'manifest.json').read_text()) == manifest
     for name in converter.LICENSE_TEXTS.values():
         assert (project / name).read_bytes() == open(source_file(*name.split('/')), 'rb').read()
@@ -177,7 +177,7 @@ def test_the_converter_copies_every_file_unchanged(converter, fake):
 
 def test_the_checksums_find_a_changed_file(converter, fake):
     convert(converter, fake)
-    package = fake[2] / 'src' / 'cuju_grf_media'
+    package = fake[2] / 'src' / 'cuju' / 'grf_media'
     (package / 'data' / 'media' / 'objects' / 'balls' / 'ball.bmp').write_bytes(b'BM changed')
     assert _media.problems(package) == [
         'data/media/objects/balls/ball.bmp differs from its SHA-256 in SHA256SUMS'
@@ -196,7 +196,7 @@ def test_a_tree_of_another_commit_writes_nothing(converter, fake):
     assert converter.GRF_COMMIT in message
     assert 'third_party/gfootball_engine/data/media/objects/balls/ball.bmp differs' in message
     assert 'missing third_party/gfootball_engine/data/media/objects/balls/generic.ase' in message
-    assert not (project / 'src' / 'cuju_grf_media' / 'manifest.json').exists()
+    assert not (project / 'src' / 'cuju' / 'grf_media' / 'manifest.json').exists()
 
 
 def test_generated_files_are_required_and_listed(converter, fake, tmp_path):
@@ -215,7 +215,7 @@ def test_generated_files_are_required_and_listed(converter, fake, tmp_path):
             'role': 'font',
         }
     ]
-    package = fake[2] / 'src' / 'cuju_grf_media'
+    package = fake[2] / 'src' / 'cuju' / 'grf_media'
     assert _media.problems(package) == []
     assert _media.path('fonts/atlas.bin', package).read_bytes() == b'glyphs'
 
@@ -273,12 +273,12 @@ def test_a_wheel_of_cuju_holds_no_folder_of_another_package(tmp_path):
 
 def media_wheel(path, project, extra=None):
     """Writes a wheel of cuju-grf-media from a converted project, as hatchling lays it out."""
-    package = project / 'src' / 'cuju_grf_media'
-    dist_info = 'cuju_grf_media-0.3.0.dist-info'
+    package = project / 'src' / 'cuju' / 'grf_media'
+    dist_info = 'cuju_grf_media-0.4.0.dist-info'
     with zipfile.ZipFile(path, 'w') as wheel:
         for file in sorted(package.rglob('*')):
             if file.is_file():
-                wheel.write(file, 'cuju_grf_media/' + file.relative_to(package).as_posix())
+                wheel.write(file, 'cuju/grf_media/' + file.relative_to(package).as_posix())
         for name in ('LICENSE', 'LICENSES/Unlicense.txt', 'LICENSES/OFL-1.1.txt'):
             wheel.write(project / name, f'{dist_info}/licenses/{name}')
         wheel.write(
@@ -286,7 +286,7 @@ def media_wheel(path, project, extra=None):
         )
         wheel.writestr(
             f'{dist_info}/METADATA',
-            'Metadata-Version: 2.4\nName: cuju-grf-media\nVersion: 0.3.0\n'
+            'Metadata-Version: 2.4\nName: cuju-grf-media\nVersion: 0.4.0\n'
             'License-Expression: Apache-2.0 AND Unlicense AND OFL-1.1\n',
         )
         if extra:
@@ -297,14 +297,14 @@ def test_wheel_check_reads_the_media_wheel(converter, fake, tmp_path):
     check = load_script('ci', 'checks', 'check_wheel.py')
     convert(converter, fake)
     project = fake[2]
-    path = tmp_path / 'cuju_grf_media-0.3.0-py3-none-any.whl'
+    path = tmp_path / 'cuju_grf_media-0.4.0-py3-none-any.whl'
     media_wheel(path, project)
     assert check.media_problems(str(path)) == []
-    media_wheel(path, project, extra='cuju_grf_media/data/stray.bmp')
+    media_wheel(path, project, extra='cuju/grf_media/data/stray.bmp')
     assert check.media_problems(str(path)) == [
-        'expected only the listed files, found cuju_grf_media/data/stray.bmp and 0 more'
+        'expected only the listed files, found cuju/grf_media/data/stray.bmp and 0 more'
     ]
-    (project / 'src' / 'cuju_grf_media' / 'data' / 'databases' / 'logo.bmp').write_bytes(b'BM')
+    (project / 'src' / 'cuju' / 'grf_media' / 'data' / 'databases' / 'logo.bmp').write_bytes(b'BM')
     media_wheel(path, project)
     assert check.media_problems(str(path)) == [
         'data/databases/logo.bmp differs from its manifest entry'
@@ -315,9 +315,9 @@ def test_wheel_check_reads_the_media_wheel(converter, fake, tmp_path):
             wheel.writestr(f'cuju-0.3.0.dist-info/licenses/{name}', '')
         wheel.writestr('cuju/libcuju_cpu.so', '')
         wheel.writestr('cuju/libcuju_cuda.so', '')
-        wheel.writestr('cuju_grf_media/manifest.json', '')
+        wheel.writestr('cuju/grf_media/manifest.json', '')
     assert check.problems(str(cuju_wheel), cpu_only=False) == [
-        'expected no media, found cuju_grf_media/manifest.json and 0 more'
+        'expected no other package, found cuju/grf_media/manifest.json and 0 more'
     ]
 
 
@@ -326,7 +326,7 @@ def test_the_extra_takes_the_media_of_this_release():
     with open(source_file('pyproject.toml'), 'rb') as handle:
         extras = tomllib.load(handle)['project']['optional-dependencies']
     with open(
-        source_file('packaging', 'cuju-grf-media', 'src', 'cuju_grf_media', '__init__.py')
+        source_file('packaging', 'cuju-grf-media', 'src', 'cuju', 'grf_media', '__init__.py')
     ) as f:
         version = re.search(r"__version__ = '(\d+)\.(\d+)\.\d+'", f.read()).groups()
     major, minor = map(int, version)

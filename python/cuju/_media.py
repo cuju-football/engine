@@ -13,7 +13,7 @@ from . import _checksums
 from .errors import MissingFileError
 
 DISTRIBUTION = 'cuju-grf-media'
-PACKAGE = 'cuju_grf_media'
+PACKAGE = 'cuju.grf_media'
 FORMAT = 1
 INSTALL = "pip install 'cuju-engine[pixels]'"
 MESSAGE = (

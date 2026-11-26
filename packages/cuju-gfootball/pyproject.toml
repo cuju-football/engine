@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "cuju-gfootball"
-# The version is `__version__` in `src/cuju_gfootball/_version.py`.
+# The version is `__version__` in `src/cuju/gfootball_alias/_version.py`.
 dynamic = ["version"]
 description = "Imports cuju's port of Google Research Football under GRF's own names, gfootball and gfootball_engine"
 readme = "README.md"
@@ -37,10 +37,10 @@ Issues = "https://github.com/cuju-football/engine/issues"
 Changelog = "https://github.com/cuju-football/engine/blob/main/CHANGELOG.md"
 
 [tool.hatch.version]
-path = "src/cuju_gfootball/_version.py"
+path = "src/cuju/gfootball_alias/_version.py"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cuju_gfootball"]
+packages = ["src/cuju"]
 
 # Python's `site` reads a `.pth` file only at the root of site-packages.
 [tool.hatch.build.targets.wheel.force-include]

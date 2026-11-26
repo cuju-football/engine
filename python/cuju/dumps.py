@@ -8,11 +8,13 @@ import collections
 import ctypes
 import datetime
 import io
+import math
 import os
 import pickle
 import re
 import struct
 import timeit
+from collections.abc import Iterator
 from typing import Any
 
 import torch
@@ -20,8 +22,11 @@ import torch
 from ._batch import unwrap
 from .errors import ArgumentError, LibraryError
 
-__all__ = ['DumpWriter', 'read_dump']
+__all__ = ['DumpWriter', 'iterate_dump', 'read_dump']
 
+_VALUES_PER_BYTE = 4
+_VALUES_ALLOWANCE = 1 << 20
+_MAX_DEPTH = 32
 # GRF's `e_BackendAction`, by value.
 _BACKEND_ACTIONS = (
     'idle',
@@ -692,6 +697,25 @@ def _read_reconstruct(cls, shape, code):
     return _ReadArray()
 
 
+class _ReadScalar:
+    def __init__(self, numpy_type=None, data=None):
+        self.type, self.data = numpy_type, data
+
+
+def _read_encode(text, encoding='utf-8'):
+    # Python 3 writes bytes into a pickle of protocol 2 as text that this function turns back.
+    if not isinstance(text, str) or encoding not in ('latin1', 'latin-1'):
+        raise pickle.UnpicklingError('expected bytes written as Latin-1 text')
+    return text.encode('latin-1')
+
+
+def _read_reconstructor(cls, base, state):
+    # Pickles of protocols 0 and 1 build an object through this function of `copyreg`.
+    if cls not in (_ReadAction, _ReadArray):
+        raise pickle.UnpicklingError('expected a GRF dump, found an object of another class')
+    return cls()
+
+
 def _read_frombuffer(buffer, numpy_type, shape, order):
     array = _ReadArray()
     array.shape, array.type, array.data = shape, numpy_type, bytes(buffer)
@@ -701,8 +725,11 @@ def _read_frombuffer(buffer, numpy_type, shape, order):
 _READ_TYPES = {
     'f8': torch.float64,
     'f4': torch.float32,
+    'f2': torch.float16,
     'i8': torch.int64,
     'i4': torch.int32,
+    'i2': torch.int16,
+    'i1': torch.int8,
     'u1': torch.uint8,
     'b1': torch.bool,
 }
@@ -717,8 +744,13 @@ _READ_GLOBALS = {
     ('numpy._core.multiarray', '_reconstruct'): _read_reconstruct,
     ('numpy.core.numeric', '_frombuffer'): _read_frombuffer,
     ('numpy._core.numeric', '_frombuffer'): _read_frombuffer,
+    ('numpy.core.multiarray', 'scalar'): _ReadScalar,
+    ('numpy._core.multiarray', 'scalar'): _ReadScalar,
     ('numpy', 'ndarray'): _ReadArray,
     ('numpy', 'dtype'): _ReadType,
+    ('copyreg', '_reconstructor'): _read_reconstructor,
+    ('copy_reg', '_reconstructor'): _read_reconstructor,
+    ('_codecs', 'encode'): _read_encode,
 }
 
 
@@ -730,46 +762,107 @@ class _DumpUnpickler(pickle.Unpickler):
         return target
 
 
-def _converted(value):
+def _spend(budget, count):
+    budget[0] -= count
+    if budget[0] < 0:
+        raise pickle.UnpicklingError('found more values than the size of the file can hold')
+
+
+def _read_type(value):
+    if not isinstance(value, _ReadType) or not isinstance(value.code, str):
+        raise pickle.UnpicklingError('expected an array with a numpy type')
+    dtype = _READ_TYPES.get(re.sub(r'^[<|=]', '', value.code))
+    if dtype is None or value.order == '>':
+        raise pickle.UnpicklingError(f'expected a little-endian array, found {value.code}')
+    return dtype
+
+
+def _read_bytes(data, size):
+    if isinstance(data, str):
+        # Python 2 wrote the bytes of an array as text of Latin-1.
+        data = data.encode('latin-1')
+    if not isinstance(data, (bytes, bytearray)) or len(data) != size:
+        raise pickle.UnpicklingError('expected array bytes that fit the shape')
+    return bytearray(data)
+
+
+def _converted(value, budget=None, depth=0):
+    if budget is None:
+        budget = [1 << 62]
+    if depth > _MAX_DEPTH:
+        raise pickle.UnpicklingError(f'found values nested more than {_MAX_DEPTH} deep')
+    _spend(budget, 1)
     if isinstance(value, _ReadArray):
-        dtype = _READ_TYPES.get(re.sub(r'^[<|=]', '', value.type.code))
-        if dtype is None or value.type.order == '>':
-            raise pickle.UnpicklingError(f'expected a little-endian array, found {value.type.code}')
-        if not value.data:
-            return torch.empty(value.shape, dtype=dtype)
-        return torch.frombuffer(bytearray(value.data), dtype=dtype).reshape(value.shape)
+        dtype = _read_type(value.type)
+        shape = value.shape
+        if not isinstance(shape, tuple) or not all(
+            isinstance(size, int) and not isinstance(size, bool) and size >= 0 for size in shape
+        ):
+            raise pickle.UnpicklingError('expected an array with a shape')
+        count = math.prod(shape)
+        _spend(budget, count)
+        data = _read_bytes(value.data, count * dtype.itemsize) if value.data else bytearray()
+        if not data:
+            if count:
+                raise pickle.UnpicklingError('expected array bytes that fit the shape')
+            return torch.empty(shape, dtype=dtype)
+        return torch.frombuffer(data, dtype=dtype).reshape(shape)
+    if isinstance(value, _ReadScalar):
+        dtype = _read_type(value.type)
+        data = _read_bytes(value.data, dtype.itemsize)
+        return torch.frombuffer(data, dtype=dtype)[0].item()
     if isinstance(value, _ReadAction):
         return value.__dict__['_name']
     if isinstance(value, dict):
-        return {key: _converted(item) for key, item in value.items()}
+        return {key: _converted(item, budget, depth + 1) for key, item in value.items()}
     if isinstance(value, list):
-        return [_converted(item) for item in value]
+        return [_converted(item, budget, depth + 1) for item in value]
     if isinstance(value, tuple):
-        return tuple(_converted(item) for item in value)
+        return tuple(_converted(item, budget, depth + 1) for item in value)
+    if isinstance(value, (bytes, bytearray)):
+        _spend(budget, len(value) // 8)
     return value
 
 
 def read_dump(path: str) -> list[dict[str, Any]]:
     """Reads a GRF dump, of this module or of GRF, without GRF or numpy."""
-    return _read_dump(path, strict=False)
+    return list(_iterate(path, strict=False))
 
 
-def _read_dump(path: str, *, strict: bool) -> list[dict[str, Any]]:
-    steps = []
+def iterate_dump(path: str) -> Iterator[dict[str, Any]]:
+    """Yields the steps of a GRF dump one at a time, as `read_dump` reads them."""
+    return _iterate(path, strict=False)
+
+
+def _iterate(path, *, strict):
+    budget = [_VALUES_PER_BYTE * os.path.getsize(path) + _VALUES_ALLOWANCE]
+    count = 0
     with open(path, 'rb') as handle:
         while not strict or handle.peek(1):
             try:
-                step = _converted(_DumpUnpickler(handle).load())
+                step = _converted(_DumpUnpickler(handle).load(), budget)
             except EOFError:
                 if strict:
                     raise pickle.UnpicklingError('the final step is incomplete') from None
-                return steps
+                return
+            except RecursionError:
+                raise pickle.UnpicklingError(
+                    f'found values nested more than {_MAX_DEPTH} deep'
+                ) from None
+            except (TypeError, ValueError, AttributeError, KeyError, IndexError) as error:
+                raise pickle.UnpicklingError(
+                    f'found a pickle that does not build, {type(error).__name__}'
+                ) from None
             if strict and not isinstance(step, dict):
                 raise pickle.UnpicklingError('expected each step to be a dictionary')
-            steps.append(step)
-    if not steps:
+            count += 1
+            yield step
+    if strict and not count:
         raise pickle.UnpicklingError('the dump is empty')
-    return steps
+
+
+def _read_dump(path: str, *, strict: bool) -> list[dict[str, Any]]:
+    return list(_iterate(path, strict=strict))
 
 
 def _read_cli_dump(path: str) -> list[dict[str, Any]]:

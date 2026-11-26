@@ -41,10 +41,10 @@ public `BatchEnvironment` onto it, and `_config.py` reads the machine config, wh
 speed settings. `gfootball/` is GRF's Python package, which `ci/make/port_gfootball.py` generates from GRF's
 sources with a table of import rewrites, and which changes only through that script.
 `gfootball_engine/` is GRF's engine module over the engine of `include/cuju/engine/`, and `data/`
-holds the bundles, the animations and the digests. `_state.py` reads single fields of a state, `_plugins.py` suggests the package of a missing
-module `cuju.<name>` and runs the hooks of batches, and `__main__.py` is the command `cuju`, one entry per subcommand.
-`packages/cuju-gfootball/` is a separate package with its own version, which maps GRF's module
-names onto `cuju.gfootball` through a `.pth` file and releases with cuju.
+holds the bundles, the animations and the digests. `_state.py` reads single fields of a state, `_plugins.py` runs the hooks of batches, and `__main__.py` is the command `cuju`, one entry per subcommand.
+`packages/cuju-gfootball/` is a separate package with its own version, `cuju.gfootball_alias`, which
+maps GRF's module names onto `cuju.gfootball` through a `.pth` file and releases with cuju. The
+packages of the family join the namespace `cuju`, as `cuju.grf_media` of `packaging/cuju-grf-media/` does.
 
 The packages of the family reach the private `Batch` behind a public `BatchEnvironment` through `cuju._batch.unwrap(batch)`, which also takes a `Batch`.
 
@@ -67,6 +67,9 @@ only a pull request.
 4. Keep the compiler flags as they are. The build refuses flags that change floating-point results,
     and a pull request that needs one explains why.
 5. Use GRF's names for GRF's things in the documentation.
+6. Keep the private names that `tests/packaging/test_family_surface.py` lists. Cuju-recording,
+    cuju-arena and cuju-render import them, so a change to one breaks the family and needs a
+    coordinated release.
 
 ## Rules for exactness
 

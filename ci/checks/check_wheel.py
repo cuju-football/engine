@@ -27,15 +27,15 @@ RENDER_LOADER = 'cuju/_pixels.py'
 # The folders of the engine, so that a folder of any other package in the wheel is an error.
 FOLDERS = ('_batch', 'data', 'gfootball', 'gfootball_engine')
 ALIAS_FILES = (
-    'cuju_gfootball/__init__.py',
-    'cuju_gfootball/__main__.py',
-    'cuju_gfootball/_startup.py',
-    'cuju_gfootball/_version.py',
+    'cuju/gfootball_alias/__init__.py',
+    'cuju/gfootball_alias/__main__.py',
+    'cuju/gfootball_alias/_startup.py',
+    'cuju/gfootball_alias/_version.py',
 )
 ALIAS_HOOK = 'cuju_gfootball.pth'
-ALIAS_HOOK_TEXT = 'import cuju_gfootball._startup\n'
+ALIAS_HOOK_TEXT = 'import cuju.gfootball_alias._startup\n'
 
-MEDIA_PACKAGE = 'cuju_grf_media/'
+MEDIA_PACKAGE = 'cuju/grf_media/'
 MEDIA_LICENSE = 'Apache-2.0 AND Unlicense AND OFL-1.1'
 MEDIA_FORMAT = 1
 # Each license file of the media wheel, with a line that its text must hold.
@@ -64,9 +64,6 @@ def problems(path, cpu_only):
     )
     if portions:
         found.append(f'expected no other package, found {portions[0]} and {len(portions) - 1} more')
-    media = sorted(name for name in names if name.startswith(MEDIA_PACKAGE))
-    if media:
-        found.append(f'expected no media, found {media[0]} and {len(media) - 1} more')
     libraries = {name.rpartition('/')[2] for name in names if name.startswith('cuju/')}
     if not libraries & set(CPU_LIBRARIES):
         found.append('missing the CPU library')

@@ -35,6 +35,9 @@ maps every old name to its replacement.
     argument `config` overrides the keys of `[run]` for one batch. `BatchEnvironment.run_config` lists
     each resolved key with its value and its source, and `cuju check` prints the path it read and every
     value that differs from the default.
+- `cuju.dumps.iterate_dump(path)` yields the steps of a dump one at a time. It and `read_dump`
+    refuse a file whose values nest more than 32 deep or pass what its size can hold, and every valid
+    dump reads as before.
 - `BatchEnvironment.set_difficulty(values, mask=None)` sets the difficulty of chosen environments
     from their next reset, through the per-environment difficulty that the C API already takes.
 - `cuju.scenario_names()` lists the shipped scenarios.
@@ -87,6 +90,15 @@ maps every old name to its replacement.
     organization, with the issue forms and the pull request template, and the repository keeps its own
     security policy and contributing notes. CI runs the lint of the Python and the SBOMs through
     the organization's reusable workflows.
+- `import cuju` defines names and nothing else. It installs no import finder, and every submodule
+    loads on first use. It no longer registers the `GFootball-*-v0` ids with Gymnasium by itself.
+    Gymnasium before 1.0 loads them through the entry point group `gymnasium.envs`, and Gymnasium
+    1.0 and later load no entry points, so there `import cuju.env` or
+    `gymnasium.make('cuju.env:GFootball-<scenario>-<representation>-v0')` registers them.
+- Every package of the family that installs beside the engine lives in the namespace `cuju`.
+    cuju-gfootball 0.2.0 is `cuju.gfootball_alias`, and `python -m cuju.gfootball_alias` prints its
+    status. cuju-grf-media 0.4.0 is `cuju.grf_media`, and the extras `pixels` and `gfootball-video`
+    ask for `cuju-grf-media>=0.4.0,<0.5`.
 
 ### Removed
 

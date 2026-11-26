@@ -60,7 +60,7 @@ def _json(code, **options):
 def _installed():
     return _json(
         'import importlib.util, json; print(json.dumps(bool('
-        "importlib.util.find_spec('cuju_gfootball'))))",
+        "importlib.util.find_spec('cuju.gfootball_alias'))))",
         alias=False,
     )
 
@@ -68,14 +68,14 @@ def _installed():
 def test_names_of_grf_are_the_modules_of_cuju():
     found = _json("""
         import importlib.util, json
-        import cuju_gfootball
+        import cuju.gfootball_alias
         import gfootball, gfootball.env.football_env
         import gfootball_engine, _gameplayfootball
         import cuju.gfootball, cuju.gfootball.env.football_env, cuju.gfootball_engine
         from gfootball.env import config
         from gfootball.scenarios import *
         print(json.dumps([
-            cuju_gfootball.active(),
+            cuju.gfootball_alias.active(),
             gfootball is cuju.gfootball,
             gfootball.env.football_env is cuju.gfootball.env.football_env,
             config is cuju.gfootball.env.config,
@@ -139,7 +139,7 @@ def test_a_port_module_loaded_first_is_renamed_on_activation():
         """
         import json
         from cuju.gfootball.env import football_action_set
-        import cuju_gfootball
+        import cuju.gfootball_alias
         import gfootball.env.football_action_set as grf
         print(json.dumps([football_action_set.CoreAction.__module__,
                           grf is football_action_set]))
@@ -417,14 +417,14 @@ _REFUSED = """
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         import gfootball
-    import cuju_gfootball
+    import cuju.gfootball_alias
     from cuju.gfootball.env import football_action_set
     try:
         import gfootball_engine
         engine = 'imported'
     except ImportError:
         engine = 'missing'
-    print(json.dumps([cuju_gfootball.active(), cuju_gfootball.status(),
+    print(json.dumps([cuju.gfootball_alias.active(), cuju.gfootball_alias.status(),
                       getattr(gfootball, 'GRF', False),
                       [str(item.message) for item in caught if item.category is RuntimeWarning],
                       football_action_set.CoreAction.__module__, engine]))
@@ -452,8 +452,8 @@ def test_the_alias_stays_out_beside_the_distribution_of_grf(tmp_path):
         """
         import json, warnings
         warnings.simplefilter('ignore')
-        import cuju_gfootball
-        print(json.dumps([cuju_gfootball.active(), cuju_gfootball.status()]))
+        import cuju.gfootball_alias
+        print(json.dumps([cuju.gfootball_alias.active(), cuju.gfootball_alias.status()]))
     """,
         path=(tmp_path,),
     )
@@ -476,21 +476,21 @@ def test_the_alias_stays_out_beside_an_editable_grf(tmp_path):
                     return importlib.machinery.PathFinder.find_spec(name, [{str(folder)!r}])
 
         sys.meta_path.append(Editable())
-        import gfootball, cuju_gfootball
-        print(json.dumps([cuju_gfootball.active(), getattr(gfootball, 'GRF', False)]))
+        import gfootball, cuju.gfootball_alias
+        print(json.dumps([cuju.gfootball_alias.active(), getattr(gfootball, 'GRF', False)]))
     """)
     assert found == [False, True]
 
 
 def test_the_command_says_why(tmp_path):
     active = _run(
-        'import runpy; runpy.run_module("cuju_gfootball", run_name="__main__")', check=False
+        'import runpy; runpy.run_module("cuju.gfootball_alias", run_name="__main__")', check=False
     )
     assert active.returncode == 0
     assert 'cuju-gfootball is active' in active.stdout
     folder = _grf_package(tmp_path)
     inactive = _run(
-        'import runpy; runpy.run_module("cuju_gfootball", run_name="__main__")',
+        'import runpy; runpy.run_module("cuju.gfootball_alias", run_name="__main__")',
         check=False,
         path=(folder,),
     )
@@ -524,7 +524,9 @@ def wheel(tmp_path_factory):
 
 
 def _version():
-    with open(os.path.join(SOURCE, 'cuju_gfootball', '_version.py'), encoding='utf-8') as handle:
+    with open(
+        os.path.join(SOURCE, 'cuju', 'gfootball_alias', '_version.py'), encoding='utf-8'
+    ) as handle:
         return re.search(r"__version__ = '([^']+)'", handle.read())[1]
 
 
@@ -537,10 +539,10 @@ def test_wheel_holds_the_alias_and_its_license(wheel):
     assert _load_script('check_wheel').alias_problems(wheel) == []
     assert names == {
         'cuju_gfootball.pth',
-        'cuju_gfootball/__init__.py',
-        'cuju_gfootball/__main__.py',
-        'cuju_gfootball/_startup.py',
-        'cuju_gfootball/_version.py',
+        'cuju/gfootball_alias/__init__.py',
+        'cuju/gfootball_alias/__main__.py',
+        'cuju/gfootball_alias/_startup.py',
+        'cuju/gfootball_alias/_version.py',
         f'{info}/METADATA',
         f'{info}/WHEEL',
         f'{info}/RECORD',
@@ -557,11 +559,11 @@ def test_wheel_check_finds_a_wheel_that_is_not_the_alias(tmp_path):
         archive.writestr('cuju_gfootball.pth', 'import os\n')
         archive.writestr('gfootball/__init__.py', '')
     assert _load_script('check_wheel').alias_problems(path) == [
-        'missing cuju_gfootball/__init__.py',
-        'missing cuju_gfootball/__main__.py',
-        'missing cuju_gfootball/_startup.py',
-        'missing cuju_gfootball/_version.py',
-        "expected cuju_gfootball.pth to hold 'import cuju_gfootball._startup\\n', "
+        'missing cuju/gfootball_alias/__init__.py',
+        'missing cuju/gfootball_alias/__main__.py',
+        'missing cuju/gfootball_alias/_startup.py',
+        'missing cuju/gfootball_alias/_version.py',
+        "expected cuju_gfootball.pth to hold 'import cuju.gfootball_alias._startup\\n', "
         "found 'import os\\n'",
         'missing LICENSE',
         'expected the alias alone, found gfootball/__init__.py and 0 more',
@@ -596,8 +598,8 @@ def test_install_activates_and_uninstall_leaves_nothing(wheel, tmp_path):
         [
             str(python),
             '-c',
-            'import gfootball, cuju.gfootball, cuju_gfootball; '
-            'print(gfootball is cuju.gfootball, cuju_gfootball.__version__)',
+            'import gfootball, cuju.gfootball, cuju.gfootball_alias; '
+            'print(gfootball is cuju.gfootball, cuju.gfootball_alias.__version__)',
         ],
         capture_output=True,
         text=True,
@@ -634,7 +636,7 @@ def test_release_checks_the_wheel_and_publishes_it_after_the_engine():
     assert 'name: cuju-gfootball' in publish
     assert 'skip-existing' not in workflow
     check = publish.index('https://pypi.org/pypi/cuju-gfootball/$version/json')
-    assert publish.index('packages/cuju-gfootball/src/cuju_gfootball/_version.py') < check
+    assert publish.index('packages/cuju-gfootball/src/cuju/gfootball_alias/_version.py') < check
     step = publish[check : publish.index('gh-action-pypi-publish')]
     assert '200) ' in step and 'upload=false' in step
     assert '404) ' in step and 'upload=true' in step

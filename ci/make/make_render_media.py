@@ -56,10 +56,10 @@ GENERATED_SHA256 = {
 OUTPUTS = (
     'LICENSE',
     'LICENSES',
-    'src/cuju_grf_media/data',
-    'src/cuju_grf_media/fonts',
-    'src/cuju_grf_media/manifest.json',
-    'src/cuju_grf_media/SHA256SUMS',
+    'src/cuju/grf_media/data',
+    'src/cuju/grf_media/fonts',
+    'src/cuju/grf_media/manifest.json',
+    'src/cuju/grf_media/SHA256SUMS',
 )
 
 
@@ -145,10 +145,12 @@ def license_problems(tree: str, root: str = ROOT) -> list[str]:
 
 
 def package_version(project: str) -> str:
-    with open(os.path.join(project, 'src', 'cuju_grf_media', '__init__.py'), encoding='utf-8') as f:
+    with open(
+        os.path.join(project, 'src', 'cuju', 'grf_media', '__init__.py'), encoding='utf-8'
+    ) as f:
         match = re.search(r"^__version__ = '([^']+)'$", f.read(), re.MULTILINE)
     if not match:
-        raise ConversionError('expected `__version__` in cuju_grf_media/__init__.py')
+        raise ConversionError('expected `__version__` in cuju/grf_media/__init__.py')
     return match.group(1)
 
 
@@ -182,7 +184,7 @@ def convert(
             f'the GRF tree {tree} is not GRF {GRF_COMMIT} as pinned, or its licenses differ. '
             'A checkout with converted line endings differs too.\n  ' + '\n  '.join(problems)
         )
-    package = os.path.join(project, 'src', 'cuju_grf_media')
+    package = os.path.join(project, 'src', 'cuju', 'grf_media')
     for output in OUTPUTS:
         path = os.path.join(project, *output.split('/'))
         if os.path.isdir(path):
