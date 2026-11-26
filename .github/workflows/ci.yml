@@ -16,14 +16,26 @@ jobs:
         with:
             paths: python tests examples packages ci
 
+    # The wheels are py3-none, so the versions are for testing. Python 3.12 runs the whole suite and
+    # the others run the tests of the parts that touch the interpreter. Python 3.14 runs where
+    # PyTorch has wheels for it, and may fail.
     cpu:
+        name: cpu python ${{ matrix.python }}
         needs: grf-media
         runs-on: ubuntu-24.04
+        continue-on-error: ${{ matrix.experimental || false }}
+        strategy:
+            fail-fast: false
+            matrix:
+                python: ['3.10', '3.11', '3.12', '3.13']
+                include:
+                    - python: '3.14'
+                      experimental: true
         steps:
             - uses: actions/checkout@v7
             - uses: actions/setup-python@v7
               with:
-                  python-version: '3.12'
+                  python-version: ${{ matrix.python }}
             - name: Install PyTorch for the CPU
               run: pip install torch --index-url https://download.pytorch.org/whl/cpu
             - name: Build and install the CPU backend
@@ -36,13 +48,22 @@ jobs:
             - name: Install the pinned GRF media
               run: pip install --no-index --find-links grf-media cuju-grf-media
             - name: Lint the C++ and CUDA
+              if: matrix.python == '3.12'
               run: |
                   find include src -name '*.h' -o -name '*.cuh' -o -name '*.cpp' -o -name '*.cu' \
                       | xargs clang-format-18 --dry-run -Werror
             - name: Links of the README and the docs
+              if: matrix.python == '3.12'
               run: python ci/checks/check_links.py --offline
             - name: Self-check
-              run: pytest tests
+              run: pytest ${{ matrix.python == '3.12' && 'tests' || 'tests/agents tests/packaging tests/cli' }}
+            # The child of a process controller needs only numpy, and runs under the oldest Python
+            # that client.py supports, which the conformance check of the protocol plays against.
+            - name: client.py under Python 3.8
+              if: matrix.python == '3.12'
+              run: |
+                  cuju agents check --scenario 5_vs_5 --steps 5 --command \
+                      "docker run --rm -i --init python:3.8-slim sh -c \"pip install -q numpy && python -X utf8 -c '{stub}'\""
 
     cpu-arm:
         runs-on: ubuntu-24.04-arm
@@ -59,13 +80,18 @@ jobs:
               run: pytest tests
 
     cpu-windows:
+        name: cpu windows python ${{ matrix.python }}
         needs: grf-media
         runs-on: windows-2022
+        strategy:
+            fail-fast: false
+            matrix:
+                python: ['3.10', '3.13']
         steps:
             - uses: actions/checkout@v7
             - uses: actions/setup-python@v7
               with:
-                  python-version: '3.12'
+                  python-version: ${{ matrix.python }}
             - name: Install PyTorch for the CPU
               run: pip install torch --index-url https://download.pytorch.org/whl/cpu
             - name: Build and install the CPU backend
@@ -79,7 +105,33 @@ jobs:
             - name: Install the pinned GRF media
               run: pip install --no-index --find-links grf-media cuju-grf-media
             - name: Self-check
-              run: pytest tests
+              run: pytest ${{ matrix.python == '3.13' && 'tests' || 'tests/agents tests/packaging tests/cli' }}
+
+    cpu-macos:
+        name: cpu macos python ${{ matrix.python }}
+        needs: grf-media
+        runs-on: macos-15
+        strategy:
+            fail-fast: false
+            matrix:
+                python: ['3.10', '3.13']
+        steps:
+            - uses: actions/checkout@v7
+            - uses: actions/setup-python@v7
+              with:
+                  python-version: ${{ matrix.python }}
+            - name: Install PyTorch
+              run: pip install torch
+            - name: Build and install the CPU backend
+              run: CMAKE_ARGS=-DCUJU_CUDA=OFF pip install '.[test,spaces]' hatchling opencv-python-headless
+            - uses: actions/download-artifact@v8
+              with:
+                  name: grf-media
+                  path: grf-media
+            - name: Install the pinned GRF media
+              run: pip install --no-index --find-links grf-media cuju-grf-media
+            - name: Self-check
+              run: pytest ${{ matrix.python == '3.13' && 'tests' || 'tests/agents tests/packaging tests/cli' }}
 
     grf-media:
         runs-on: ubuntu-24.04

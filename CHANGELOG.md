@@ -7,10 +7,33 @@ compare only within one version, or across versions whose entries say the output
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.5.0] - unreleased
+## [0.5.0] - 2026-11-26
 
 ### Added
 
+- `cuju.agents` is the layer between controllers and the batch. A controller sends the actions of a
+    set of agents through `start`, `act` and `close`, batched, so one object serves one environment
+    or thousands. Trees of controllers load from TOML files, dictionaries, entry strings and
+    folders with nested entry points. The standard controllers are `function`, `per_environment`,
+    `kaggle`, `grf`, `bot`, `lazy`, `random`, `pool`, `process` and `builtin`, and installed parts
+    join them through the group `cuju.agents.parts`. `Match` joins a batch to controllers, with
+    `reset`, `step`, `step_async`, `step_wait`, `run`, `set` and `episodes`, and `play`,
+    `play_batch`, `check`, `to_gymnasium` and `to_pettingzoo` build on it. `run` returns the score
+    of each episode, the wins, draws and losses, the goal difference and a 95 percent interval of
+    the win rate. `process` runs a tree in another process through `client.py`, which needs only
+    numpy and Python 3.8, and ends the process tree on Linux, macOS and Windows. The messages are
+    specified in [the protocol](docs/protocol.md) and available as `cuju.agents.protocol`. See
+    [Controllers](docs/agents.md).
+- `cuju agents check`, `play`, `parts` and `client`, with the schemas `agents.check/1`,
+    `agents.play/1` and `agents.parts/1`.
+- `BatchEnvironment.get_states` and `set_states` save and load every environment in one call, with
+    one copy between the device and the host, and bytes equal to those of `get_state`. The C
+    library gains `cuju_environment_get_states` and `cuju_environment_set_states`.
+- `cuju.recording.load` reads many recordings into arrays for offline learning.
+- `cuju.types` holds `Literal` aliases for the options that take a fixed set of strings, and the
+    signatures of `BatchEnvironment`, `cuju.agents` and `cuju.recording` use them.
+- The extra `pettingzoo`, and tests on Python 3.10 to 3.13 on Linux, Windows and macOS, with 3.14
+    where PyTorch has wheels, and `client.py` under Python 3.8.
 - `cuju.recording` keeps one match as one file, a `.cjr` archive in numpy's `.npz` layout that
     holds the engine state at the start, the actions and the rewards, so the engine plays the match
     again bit for bit. `record` follows a batch and hands each finished episode to a function,
@@ -20,6 +43,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     the package cuju-recording, whose files read unchanged. See [Recording](docs/recording.md).
 - `cuju recording show`, `check` and `convert` are commands of the engine, with the schemas
     `recording.show/1`, `recording.check/1` and `recording.convert/1`.
+
+### Removed
+
+- The private `cuju._kaggle`, with `evaluate`, and `cuju._players` and `cuju._python_players`.
+    `cuju.agents` holds their code as the `kaggle`, `bot`, `lazy` and `grf` controllers and the
+    helpers of `cuju.agents.kaggle`, and `play` and `play_batch` replace `evaluate`. The outputs of
+    `cuju.env` and `cuju.gfootball` stay as they were, bit for bit.
+
+### Packaging
+
+- cuju-gfootball 0.2.1 accepts cuju-engine 0.5.
 
 ## [0.4.0] - 2026-11-25
 

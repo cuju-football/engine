@@ -25,7 +25,7 @@ CUDA_LIBRARIES = ('libcuju_cuda.so', 'cuju_cuda.dll')
 RENDER_LIBRARIES = ('libcuju_render.so', 'cuju_render.dll', 'libcuju_render.dylib')
 RENDER_LOADER = 'cuju/_pixels.py'
 # The folders of the engine, so that a folder of any other package in the wheel is an error.
-FOLDERS = ('_batch', 'data', 'gfootball', 'gfootball_engine')
+FOLDERS = ('_batch', 'agents', 'data', 'gfootball', 'gfootball_engine', 'recording')
 ALIAS_FILES = (
     'cuju/gfootball_alias/__init__.py',
     'cuju/gfootball_alias/__main__.py',

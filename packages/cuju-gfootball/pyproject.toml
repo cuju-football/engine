@@ -28,7 +28,7 @@ classifiers = [
     "Topic :: Games/Entertainment :: Simulation",
 ]
 # The alias maps GRF's names onto the module names of cuju 0.3, which the range holds.
-dependencies = ["cuju-engine>=0.4.0,<0.5"]
+dependencies = ["cuju-engine>=0.4.0,<0.6"]
 
 [project.urls]
 Homepage = "https://github.com/cuju-football/engine"

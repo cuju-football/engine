@@ -115,6 +115,8 @@ The constructor checks every shape and raises `RecordingError` for one that does
 
 `cr.from_grf_dump(path, device='cpu')` converts a dump that GRF or cuju wrote. It reads the dump with `cuju.dumps`, which runs no code of the file. The converter then plays the dump's actions again from its configuration, compares the observation of every step with the dump, and returns the recording only when every step is equal. A dump that differs, that does not start at its kick off, that has players other than agents or that uses another number of physics steps than 10 raises `RecordingError` with the reason. The source may also be bytes or an open binary file.
 
+`cr.load(paths, fields=None)` reads many recordings into arrays for offline learning and behavior cloning. It takes a file, a folder of `.cjr` files or a list, and decodes only the fields that you ask for, which are `actions`, `rewards` and `done` by default and `step/NAME` and `array/NAME` for the tables. The episodes follow each other along the first axis, and `episode_start` gives the first row of each with the total at the end, so episode `i` is the rows from `episode_start[i]` to `episode_start[i + 1]`. The tables hold one row more than the steps of an episode, and `table_start` gives their offsets.
+
 `cr.from_kaggle(path)` converts an episode of the GRF competition from Kaggle. The episode holds no engine state, so the recording holds the steps, the actions and the end, with no state and zero rewards.
 
 ## Command line

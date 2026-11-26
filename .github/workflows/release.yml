@@ -195,30 +195,70 @@ jobs:
                   path: build*.log
 
     test:
-        name: test ${{ matrix.name }}
+        name: test ${{ matrix.name }} python ${{ matrix.python }}
         needs: wheel
         if: ${{ !cancelled() }}
         runs-on: ${{ matrix.runner }}
+        continue-on-error: ${{ matrix.experimental || false }}
         strategy:
             fail-fast: false
             matrix:
+                # The wheels are py3-none, so each entry tests one Python. PyTorch's last x86-64 macOS
+                # wheel is 2.2.2, which stops at Python 3.12, and Python 3.14 may fail.
                 include:
                     - name: linux-x86-64
                       runner: ubuntu-24.04
-                      torch: torch --index-url https://download.pytorch.org/whl/cpu
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.10'
+                    - name: linux-x86-64
+                      runner: ubuntu-24.04
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.11'
+                    - name: linux-x86-64
+                      runner: ubuntu-24.04
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.12'
+                    - name: linux-x86-64
+                      runner: ubuntu-24.04
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.13'
                     - name: linux-aarch64
                       runner: ubuntu-24.04-arm
-                      torch: torch --index-url https://download.pytorch.org/whl/cpu
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.10'
+                    - name: linux-aarch64
+                      runner: ubuntu-24.04-arm
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.13'
                     - name: windows-x86-64
                       runner: windows-2025
-                      torch: torch --index-url https://download.pytorch.org/whl/cpu
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.10'
+                    - name: windows-x86-64
+                      runner: windows-2025
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.13'
                     - name: macos-arm64
                       runner: macos-15
                       torch: torch
-                    # PyTorch's last x86-64 macOS wheel is 2.2.2, built against numpy 1.
+                      python: '3.10'
+                    - name: macos-arm64
+                      runner: macos-15
+                      torch: torch
+                      python: '3.13'
                     - name: macos-x86-64
                       runner: macos-15-intel
                       torch: torch==2.2.2 'numpy<2'
+                      python: '3.10'
+                    - name: macos-x86-64
+                      runner: macos-15-intel
+                      torch: torch==2.2.2 'numpy<2'
+                      python: '3.12'
+                    - name: linux-x86-64
+                      runner: ubuntu-24.04
+                      torch: torch --index-url https://download.pytorch.org/whl/cpu --extra-index-url https://pypi.org/simple
+                      python: '3.14'
+                      experimental: true
         defaults:
             run:
                 shell: bash
@@ -228,7 +268,7 @@ jobs:
             - uses: actions/checkout@v7
             - uses: actions/setup-python@v7
               with:
-                  python-version: '3.12'
+                  python-version: ${{ matrix.python }}
             - uses: actions/download-artifact@v8
               with:
                   name: wheel-${{ matrix.name }}
@@ -256,11 +296,16 @@ jobs:
               working-directory: ${{ runner.temp }}
               run: |
                   "$VENV_PYTHON" -m pip install "$GITHUB_WORKSPACE/$WHEEL[test,spaces]"
-                  "$VENV_PYTHON" -m pytest -ra -p no:cacheprovider "$GITHUB_WORKSPACE/tests"
+                  if [ "${{ matrix.python }}" = 3.12 ]; then
+                      set -- "$GITHUB_WORKSPACE/tests"
+                  else
+                      set -- "$GITHUB_WORKSPACE/tests/agents" "$GITHUB_WORKSPACE/tests/packaging" "$GITHUB_WORKSPACE/tests/cli"
+                  fi
+                  "$VENV_PYTHON" -m pytest -ra -p no:cacheprovider "$@"
             - uses: actions/upload-artifact@v7
               if: always()
               with:
-                  name: check-${{ matrix.name }}
+                  name: check-${{ matrix.name }}-${{ matrix.python }}
                   path: ${{ runner.temp }}/check.log
                   if-no-files-found: ignore
 

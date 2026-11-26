@@ -540,7 +540,8 @@ public:
         // formation entries of the reset in their `TeamData`, so an environment that was reset
         // plays on with the variant of the state's order and of its reset's parity.
         int index = parity;
-        if (currentSlot.episode > 0) index = (parity & 2) | ((currentSlot.variant - bundle * 4) & 1);
+        if (currentSlot.episode > 0)
+            index = (parity & 2) | ((currentSlot.variant - bundle * 4) & 1);
         const int variant = bundle * 4 + index;
         core = simulation::EnvironmentCore();
         core.previousScoreDifference = previousScoreDifference;
@@ -597,8 +598,8 @@ public:
                 const int *episode = episodes + (size_t)(start + index) * stride;
                 new (&rebuilt[index]) simulation::World();
                 BuildState(base + index, states[start + index], episode[0], episode[1], episode[2],
-                           episode + 3, current[index], before[index], rebuilt[index],
-                           cores[index], slots[index]);
+                           episode + 3, current[index], before[index], rebuilt[index], cores[index],
+                           slots[index]);
             }
             backend_.ToDevice(buffers_.worlds + base, rebuilt.get(),
                               sizeof(simulation::World) * size);

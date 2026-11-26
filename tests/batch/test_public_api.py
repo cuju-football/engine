@@ -19,6 +19,7 @@ NAMES = [
     'engine_status',
     'errors',
     'scenario_names',
+    'types',
 ]
 
 

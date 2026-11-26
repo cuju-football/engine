@@ -42,6 +42,10 @@ classifiers = [
     "Operating System :: POSIX :: Linux",
     "Programming Language :: C++",
     "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Games/Entertainment :: Simulation",
 ]
@@ -78,6 +82,8 @@ Changelog = "https://github.com/cuju-football/engine/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 spaces = ["gymnasium>=0.29"]
+# The PettingZoo adapter of cuju.agents.
+pettingzoo = ["pettingzoo>=1.24", "gymnasium>=0.29"]
 test = ["pytest>=8", "psutil"]
 # GRF's media, which cuju's software renderer draws, the package cuju-grf-media.
 pixels = ["cuju-grf-media>=0.4.0,<0.5"]

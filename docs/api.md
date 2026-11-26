@@ -58,6 +58,8 @@ The agent slots are the left agents first, then the right agents, and each agent
 | `set_difficulty(values, mask=None)` | `None` | Sets the difficulty from the next reset. `values` is a `(left, right)` pair or `[E, 2]` with NaN for the scenario's. |
 | `get_state(index, stacked=False)` | `bytes` | The state of one environment in GRF's byte format. |
 | `set_state(index, state, stacked=False)` | `None` | Loads a state of cuju or of GRF into one environment. The returned tensors are rewritten in place. |
+| `get_states(stacked=False)` | `list[bytes]` | The state of every environment, byte for byte what `get_state` gives each, with one copy from the device. |
+| `set_states(states, stacked=False)` | `None` | Loads one state into every environment, as a loop of `set_state` does, with one copy to the device. |
 | `raw()` | `dict` | GRF's raw observation after the last call, `[E, A, ...]` tensors. Needs `raw=True` or the representation `raw`. |
 | `frame()` | tensor | GRF's frames, `[E, height, width, 3]` `uint8`. Needs `frames=True` or a pixel representation. |
 | `close()` | `None` | Frees the batch at once. A `with` block closes it too. |
@@ -147,14 +149,16 @@ Bundles built from scenario files are cached in the user cache folder, `$XDG_CAC
 
 ## Namespace
 
-`import cuju` shows `BatchEnvironment`, `scenario_names()`, `Error`, `errors`, `engine_status` and `__version__`. Submodules are imported by name.
+`import cuju` shows `BatchEnvironment`, `scenario_names()`, `Error`, `errors`, `types`, `engine_status` and `__version__`. Submodules are imported by name.
 
 | Module | Holds |
 | --- | --- |
 | `cuju.scenarios` | `build_bundle`, `describe`, `load_scenario`, `cached_bundle`, `cache_directory`, `ScenarioError` and GRF's builder classes. See [Scenarios](scenarios.md). |
 | `cuju.dumps` | `DumpWriter(batch, logdir, environments=None, write_full_episode_dumps=True, write_goal_dumps=False, dump_frequency=1)` with `record(actions)`, `close()` and `paths`, `read_dump(path)` and `iterate_dump(path)`, which read dumps under limits on depth and size. See [Migrating from GRF](migrating-from-grf.md). |
 | `cuju.env` | `create_environment` with GRF's arguments plus `device`, `threads` and `api`, and `register_environments()`. See [Migrating from GRF](migrating-from-grf.md). |
-| `cuju.recording` | `Recording`, `read(source)`, `record(batch, environments, on_episode, steps=True, provenance=None, teams=None)` and its `Recorder`, `from_grf_dump(source, device='cpu')`, `from_kaggle(source)` and `RecordingError`. See [Recording](recording.md). |
+| `cuju.agents` | `Controller`, `Spec`, `Observation`, `Actions`, `ControllerError`, `load(spec, base=None)`, `Match(batch, left=None, right=None, control=None, seed=0, check=True)` with `reset`, `step`, `step_async`, `step_wait`, `run(episodes=1, record=False)`, `set`, `episodes` and `close`, `Result`, `play(left, right, scenario, ...)`, `play_batch(left, right, scenario, environments=64, ...)`, `check(spec, scenario, steps=10, twice=False, process=False, command=None)`, `parts()`, `to_gymnasium(match)` and `to_pettingzoo(match)`. The standard controllers are in `cuju.agents.standard`, the Kaggle helpers `players_raw`, `observation`, `action_index`, `action_indices` and `accepts_configuration` in `cuju.agents.kaggle`, and the frames and messages of the protocol in `cuju.agents.protocol`. See [Controllers](agents.md) and [the protocol](protocol.md). |
+| `cuju.types` | The `Literal` aliases `Representation`, `Rewards`, `ActionSet`, `Device`, `Side`, `Sides`, `Assignment`, `Goalkeeper` and the others that the signatures of `BatchEnvironment`, `cuju.agents` and `cuju.recording` use, so a type checker knows the strings that each option takes. |
+| `cuju.recording` | `Recording`, `read(source)`, `load(paths, fields=None)`, `record(batch, environments, on_episode, steps=True, provenance=None, teams=None)` and its `Recorder`, `from_grf_dump(source, device='cpu')`, `from_kaggle(source)` and `RecordingError`. See [Recording](recording.md). |
 | `cuju.gfootball` | GRF's package `gfootball`, so GRF code runs with its imports switched. |
 | `cuju.gfootball_engine` | GRF's engine package over cuju's engine, with `SignatureError` and `TrackerError`. |
 
@@ -187,6 +191,7 @@ Every class lives in `cuju.errors`, derives from `cuju.Error` and from a built-i
 | `cuju replay FILE [--device D] [--json]` | Replays a GRF dump without rendering, compares each step with the recorded one, and runs no code from the dump. |
 | `cuju dump FILE [-o OUT] [--json]` | Writes a dump as text to standard output, or to `OUT`. |
 | `cuju recording show FILE`, `check FILE [--replay]`, `convert PATH... -o DIR` | Shows what a recording holds, validates it and replays it, and converts GRF dumps and Kaggle episodes. See [Recording](recording.md). |
+| `cuju agents check PATH --scenario S`, `play A B --scenario S`, `parts`, `client` | Plays short matches with a controller and reports what failed and how long each call took, plays two controllers against each other, lists the parts of a tree and prints the file that runs a child. See [Controllers](agents.md). |
 | `cuju help [NAME ...]`, `cuju completion SHELL`, `cuju -V` | Family help, a completion script for `bash`, `zsh`, `fish` or `powershell`, and the installed versions. |
 
 ```sh
@@ -195,7 +200,7 @@ cuju replay episode_done.dump --json
 cuju dump episode_done.dump -o episode_done.txt
 ```
 
-With `--json`, output is one object whose first key is `schema`, such as `engine.check/1`, `engine.check.list/1`, `engine.replay/1`, `engine.dump/1` and `recording.show/1`, and errors use `error/1`. Progress goes to standard error, and `--quiet` hides it. Exit status 0 is success, 1 a negative result such as a difference in a replay, 2 a usage error, 3 an environment that cannot run the command, 70 an unexpected error and 130 Ctrl+C. Add `--verbose` for a traceback.
+With `--json`, output is one object whose first key is `schema`, such as `engine.check/1`, `engine.check.list/1`, `engine.replay/1`, `engine.dump/1`, `recording.show/1`, `agents.check/1`, `agents.play/1` and `agents.parts/1`, and errors use `error/1`. Progress goes to standard error, and `--quiet` hides it. Exit status 0 is success, 1 a negative result such as a difference in a replay, 2 a usage error, 3 an environment that cannot run the command, 70 an unexpected error and 130 Ctrl+C. Add `--verbose` for a traceback.
 
 Packages add commands through entry points in the group `cuju.commands`, one `main(arguments)` function each, and install as modules `cuju.<name>`.
 
@@ -233,7 +238,8 @@ Both libraries export the same C functions, declared in `src/environment_api.h` 
 | `MultiDeviceBatch` | One process per GPU with `seed=base + rank`. |
 | `ActionRangeError`, `EnvironmentIndexError` | `ArgumentError` |
 | `cuju.SignatureError`, `cuju.TrackerError` | `cuju.gfootball_engine` |
-| `cuju.kaggle`, `cuju.raw`, `cuju.state`, `cuju.players`, `cuju.wrappers`, `cuju.action_log` | Renamed `_kaggle`, `_raw`, `_state`, `_players`, `_wrappers` and `_action_log`, which are private to the family of packages. |
+| `cuju.kaggle`, `cuju.players`, `cuju._kaggle` and its `evaluate` | `cuju.agents`, with the `kaggle`, `bot` and `lazy` controllers, `play` and `play_batch`. |
+| `cuju.raw`, `cuju.state`, `cuju.wrappers`, `cuju.action_log` | Renamed `_raw`, `_state`, `_wrappers` and `_action_log`, which are private to the family of packages. |
 | `ActionLog`, `Digest`, `replay` | Private. `cuju replay FILE` replays a dump. |
 | `CUJU_NUMA_NODES`, `CUJU_RENDER_THREADS`, `CUJU_RENDER_WORKERS`, `CUJU_LOG` | The keys `numa`, `render_threads`, `render_workers` and `log`. |
 | `CUJU_BUNDLE_CACHE` | Removed. The bundle cache is always on. |

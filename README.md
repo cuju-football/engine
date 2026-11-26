@@ -80,6 +80,7 @@ The reference is GRF 2.10.3 at commit 3d9e754 as built by GCC for x86-64 Linux w
 | [Observations, rewards and actions](https://github.com/cuju-football/engine/blob/main/docs/observations-rewards-actions.md) | what agents see, receive and do, frames and videos |
 | [Scenarios](https://github.com/cuju-football/engine/blob/main/docs/scenarios.md) | the shipped and custom scenarios |
 | [Migrating from GRF](https://github.com/cuju-football/engine/blob/main/docs/migrating-from-grf.md) | GRF's interfaces, option mapping, dumps |
+| [Controllers](https://github.com/cuju-football/engine/blob/main/docs/agents.md) | controllers for the agents of a batch, matches between them, Kaggle agents and other environments |
 | [Recording](https://github.com/cuju-football/engine/blob/main/docs/recording.md) | matches kept as files, replaying them, converting GRF dumps and Kaggle episodes |
 | [Exactness](https://github.com/cuju-football/engine/blob/main/docs/exactness.md) | what equals GRF, how to check, differences |
 | [Performance](https://github.com/cuju-football/engine/blob/main/docs/performance.md) | backends, devices, threads, memory |
@@ -100,7 +101,7 @@ Research that uses cuju is asked to cite both cuju and GRF.
     title   = {cuju: a bit-exact, batched reimplementation of {Google Research Football}, for {CUDA}
              and {CPU}},
     year    = {2026},
-    version = {0.4.0},
+    version = {0.5.0},
     url     = {https://github.com/cuju-football/engine}
 }
 
