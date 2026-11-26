@@ -9,7 +9,7 @@ import pytest
 import torch
 
 import cuju
-import cuju._players
+import cuju.agents._scripted
 from conftest import CUDA
 from cuju._batch import Batch
 
@@ -177,7 +177,7 @@ def test_bot_equals_grf_bot(assets):
     batch = Batch(
         assets, environment_count=environments, device='cpu', action_set='full', with_raw=True
     )
-    bots = [cuju._players.Bot(batch, agent) for agent in (0, 1)]
+    bots = [cuju.agents._scripted.Bot(batch, agent) for agent in (0, 1)]
     references = [[GrfBot() for _ in range(environments)] for _ in bots]
     batch.reset()
     generator = torch.Generator().manual_seed(3)
@@ -216,7 +216,7 @@ def test_scripted_players_of_create_environment():
         auto_reset=False,
         agent_counts=[(1, 1)],
     )
-    bot, lazy = cuju._players.Bot(batch, 0), cuju._players.Lazy(batch, 1)
+    bot, lazy = cuju.agents._scripted.Bot(batch, 0), cuju.agents._scripted.Lazy(batch, 1)
     observation = environment.reset()
     batch.reset()
     assert observation == []
@@ -235,8 +235,8 @@ def test_scripted_players_of_create_environment():
 def test_refusals_and_lazy():
     batch = Batch('5_vs_5_l2_r0', environment_count=2, device='cpu', with_raw=True)
     with pytest.raises(ValueError, match='full'):
-        cuju._players.Bot(batch, 0)
-    lazy = cuju._players.Lazy(batch, [0, 1])
+        cuju.agents._scripted.Bot(batch, 0)
+    lazy = cuju.agents._scripted.Lazy(batch, [0, 1])
     assert lazy.act().tolist() == [[0, 0], [0, 0]]
     batch.close()
     with pytest.raises(ValueError, match='full'):
@@ -260,7 +260,7 @@ def test_bot_on_the_gpu_equals_the_cpu():
             action_set='full',
             with_raw=True,
         )
-        bots = [cuju._players.Bot(batch, agent) for agent in (0, 1)]
+        bots = [cuju.agents._scripted.Bot(batch, agent) for agent in (0, 1)]
         batch.reset()
         history = []
         for _ in range(100):

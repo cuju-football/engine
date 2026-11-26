@@ -36,7 +36,7 @@ from ._assets import scenario_names
 from ._batch import Batch
 from ._batch import frame_stack as _frame_stack
 from ._batch.state import _pickle_episode, _StateUnpickler
-from ._players import Bot, Lazy
+from .agents._scripted import Bot, Lazy
 from ._raw import grf_observation, grf_observations
 from ._wrappers import MultiAgentToSingleAgent
 from .errors import ChoiceError, StateError
@@ -758,7 +758,7 @@ def _create(
         creation = [first]
     python_players = None
     if any(name not in _PLAYERS for name, _ in scripted):
-        from ._python_players import PythonPlayers
+        from .agents._grf_players import PythonPlayers
 
         # GRF: `FootballEnv` builds its players between the configuration and the core.
         config = _grf_config_values(values, config, deterministic, fixed_seed, creation)

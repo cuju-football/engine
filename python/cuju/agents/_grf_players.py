@@ -11,9 +11,9 @@ from typing import Any
 import numpy as np
 import torch
 
-from . import dumps
-from ._batch import unwrap
-from ._raw import grf_observations
+from .. import dumps
+from .._batch import unwrap
+from .._raw import grf_observations
 
 _PACKAGE = 'cuju.gfootball.env.players'
 _MODULE_PATH = re.compile(r'\w+(\.\w+)*')
@@ -133,7 +133,7 @@ class PythonPlayers:
         config: Any,
         action_set: str,
     ) -> None:
-        from ._grf_config import parse_player_definition
+        from .._grf_config import parse_player_definition
 
         self.config = config
         others = {name for name, *_ in parsed if name not in ('agent', 'bot', 'lazy')}

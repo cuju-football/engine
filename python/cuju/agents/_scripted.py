@@ -9,7 +9,7 @@ from typing import Any
 
 import torch
 
-from ._batch import unwrap
+from .._batch import unwrap
 
 __all__ = ['Bot', 'Lazy']
 
