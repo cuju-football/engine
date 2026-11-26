@@ -5,7 +5,7 @@ type: software
 authors:
     - family-names: Koraleski
       given-names: André
-version: 0.5.0
+version: 0.6.0
 date-released: "2026-11-26"
 license:
     - Apache-2.0

@@ -548,7 +548,7 @@ def test_wheel_holds_the_alias_and_its_license(wheel):
         f'{info}/RECORD',
         f'{info}/licenses/LICENSE',
     }
-    assert re.search(r'^Requires-Dist: cuju-engine<0\.5,>=0\.4\.0$', metadata, re.M)
+    assert re.search(r'^Requires-Dist: cuju-engine<0\.7,>=0\.4\.0$', metadata, re.M)
     assert re.search(r'^License-Expression: Apache-2\.0$', metadata, re.M)
     assert wheel.name == f'cuju_gfootball-{version}-py3-none-any.whl'
 

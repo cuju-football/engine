@@ -7,7 +7,7 @@ compare only within one version, or across versions whose entries say the output
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.6.0] - Unreleased
+## [0.6.0] - 2026-11-26
 
 Every output of a batch and every state stays as it was in 0.5.0, bit for bit, on both backends. The
 scene is read from a world without changing it, and only when asked.
@@ -26,6 +26,10 @@ scene is read from a world without changing it, and only when asked.
 - The C library gains `cuju_environment_scene_states`, `cuju_scene_state_size`,
     `cuju_scene_state_version` and `cuju_scene_team_players`. `SceneState` is in
     `include/cuju/scene/scene_state.h`.
+
+### Changed
+
+- cuju-gfootball 0.2.2 accepts cuju-engine 0.6.
 
 ## [0.5.0] - 2026-11-26
 

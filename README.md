@@ -102,7 +102,7 @@ Research that uses cuju is asked to cite both cuju and GRF.
     title   = {cuju: a bit-exact, batched reimplementation of {Google Research Football}, for {CUDA}
              and {CPU}},
     year    = {2026},
-    version = {0.5.0},
+    version = {0.6.0},
     url     = {https://github.com/cuju-football/engine}
 }
 

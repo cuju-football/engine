@@ -32,7 +32,7 @@ The CUDA backend needs a driver for CUDA 12 and no CUDA toolkit. `device='cuda'`
 
 ### Upgrading and source builds
 
-When upgrading from cuju 0.2.1, run `pip uninstall cuju` before installing 0.3.0 or later. If `import cuju` already finds an empty folder, `cuju-repair` prints the repair command. A source build needs CMake 3.24 or later, a C++ compiler and, for the GPU library, the CUDA toolkit 12.0 or later. Clone `https://github.com/cuju-football/engine` and run `pip install .` in it. The build targets the GPU of the build machine, and `CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=90"` names another. Run `cuju check --long` afterward. The repository `Dockerfile` builds an image with both libraries, started with `docker run --rm --gpus all cuju:0.5.0 python3 -m cuju.check`.
+When upgrading from cuju 0.2.1, run `pip uninstall cuju` before installing 0.3.0 or later. If `import cuju` already finds an empty folder, `cuju-repair` prints the repair command. A source build needs CMake 3.24 or later, a C++ compiler and, for the GPU library, the CUDA toolkit 12.0 or later. Clone `https://github.com/cuju-football/engine` and run `pip install .` in it. The build targets the GPU of the build machine, and `CMAKE_ARGS="-DCMAKE_CUDA_ARCHITECTURES=90"` names another. Run `cuju check --long` afterward. The repository `Dockerfile` builds an image with both libraries, started with `docker run --rm --gpus all cuju:0.6.0 python3 -m cuju.check`.
 
 ## Properties of a batch
 
