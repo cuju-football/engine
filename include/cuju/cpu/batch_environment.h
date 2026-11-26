@@ -363,6 +363,13 @@ public:
             render.count, [&](int output) { WriteRenderState(buffers, variants, render, output); },
             LIGHT_GRAIN);
     }
+    void SceneStates(const EnvironmentBuffers &buffers, const Variants &variants,
+                     const SceneBuffers &scene) {
+        Steps().Settle();
+        Pool().For(
+            scene.count, [&](int output) { WriteSceneState(buffers, variants, scene, output); },
+            LIGHT_GRAIN);
+    }
     void Outputs(const EnvironmentBuffers &buffers, const uint8_t *mask, bool afterStep) {
         Steps().Settle();
         Pool().For(

@@ -519,6 +519,28 @@ int cuju_environment_render_events(void *environment, int index, void *events, i
     }
 }
 
+unsigned long long cuju_scene_state_size() { return sizeof(cuju::scene::SceneState); }
+unsigned int cuju_scene_state_version() { return cuju::scene::SCENE_STATE_VERSION; }
+int cuju_scene_team_players() { return cuju::scene::SCENE_TEAM_PLAYERS; }
+
+int cuju_environment_scene_states(void *environment, const int *environments, int count,
+                                  void *states, unsigned long long size) {
+    try {
+        cuju::DefaultFloatingPoint floatingPoint;
+        if (count < 0 || size != (unsigned long long)count * sizeof(cuju::scene::SceneState))
+            throw std::invalid_argument("expected " + std::to_string(count) + " SceneStates of " +
+                                        std::to_string(sizeof(cuju::scene::SceneState)) +
+                                        " bytes, version " +
+                                        std::to_string(cuju::scene::SCENE_STATE_VERSION) +
+                                        ", found " + std::to_string(size) + " bytes");
+        static_cast<BatchEnvironment *>(environment)
+            ->SceneStates(environments, count, static_cast<cuju::scene::SceneState *>(states));
+        return 0;
+    } catch (const std::exception &exception) {
+        return Fail(exception);
+    }
+}
+
 int cuju_environment_render_states(void *environment, const int *environments, int count,
                                    void *states, unsigned long long size, unsigned int *processed) {
     try {

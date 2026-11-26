@@ -64,6 +64,13 @@ __global__ void RenderStateKernel(EnvironmentBuffers buffers, Variants variants,
     WriteRenderState(buffers, variants, render, output);
 }
 
+__global__ void SceneStateKernel(EnvironmentBuffers buffers, Variants variants,
+                                 SceneBuffers scene) {
+    const int output = blockIdx.x * blockDim.x + threadIdx.x;
+    if (output >= scene.count) return;
+    WriteSceneState(buffers, variants, scene, output);
+}
+
 class CudaBackend {
 public:
     using Stream = cudaStream_t;
@@ -178,6 +185,12 @@ public:
                       const RenderBuffers &render) {
         const int grid = std::max(1, (render.count + 63) / 64);
         RenderStateKernel<<<grid, 64>>>(buffers, variants, render);
+        CUJU_CUDA_CHECK(cudaGetLastError());
+    }
+    void SceneStates(const EnvironmentBuffers &buffers, const Variants &variants,
+                     const SceneBuffers &scene) {
+        const int grid = std::max(1, (scene.count + 63) / 64);
+        SceneStateKernel<<<grid, 64>>>(buffers, variants, scene);
         CUJU_CUDA_CHECK(cudaGetLastError());
     }
     void Outputs(const EnvironmentBuffers &buffers, const uint8_t *mask, bool afterStep) {

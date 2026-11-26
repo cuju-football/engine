@@ -15,6 +15,7 @@
 #include "../animation/skeleton.h"
 #include "batch_core.h"
 #include "render_states.h"
+#include "scene_states.h"
 #include "state_difference.h"
 #include "tables.h"
 
@@ -388,10 +389,7 @@ public:
             renderStates_ = Allocate<render::RenderState>(environments);
             renderEpisodes_ = Allocate<int32_t>(environments);
             backend_.Fill(renderEpisodes_, 0xff, sizeof(int32_t) * environments);
-            const std::vector<uint8_t> mirrored = AnimationMirroredNames(store_->names);
-            uint8_t *table = Allocate<uint8_t>(mirrored.size());
-            backend_.ToDevice(table, mirrored.data(), mirrored.size());
-            animationMirrored_ = table;
+            MirroredTable();
         }
         if (count > renderCapacity_) {
             renderIndices_ = Allocate<int32_t>(count);
@@ -407,6 +405,21 @@ public:
         backend_.ToHost(processed, renderProcessed_, sizeof(uint32_t) * count);
     }
 
+    // The scene of the chosen environments, read from their worlds as they are.
+    void SceneStates(const int32_t *indices, int count, scene::SceneState *out) {
+        for (int output = 0; output < count; output++) CheckEnvironment(indices[output]);
+        if (count <= 0) return;
+        if (count > sceneCapacity_) {
+            sceneIndices_ = Allocate<int32_t>(count);
+            sceneOut_ = Allocate<scene::SceneState>(count);
+            sceneCapacity_ = count;
+        }
+        backend_.ToDevice(sceneIndices_, indices, sizeof(int32_t) * count);
+        SceneBuffers scene{MirroredTable(), sceneIndices_, count, sceneOut_};
+        backend_.SceneStates(buffers_, variants_, scene);
+        backend_.ToHost(out, sceneOut_, sizeof(scene::SceneState) * count);
+    }
+
     void EnableRenderEvents(int capacity) {
         if (capacity < 1)
             throw std::invalid_argument("expected a capacity of at least one render event, found " +
@@ -417,10 +430,7 @@ public:
         events.events = Allocate<RenderEvent>((size_t)environments * capacity);
         events.counts = Allocate<int32_t>(environments);
         events.states = Allocate<render::RenderState>(environments);
-        const std::vector<uint8_t> mirrored = AnimationMirroredNames(store_->names);
-        uint8_t *table = Allocate<uint8_t>(mirrored.size());
-        backend_.ToDevice(table, mirrored.data(), mirrored.size());
-        events.animationMirrored = table;
+        events.animationMirrored = MirroredTable();
         events.capacity = capacity;
         buffers_.renderEvents = events;
     }
@@ -653,6 +663,15 @@ private:
     T *Allocate(size_t count) {
         return backend_.template Allocate<T>(count);
     }
+    const uint8_t *MirroredTable() {
+        if (!animationMirrored_) {
+            const std::vector<uint8_t> mirrored = AnimationMirroredNames(store_->names);
+            uint8_t *table = Allocate<uint8_t>(mirrored.size());
+            backend_.ToDevice(table, mirrored.data(), mirrored.size());
+            animationMirrored_ = table;
+        }
+        return animationMirrored_;
+    }
     template <class T>
     const T *Scratch(const T *host, int count, T *&slot) {
         if (Backend::HOST_MEMORY) return host;
@@ -762,6 +781,9 @@ private:
     uint32_t *renderProcessed_ = nullptr;
     const uint8_t *animationMirrored_ = nullptr;
     int renderCapacity_ = 0;
+    scene::SceneState *sceneOut_ = nullptr;
+    int32_t *sceneIndices_ = nullptr;
+    int sceneCapacity_ = 0;
     int players_ = 0;
     std::vector<bool> started_;
     int unstarted_ = 0;
