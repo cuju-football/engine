@@ -3,8 +3,6 @@
 
 """GRF's raw observation dictionaries, from the raw tensors of a batch."""
 
-from __future__ import annotations
-
 from typing import Any
 
 import numpy as np

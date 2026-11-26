@@ -4,8 +4,6 @@
 
 """GRF's scripted players `bot` and `lazy`, for one agent of every environment of a batch."""
 
-from __future__ import annotations
-
 import math
 from typing import Any
 

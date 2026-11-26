@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Copies the media of GRF that cuju's renderer reads into the package cuju-grf-media, unchanged."""
 
-from __future__ import annotations
-
 import argparse
 import hashlib
 import json

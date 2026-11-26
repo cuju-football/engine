@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """GRF's `FrameStack` in the pickle of a stacked state, a deque of four numpy observations."""
 
-from __future__ import annotations
-
 import collections
 import importlib
 import pickle

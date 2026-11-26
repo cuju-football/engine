@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Renders the glyph atlas of GRF's caption font with the libraries GRF loads."""
 
-from __future__ import annotations
-
 import argparse
 import ctypes
 import hashlib

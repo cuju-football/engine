@@ -3,8 +3,6 @@
 
 """Tells an intact engine from a damaged one, and prints the command that repairs it."""
 
-from __future__ import annotations
-
 import argparse
 import os
 import sys

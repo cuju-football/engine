@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Episodes of a batch as GRF dumps, which GRF's `replay` and `dump_to_video` read."""
 
-from __future__ import annotations
-
 import collections
 import ctypes
 import datetime
@@ -578,7 +576,7 @@ class DumpWriter:
             self._episodes[environment] = None
         return written
 
-    def __enter__(self) -> DumpWriter:
+    def __enter__(self) -> 'DumpWriter':
         return self
 
     def __exit__(self, *exception: Any) -> None:

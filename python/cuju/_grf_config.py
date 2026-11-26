@@ -2,8 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 import copy
 import os
 import platform
@@ -89,7 +87,7 @@ def _scenario_function(level: Any) -> Callable[[Any], Any]:
     return _LOADED[key]
 
 
-def _run_scenario(config: Config, builder: scenarios.Builder) -> scenarios.ScenarioConfig:
+def _run_scenario(config: 'Config', builder: scenarios.Builder) -> scenarios.ScenarioConfig:
     _scenario_function(config['level'])(builder)
     # GRF: `_FakePlayersForEmptyTeam` gives an empty team a lazy goalkeeper.
     for team in (scenarios.Team.e_Left, scenarios.Team.e_Right):
@@ -105,7 +103,7 @@ def _run_scenario(config: Config, builder: scenarios.Builder) -> scenarios.Scena
     return built
 
 
-def _build_scenario(config: Config) -> scenarios.ScenarioConfig:
+def _build_scenario(config: 'Config') -> scenarios.ScenarioConfig:
     built = _run_scenario(config, scenarios.Builder(config['episode_number']))
     if not built.deterministic and 'game_engine_random_seed' in config:
         built.game_engine_random_seed = config['game_engine_random_seed']

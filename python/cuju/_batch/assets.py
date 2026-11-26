@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 import os
 
 from .._assets import _DATA_DIRECTORY, _split_name, bundled_assets, scenario_names

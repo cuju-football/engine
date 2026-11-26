@@ -1,7 +1,5 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
-from __future__ import annotations
-
 import logging
 import sys
 import time
@@ -47,7 +45,7 @@ def info(message: str) -> None:
 
 
 def start(
-    device: str, torch_device: torch.device | None = None, log: bool | None = None
+    device: str, torch_device: 'torch.device | None' = None, log: bool | None = None
 ) -> tuple[float, int | None] | None:
     if not enabled(log):
         return None

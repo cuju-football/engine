@@ -3,8 +3,6 @@
 
 """Checks the engine against the family command line contract."""
 
-from __future__ import annotations
-
 import argparse
 import dataclasses
 import importlib

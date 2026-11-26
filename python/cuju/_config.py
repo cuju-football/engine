@@ -3,8 +3,6 @@
 
 """The machine config, the file `engine.toml` that holds the settings that change only speed."""
 
-from __future__ import annotations
-
 import os
 import sys
 from typing import Any

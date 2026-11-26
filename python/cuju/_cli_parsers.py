@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 from typing import Any
 
 from ._cli_contract import Parser, add_globals, add_json, examples

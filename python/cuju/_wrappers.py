@@ -4,8 +4,6 @@
 
 """GRF's `MultiAgentToSingleAgent` wrapper, over every environment of a batch."""
 
-from __future__ import annotations
-
 from typing import Any
 
 import torch

@@ -2,8 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 import contextlib
 import ctypes
 import importlib
@@ -660,7 +658,7 @@ class Batch:
             if native is not None:
                 native.free()
 
-    def __enter__(self) -> Batch:
+    def __enter__(self) -> 'Batch':
         self._handle()
         return self
 

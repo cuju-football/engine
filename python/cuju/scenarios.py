@@ -4,8 +4,6 @@
 
 """Builds the asset bundle of a GRF scenario file, without GRF."""
 
-from __future__ import annotations
-
 import ctypes
 import enum
 import hashlib

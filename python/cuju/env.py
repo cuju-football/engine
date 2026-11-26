@@ -4,8 +4,6 @@
 
 """GRF's `create_environment` and gymnasium ids, each environment a batch of one."""
 
-from __future__ import annotations
-
 import collections
 import importlib
 import importlib.metadata

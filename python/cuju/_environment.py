@@ -2,8 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 import numbers
 from typing import Any
 
@@ -158,7 +156,7 @@ class BatchEnvironment:
             'a batch cannot be pickled; create it inside the worker process that uses it'
         )
 
-    def __enter__(self) -> BatchEnvironment:
+    def __enter__(self) -> 'BatchEnvironment':
         self._batch._handle()
         return self
 

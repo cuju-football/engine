@@ -4,8 +4,6 @@
 
 """Batched Google Research Football (GRF) environments on the GPU or the CPU, bit for bit."""
 
-from __future__ import annotations
-
 import importlib
 import os
 import sys

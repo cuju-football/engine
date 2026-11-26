@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Digests of a batch's outputs, and logs of a run's actions that replay it bit for bit."""
 
-from __future__ import annotations
-
 import ctypes
 import hashlib
 import importlib.metadata
@@ -56,7 +54,7 @@ class Digest:
         else:
             raise TypeError(f'expected tensors, dictionaries, sequences or bytes, found {value!r}')
 
-    def copy(self) -> Digest:
+    def copy(self) -> 'Digest':
         """Returns a digest of the same outputs, which goes on apart."""
         other = Digest()
         other._hash = self._hash.copy()
@@ -199,7 +197,7 @@ class ActionLog:
         """Closes the batch."""
         self.batch.close()
 
-    def __enter__(self) -> ActionLog:
+    def __enter__(self) -> 'ActionLog':
         return self
 
     def __exit__(self, *exception: Any) -> None:

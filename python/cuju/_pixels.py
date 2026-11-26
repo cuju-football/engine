@@ -1,8 +1,6 @@
 # Copyright 2026 The cuju Authors
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 import ctypes
 import os
 import sys
@@ -218,7 +216,7 @@ class Renderer:
             self._library.cuju_render_destroy(self._handle)
             self._handle = ctypes.c_void_p()
 
-    def __enter__(self) -> Renderer:
+    def __enter__(self) -> 'Renderer':
         return self
 
     def __exit__(self, *exception: Any) -> None:

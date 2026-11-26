@@ -3,8 +3,6 @@
 
 """GRF's frames for a batch in render mode, one renderer per environment."""
 
-from __future__ import annotations
-
 import concurrent.futures
 import ctypes
 import os

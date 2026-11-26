@@ -3,8 +3,6 @@
 
 """Reads single fields of a GRF state, such as the joints of a player or the spin of the ball."""
 
-from __future__ import annotations
-
 import ctypes
 import functools
 import struct

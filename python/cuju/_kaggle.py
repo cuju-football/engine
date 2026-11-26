@@ -3,8 +3,6 @@
 
 """Kaggle's GRF competition protocol, for a batch and for Kaggle agents."""
 
-from __future__ import annotations
-
 import inspect
 from typing import Any
 

@@ -2,8 +2,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Checks that this installation reproduces the expected outputs, on the CPU and on every GPU."""
 
-from __future__ import annotations
-
 import argparse
 import ctypes
 import hashlib
@@ -47,13 +45,13 @@ def load_cases(long: bool = False) -> dict[str, dict]:
     return cases
 
 
-def tensor_bytes(tensor: torch.Tensor) -> bytes:
+def tensor_bytes(tensor: 'torch.Tensor') -> bytes:
     """Returns the bytes of a tensor, read without numpy."""
     tensor = tensor.detach().to('cpu').contiguous()
     return ctypes.string_at(tensor.data_ptr(), tensor.numel() * tensor.element_size())
 
 
-def actions_at(step: int, environments: int, agents: int, action_count: int) -> torch.Tensor:
+def actions_at(step: int, environments: int, agents: int, action_count: int) -> 'torch.Tensor':
     """Returns the actions of a step from integer arithmetic alone, the same on every machine."""
     import torch
 

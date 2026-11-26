@@ -2,8 +2,6 @@
 # Copyright 2019 Google LLC
 # SPDX-License-Identifier: Apache-2.0
 
-from __future__ import annotations
-
 import copy
 import importlib
 import re
@@ -75,7 +73,7 @@ class PythonPlayer:
         self._sticky = [name for name in self._names if name in dumps._STICKY]
         self._batch = None
 
-    def bind(self, batch: Any) -> PythonPlayer:
+    def bind(self, batch: Any) -> 'PythonPlayer':
         self._batch = unwrap(batch)
         return self
 

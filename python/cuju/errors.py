@@ -3,8 +3,6 @@
 
 """The exceptions that cuju raises, each also a subclass of the built-in type it stands for."""
 
-from __future__ import annotations
-
 __all__ = [
     'ArgumentError',
     'ChoiceError',
